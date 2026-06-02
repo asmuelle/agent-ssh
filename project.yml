@@ -1,0 +1,471 @@
+# XcodeGen project manifest for Agent-Ssh macOS app.
+#
+# Generate the .xcodeproj:
+#   cd agent-ssh && xcodegen generate
+#
+# Prerequisites: brew install xcodegen
+#
+# The Rust static library is built by the "Build Rust Library" build phase.
+
+name: "Agent-Ssh"
+options:
+  bundleIdPrefix: com.agent-ssh
+  deploymentTarget:
+    macOS: "13.0"
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+  postGenCommand: |
+    # After project generation, copy the Rust library to a known location
+    # that Xcode's linker can find without extra search paths.
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    DEVELOPMENT_TEAM: "9QFT5JP875"
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.3.2"
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: 1.0.0
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.9.1
+
+targets:
+  AgentSshApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: AgentSshApp
+        type: group
+        createIntermediateGroups: true
+      # uniffi-generated Swift FFI bindings — depend on agent_sshFFI
+      # via the modulemap in bindings/, link the symbols from the universal
+      # static lib via OTHER_LDFLAGS=-lagent_ssh. Lives in the app
+      # target because frameworks can't link the Rust static lib directly.
+      - path: bindings/agent_ssh.swift
+        optional: true
+    dependencies:
+      - target: AgentSshWidgets
+      - target: AgentSshMacOS
+      - package: SwiftTerm
+        product: SwiftTerm
+      - package: Sparkle
+        product: Sparkle
+    # Declared inline so `xcodegen generate` regenerates the file
+    # deterministically. A bare `path:` (no `properties:`) would write an
+    # empty plist and silently break code signing — every regenerate would
+    # wipe out the disable-library-validation flag, then dyld rejects the
+    # ad-hoc-signed framework with "different Team IDs" at launch.
+    entitlements:
+      path: AgentSshApp/AgentSsh.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.automation.apple-events: false
+        com.apple.security.cs.allow-unsigned-executable-memory: true
+        com.apple.security.cs.disable-library-validation: true
+        com.apple.security.cs.allow-dyld-environment-variables: true
+        com.apple.security.device.audio-input: false
+        com.apple.security.device.camera: false
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true
+        com.apple.security.application-groups:
+          - group.com.agent-ssh.agent-ssh
+        # `keychain-access-groups` requires a provisioning profile (Apple
+        # ties access groups to a Team ID), so it can't coexist with
+        # ad-hoc signing. Keychain APIs still work via the implicit
+        # per-bundle access group. Re-add this when switching to
+        # Developer ID for distribution.
+        # keychain-access-groups:
+        #   - $(AppIdentifierPrefix)com.agent-ssh.macos
+    settings:
+      base:
+        INFOPLIST_FILE: AgentSshApp/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos
+        PRODUCT_NAME: "agent-ssh"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.3.2"
+        # Auto-derived module name would be "agent_ssh" (dash → underscore).
+        # Force a clean identifier so the test bundle's `@testable import
+        # AgentSshApp` resolves.
+        PRODUCT_MODULE_NAME: AgentSshApp
+        CODE_SIGN_ENTITLEMENTS: AgentSshApp/AgentSsh.entitlements
+        ENABLE_HARDENED_RUNTIME: true
+        # Hardened runtime exceptions needed for the Rust bridge
+        COM_APPLE_SECURITY_CS_DISABLE_LIBRARY_VALIDATION: true
+        COM_APPLE_SECURITY_DEVICE_MICROPHONE: false
+        COM_APPLE_SECURITY_DEVICE_CAMERA: false
+        COM_APPLE_SECURITY_NETWORK_CLIENT: true
+        COM_APPLE_SECURITY_NETWORK_SERVER: true
+        LIBRARY_SEARCH_PATHS:
+          - $(PROJECT_DIR)/target/universal/release
+        # Make the FFI modulemap visible to the app target too — needed when
+        # SwiftPM/Xcode evaluates `#if canImport(agent_sshFFI)` during
+        # the app's own Swift compilation.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/bindings
+        OTHER_LDFLAGS:
+          - $(inherited)
+          # Rust core static lib (universal: built by build_cargo.sh).
+          - -lagent_ssh
+          - -lobjc
+          - -lresolv
+          - -framework
+          - Security
+          - -framework
+          - ServiceManagement
+          # Required by `rustls-native-certs` (Postgres driver) to read
+          # the macOS system trust store.
+          - -framework
+          - SystemConfiguration
+          - -lxml2
+          - -lz
+    preBuildScripts:
+      - name: "Build Rust Library"
+        script: |
+          "${SRCROOT}/AgentSshApp/build_cargo.sh"
+        basedOnDependencyAnalysis: false
+        inputFiles: []
+        outputFiles: []
+    scheme:
+      testTargets:
+        - AgentSshAppTests
+
+  AgentSshMobile:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AgentSshMobile
+        type: group
+        createIntermediateGroups: true
+      - path: Sources/AgentSshMacOS/AgentSshMacOS.swift
+      - path: Sources/AgentSshMacOS/FileModels.swift
+      - path: Sources/AgentSshMacOS/SharedJSONFileStore.swift
+      - path: Sources/AgentSshMacOS/NetworkPolishModels.swift
+      - path: Sources/AgentSshMacOS/ConnectionStore.swift
+      - path: Sources/AgentSshMacOS/PlatformIntegrationModels.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshots.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshotPresentation.swift
+      - path: Sources/AgentSshMacOS/WidgetMonitoringPreferences.swift
+      - path: Sources/AgentSshMacOS/LiveActivityModels.swift
+      - path: Sources/AgentSshMacOS/WatchStatusModels.swift
+      - path: Sources/AgentSshMacOS/ShellIntegrationCommands.swift
+      - path: Sources/AgentSshMacOS/CloudSyncModels.swift
+      - path: Sources/AgentSshMacOS/TerminalErgonomicsModels.swift
+      - path: Sources/AgentSshMacOS/BackgroundSSHOperations.swift
+      - path: Sources/AgentSshMacOS/OfflineSFTPFileProviderModels.swift
+      - path: Sources/AgentSshMacOS/SharedUploadStagingStore.swift
+      - path: Sources/AgentSshMacOS/ServerDoctorModels.swift
+      - path: Sources/AgentSshMacOS/ServerDoctorSharedSummary.swift
+      - path: bindings/agent_ssh.swift
+        optional: true
+    dependencies:
+      - target: AgentSshMobileWidgets
+      - package: SwiftTerm
+        product: SwiftTerm
+    entitlements:
+      path: AgentSshMobile/AgentSshMobile.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.agent-ssh.mobile
+        com.apple.security.application-groups:
+          - group.com.agent-ssh.agent-ssh
+    settings:
+      base:
+        INFOPLIST_FILE: AgentSshMobile/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile
+        PRODUCT_NAME: "agent-ssh"
+        PRODUCT_MODULE_NAME: AgentSshMobile
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: false
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/bindings
+        LIBRARY_SEARCH_PATHS:
+          - $(PROJECT_DIR)/target/ios/universal-ios/release
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -lagent_ssh
+          - -lobjc
+          - -lresolv
+          - -framework
+          - Security
+          - -framework
+          - LocalAuthentication
+          - -framework
+          - SystemConfiguration
+          - -lxml2
+          - -lz
+    scheme:
+      testTargets:
+        - AgentSshMobileTests
+
+  AgentSshFileProvider:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AgentSshFileProvider
+        type: group
+        createIntermediateGroups: true
+      - path: Sources/AgentSshMacOS/AgentSshMacOS.swift
+      - path: Sources/AgentSshMacOS/FileModels.swift
+      - path: Sources/AgentSshMacOS/SharedJSONFileStore.swift
+      - path: Sources/AgentSshMacOS/PlatformIntegrationModels.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshots.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshotPresentation.swift
+      - path: Sources/AgentSshMacOS/WidgetMonitoringPreferences.swift
+      - path: Sources/AgentSshMacOS/LiveActivityModels.swift
+      - path: Sources/AgentSshMacOS/WatchStatusModels.swift
+      - path: Sources/AgentSshMacOS/ShellIntegrationCommands.swift
+      - path: Sources/AgentSshMacOS/BackgroundSSHOperations.swift
+      - path: Sources/AgentSshMacOS/OfflineSFTPFileProviderModels.swift
+      - path: Sources/AgentSshMacOS/SharedUploadStagingStore.swift
+    entitlements:
+      path: AgentSshFileProvider/AgentSshFileProvider.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.agent-ssh.agent-ssh
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.agent-ssh.mobile
+    settings:
+      base:
+        INFOPLIST_FILE: AgentSshFileProvider/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile.fileprovider
+        PRODUCT_NAME: AgentSshFileProvider
+        PRODUCT_MODULE_NAME: AgentSshFileProvider
+        CODE_SIGN_ENTITLEMENTS: AgentSshFileProvider/AgentSshFileProvider.entitlements
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  AgentSshShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AgentSshShareExtension
+        type: group
+        createIntermediateGroups: true
+      - path: Sources/AgentSshMacOS/AgentSshMacOS.swift
+      - path: Sources/AgentSshMacOS/FileModels.swift
+      - path: Sources/AgentSshMacOS/SharedJSONFileStore.swift
+      - path: Sources/AgentSshMacOS/PlatformIntegrationModels.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshots.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshotPresentation.swift
+      - path: Sources/AgentSshMacOS/WidgetMonitoringPreferences.swift
+      - path: Sources/AgentSshMacOS/LiveActivityModels.swift
+      - path: Sources/AgentSshMacOS/WatchStatusModels.swift
+      - path: Sources/AgentSshMacOS/ShellIntegrationCommands.swift
+      - path: Sources/AgentSshMacOS/BackgroundSSHOperations.swift
+      - path: Sources/AgentSshMacOS/SharedUploadStagingStore.swift
+    entitlements:
+      path: AgentSshShareExtension/AgentSshShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.agent-ssh.agent-ssh
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.agent-ssh.mobile
+    settings:
+      base:
+        INFOPLIST_FILE: AgentSshShareExtension/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile.share
+        PRODUCT_NAME: AgentSshShareExtension
+        PRODUCT_MODULE_NAME: AgentSshShareExtension
+        CODE_SIGN_ENTITLEMENTS: AgentSshShareExtension/AgentSshShareExtension.entitlements
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  AgentSshShortcutsExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AgentSshShortcutsExtension
+        type: group
+        createIntermediateGroups: true
+      - path: Sources/AgentSshMacOS/AgentSshMacOS.swift
+      - path: Sources/AgentSshMacOS/FileModels.swift
+      - path: Sources/AgentSshMacOS/SharedJSONFileStore.swift
+      - path: Sources/AgentSshMacOS/PlatformIntegrationModels.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshots.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshotPresentation.swift
+      - path: Sources/AgentSshMacOS/WidgetMonitoringPreferences.swift
+      - path: Sources/AgentSshMacOS/LiveActivityModels.swift
+      - path: Sources/AgentSshMacOS/WatchStatusModels.swift
+      - path: Sources/AgentSshMacOS/ShellIntegrationCommands.swift
+      - path: Sources/AgentSshMacOS/BackgroundSSHOperations.swift
+      - path: Sources/AgentSshMacOS/OfflineSFTPFileProviderModels.swift
+      - path: Sources/AgentSshMacOS/SharedUploadStagingStore.swift
+      - path: Sources/AgentSshMacOS/ServerDoctorModels.swift
+      - path: Sources/AgentSshMacOS/ServerDoctorSharedSummary.swift
+    entitlements:
+      path: AgentSshShortcutsExtension/AgentSshShortcutsExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.agent-ssh.agent-ssh
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.agent-ssh.mobile
+    settings:
+      base:
+        INFOPLIST_FILE: AgentSshShortcutsExtension/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile.shortcuts
+        PRODUCT_NAME: AgentSshShortcutsExtension
+        PRODUCT_MODULE_NAME: AgentSshShortcutsExtension
+        CODE_SIGN_ENTITLEMENTS: AgentSshShortcutsExtension/AgentSshShortcutsExtension.entitlements
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  AgentSshMobileWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AgentSshMobileWidgets
+        type: group
+        createIntermediateGroups: true
+      - path: Sources/AgentSshMacOS/AgentSshMacOS.swift
+      - path: Sources/AgentSshMacOS/SharedJSONFileStore.swift
+      - path: Sources/AgentSshMacOS/PlatformIntegrationModels.swift
+      - path: Sources/AgentSshMacOS/BackgroundSSHOperations.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshots.swift
+      - path: Sources/AgentSshMacOS/WidgetSnapshotPresentation.swift
+      - path: Sources/AgentSshMacOS/WidgetMonitoringPreferences.swift
+      - path: Sources/AgentSshMacOS/LiveActivityModels.swift
+      - path: Sources/AgentSshMacOS/WatchStatusModels.swift
+      - path: Sources/AgentSshMacOS/ShellIntegrationCommands.swift
+    entitlements:
+      path: AgentSshMobileWidgets/AgentSshMobileWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.agent-ssh.agent-ssh
+    settings:
+      base:
+        INFOPLIST_FILE: AgentSshMobileWidgets/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile.widgets
+        PRODUCT_NAME: AgentSshMobileWidgets
+        PRODUCT_MODULE_NAME: AgentSshMobileWidgets
+        CODE_SIGN_ENTITLEMENTS: AgentSshMobileWidgets/AgentSshMobileWidgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  AgentSshWidgets:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: AgentSshWidgets
+        type: group
+        createIntermediateGroups: true
+    dependencies:
+      - target: AgentSshMacOS
+    entitlements:
+      path: AgentSshWidgets/AgentSshWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - group.com.agent-ssh.agent-ssh
+    settings:
+      base:
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        INFOPLIST_FILE: AgentSshWidgets/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos.widgets
+        PRODUCT_NAME: AgentSshWidgets
+        PRODUCT_MODULE_NAME: AgentSshWidgets
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.3.2"
+        CODE_SIGN_ENTITLEMENTS: AgentSshWidgets/AgentSshWidgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  AgentSshMacOS:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/AgentSshMacOS
+        type: group
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos.lib
+        PRODUCT_NAME: AgentSshMacOS
+        GENERATE_INFOPLIST_FILE: YES
+        DEFINES_MODULE: YES
+        SKIP_INSTALL: YES
+    scheme:
+      testTargets:
+        - AgentSshMacOSTests
+
+  AgentSshMacOSTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/AgentSshMacOSTests
+        type: group
+    dependencies:
+      - target: AgentSshMacOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos.tests
+        PRODUCT_NAME: AgentSshMacOSTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: ""
+
+  # FFI integration tests — runs inside the app's process so the linked
+  # Rust static library is reachable. Covers the uniffi-generated surface
+  # (rshellInit, rshellConnect, rshellKeychain*) which the framework's
+  # test bundle can't see.
+  AgentSshAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/AgentSshAppTests
+        type: group
+    dependencies:
+      - target: AgentSshApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos.app-tests
+        PRODUCT_NAME: AgentSshAppTests
+        GENERATE_INFOPLIST_FILE: YES
+        # The app's PRODUCT_NAME is "agent-ssh" (with a dash) which doesn't
+        # match the target name, so xcodegen can't infer the right
+        # TEST_HOST path. Set both explicitly.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/agent-ssh.app/Contents/MacOS/agent-ssh
+        BUNDLE_LOADER: $(TEST_HOST)
+        # The test bundle re-compiles the bindings transitively when it
+        # @testable-imports AgentSshApp; needs the same module-map path.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/bindings
+
+  # StoreKit product-config guard. A pure iOS logic test (no app host, no Rust
+  # link) that resolves every id in MobileEntitlementsStore.configuredProductIds
+  # against Products.storekit. Fails the build if an id is unsellable — the
+  # "empty paywall" failure mode. MobileEntitlementsStore.swift is compiled in
+  # directly so the ids under test are the same source of truth the app ships.
+  AgentSshMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests/AgentSshMobileTests
+        type: group
+        excludes:
+          - "Products.storekit"
+      - path: Tests/AgentSshMobileTests/Products.storekit
+        buildPhase: resources
+      - path: AgentSshMobile/MobileEntitlementsStore.swift
+    dependencies:
+      - sdk: StoreKitTest.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile.tests
+        PRODUCT_NAME: AgentSshMobileTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: ""

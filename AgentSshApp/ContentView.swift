@@ -1,0 +1,359 @@
+import SwiftUI
+import AgentSshMacOS
+
+
+/// Native macOS workspace.
+///
+///   ┌────────────────┬───────────────────┬────────────┐
+///   │ Connections    │ Terminal tabs     │            │
+///   │ (manager)      │ (always-visible)  │            │
+///   ├────────────────│                   │  System    │
+///   │ Connection     ├───────────────────┤  Monitor   │
+///   │ Details        │ File browser      │  (always)  │
+///   │                │ (always-visible)  │            │
+///   └────────────────┴───────────────────┴────────────┘
+///
+/// Layout is an explicit outer `HSplitView` (sidebar | detail). The
+/// detail column is itself an `HSplitView` so the main workspace and
+/// the inspector collapse and resize independently. The three-column
+/// `NavigationSplitView` form can only express
+/// `(all / doubleColumn / detailOnly)`, which doesn't allow
+/// "sidebar visible, inspector hidden" — so the inspector lives inside
+/// the detail column.
+///
+/// `LayoutManager` is the source of truth for which panels are visible
+/// and at what size. The inspector divider is observed via
+/// `GeometryReader` preferences and persisted through a 250 ms debounced
+/// write.
+struct ContentView: View {
+    @EnvironmentObject var layoutManager: LayoutManager
+    @EnvironmentObject var tabsStore: TerminalTabsStore
+    @StateObject private var connectionStore = ConnectionStoreManager.shared
+    @StateObject private var transfersStore = TransferQueueStore()
+    @State private var selectedConnection: ConnectionProfile?
+    @State private var dashboardVisible = false
+    @State private var showingCommandPalette = false
+    @State private var serverDoctorTarget: ServerDoctorTarget?
+
+    var body: some View {
+        HSplitView {
+            if layoutManager.layout.sidebarVisible {
+                SidebarColumn(
+                    layoutManager: layoutManager,
+                    storeManager: connectionStore,
+                    selectedConnection: $selectedConnection,
+                    onConnect: { profile in
+                        Task { await tabsStore.openConnection(profile) }
+                    },
+                    onDiagnose: { profile in
+                        if let tab = tabsStore.connectedSSHTabs.first(where: { $0.profile.id == profile.id }) {
+                            serverDoctorTarget = ServerDoctorTarget(tab: tab)
+                        }
+                    }
+                )
+            }
+
+            DetailColumn(
+                layoutManager: layoutManager,
+                dashboardVisible: $dashboardVisible
+            )
+        }
+        .environmentObject(transfersStore)
+        .frame(minWidth: 900, minHeight: 600)
+        .sheet(isPresented: $showingCommandPalette) {
+            CommandPaletteView(
+                connections: connectionStore.connections,
+                selectedConnection: selectedConnection,
+                activeTab: tabsStore.activeTab,
+                connectedHostCount: tabsStore.connectedSSHTabs.count,
+                onConnect: { profile in
+                    selectedConnection = profile
+                    Task { await tabsStore.openConnection(profile) }
+                },
+                onReconnectActive: {
+                    if let activeTab = tabsStore.activeTab {
+                        Task { await tabsStore.reconnect(tabId: activeTab.id) }
+                    }
+                },
+                onCloseActive: {
+                    tabsStore.closeActiveTab()
+                },
+                onOpenDashboard: {
+                    dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
+                },
+                onToggleSidebar: {
+                    layoutManager.toggleSidebar()
+                },
+                onToggleInspector: {
+                    layoutManager.toggleInspector()
+                },
+                onExportDiagnostics: {
+                    DiagnosticsBundleExporter.export(
+                        connectionStore: connectionStore,
+                        tabsStore: tabsStore,
+                        layoutManager: layoutManager
+                    )
+                },
+                onDiagnoseActive: {
+                    if let tab = tabsStore.activeOpenSSHTab {
+                        serverDoctorTarget = ServerDoctorTarget(tab: tab)
+                    }
+                }
+            )
+        }
+        .sheet(item: $serverDoctorTarget) { target in
+            ServerDoctorView(target: target)
+        }
+        .onReceive(AgentSshEventBus.shared.events) { event in
+            switch event {
+            case .showCommandPalette:
+                showingCommandPalette = true
+            case .showDashboard:
+                dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
+            default:
+                break
+            }
+        }
+        .onOpenURL(perform: handleDeepLink)
+        .onContinueUserActivity("com.agent-ssh.agent-ssh.route") { activity in
+            handleRouteActivity(activity)
+        }
+        .userActivity("com.agent-ssh.agent-ssh.route") { activity in
+            if let selectedConnection {
+                activity.title = selectedConnection.name
+                activity.userInfo = ["url": "agent-ssh://server/\(selectedConnection.id)"]
+            } else {
+                activity.title = "agent-ssh"
+                activity.userInfo = ["url": "agent-ssh://server"]
+            }
+        }
+        .alert("Connection error", isPresented: Binding(
+            get: { tabsStore.lastError != nil },
+            set: { if !$0 { tabsStore.lastError = nil } }
+        )) {
+            Button("OK") { tabsStore.lastError = nil }
+        } message: {
+            Text(tabsStore.lastError ?? "")
+        }
+        // SSH→SFTP fallback prompt. Distinct from the error alert
+        // because the connect *did* succeed, just in a different
+        // shape than asked for. Offers a one-click commit to make
+        // the demotion permanent so future connects skip the shell
+        // attempt entirely.
+        .alert("Server doesn't allow shell access",
+               isPresented: Binding(
+                   get: { tabsStore.pendingFallback != nil },
+                   set: { if !$0 { tabsStore.pendingFallback = nil } }
+               ),
+               presenting: tabsStore.pendingFallback
+        ) { fallback in
+            Button("Convert profile to SFTP") {
+                connectionStore.setKind(profileId: fallback.profileId, kind: .sftp)
+                tabsStore.pendingFallback = nil
+            }
+            Button("Keep as SSH", role: .cancel) {
+                tabsStore.pendingFallback = nil
+            }
+        } message: { fallback in
+            Text(fallback.message)
+        }
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard let link = AgentSshDeepLink(url) else { return }
+
+        switch link.kind {
+        case .monitoring:
+            if let profileId = link.profileId,
+               let profile = connectionStore.connection(withId: profileId) {
+                selectedConnection = profile
+            }
+            dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
+        case .server, .terminal, .folder:
+            guard let profileId = link.profileId,
+                  let profile = connectionStore.connection(withId: profileId) else {
+                return
+            }
+            selectedConnection = profile
+            if link.kind == .terminal || link.kind == .folder {
+                Task { await tabsStore.openConnection(profile) }
+            }
+        case .automation:
+            guard let operationId = link.operationId,
+                  let operation = try? BackgroundSSHOperationStore().load().operations.first(where: { $0.id == operationId }),
+                  let profile = connectionStore.connection(withId: operation.profileId) else {
+                return
+            }
+            selectedConnection = profile
+        }
+    }
+
+    private func handleRouteActivity(_ activity: NSUserActivity) {
+        if let rawURL = activity.userInfo?["url"] as? String,
+           let url = URL(string: rawURL) {
+            handleDeepLink(url)
+            return
+        }
+
+        if let url = activity.webpageURL {
+            handleDeepLink(url)
+        }
+    }
+}
+
+// MARK: - Sidebar column
+
+private struct SidebarColumn: View {
+    @ObservedObject var layoutManager: LayoutManager
+    @ObservedObject var storeManager: ConnectionStoreManager
+    @Binding var selectedConnection: ConnectionProfile?
+    let onConnect: (ConnectionProfile) -> Void
+    let onDiagnose: (ConnectionProfile) -> Void
+    @State private var sidebarWidthDebounce: Task<Void, Never>?
+
+    var body: some View {
+        SidebarView(
+            storeManager: storeManager,
+            selectedConnection: $selectedConnection,
+            onConnect: onConnect,
+            onDiagnose: onDiagnose
+        )
+        .finderSidebarBackground()
+        .frame(
+            minWidth: LayoutConstants.minSidebarWidth,
+            idealWidth: layoutManager.layout.sidebarWidth,
+            maxWidth: LayoutConstants.maxSidebarWidth
+        )
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: SidebarWidthKey.self, value: proxy.size.width)
+            }
+        )
+        .onPreferenceChange(SidebarWidthKey.self, perform: persistSidebarWidth)
+    }
+
+    private func persistSidebarWidth(_ measured: CGFloat) {
+        sidebarWidthDebounce?.cancel()
+        sidebarWidthDebounce = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+
+            let clamped = min(
+                max(measured, LayoutConstants.minSidebarWidth),
+                LayoutConstants.maxSidebarWidth
+            )
+            if abs(clamped - layoutManager.layout.sidebarWidth) > 1 {
+                layoutManager.layout.sidebarWidth = clamped
+            }
+        }
+    }
+}
+
+// MARK: - Detail column (main + bottom + inspector)
+
+private struct DetailColumn: View {
+    @ObservedObject var layoutManager: LayoutManager
+    @Binding var dashboardVisible: Bool
+    @EnvironmentObject var tabsStore: TerminalTabsStore
+    @State private var inspectorWidthDebounce: Task<Void, Never>?
+
+    private var inspectorShouldRender: Bool {
+        layoutManager.layout.inspectorVisible && tabsStore.activeOpenSSHTab != nil
+    }
+
+    private var dashboardShouldRender: Bool {
+        dashboardVisible && tabsStore.connectedSSHTabs.count >= 2
+    }
+
+    private var connectedSSHTabIds: [UUID] {
+        tabsStore.connectedSSHTabs.map(\.id)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if !tabsStore.tabs.isEmpty {
+                ConnectionWorkspaceStrip(dashboardVisible: $dashboardVisible)
+                Divider()
+            }
+
+            if dashboardShouldRender {
+                DashboardPanel()
+                    .frame(minWidth: 320, minHeight: 320)
+            } else {
+                HSplitView {
+                    MainPanel()
+                        .frame(minWidth: 320, minHeight: 320)
+
+                    if inspectorShouldRender {
+                        InspectorPanel()
+                            .frame(
+                                minWidth: LayoutConstants.minInspectorWidth,
+                                idealWidth: layoutManager.layout.inspectorWidth,
+                                maxWidth: LayoutConstants.maxInspectorWidth
+                            )
+                            .background(
+                                GeometryReader { proxy in
+                                    Color.clear
+                                        .preference(key: InspectorWidthKey.self,
+                                                    value: proxy.size.width)
+                                }
+                            )
+                            .materialBackground(.contentBackground,
+                                                blendingMode: .withinWindow)
+                    }
+                }
+            }
+        }
+        .onPreferenceChange(InspectorWidthKey.self, perform: persistInspectorWidth)
+        .onChange(of: connectedSSHTabIds) { ids in
+            if ids.count < 2 {
+                dashboardVisible = false
+            }
+        }
+    }
+
+    /// Debounce drag updates: split views fire preference changes on every
+    /// frame while the user drags, *and* every frame during a window
+    /// resize. We coalesce to one disk write 250 ms after the last update,
+    /// and clamp to the configured min/max so a transient `0` (e.g.,
+    /// during reappearance after toggle) cannot corrupt the persisted
+    /// dimension.
+    ///
+    /// Note: this means the persisted dimension drifts with window
+    /// resizes, since the split view rebalances proportionally. That's
+    /// the trade-off for keeping the persistence path simple — there is
+    /// no reliable "drag began / drag ended" callback on `HSplitView` /
+    /// `VSplitView` to differentiate user drag from system reflow.
+    private func persistInspectorWidth(_ measured: CGFloat) {
+        inspectorWidthDebounce?.cancel()
+        inspectorWidthDebounce = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+
+            let clamped = min(
+                max(measured, LayoutConstants.minInspectorWidth),
+                LayoutConstants.maxInspectorWidth
+            )
+            if abs(clamped - layoutManager.layout.inspectorWidth) > 1 {
+                layoutManager.layout.inspectorWidth = clamped
+            }
+        }
+    }
+}
+
+// MARK: - Preference keys for split-pane dimensions
+
+private struct InspectorWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct SidebarWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}

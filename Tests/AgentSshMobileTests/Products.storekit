@@ -1,0 +1,32 @@
+{
+  "identifier" : "AGENTSSH-0000-0000-0000-000000000001",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "39.99",
+      "familyShareable" : false,
+      "internalID" : "AGENTSSH-0000-0000-0000-000000000010",
+      "localizations" : [
+        {
+          "description" : "Unlock the full server operations toolkit: Server Doctor history, the runbook library, incident export, the fleet dashboard, widgets and alerts, and unlimited hosts.",
+          "displayName" : "agent-ssh Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.agent-ssh.mobile.pro.lifetime",
+      "referenceName" : "Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storeKitErrors" : [],
+    "_storefront" : "USA"
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

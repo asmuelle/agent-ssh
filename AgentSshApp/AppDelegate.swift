@@ -1,0 +1,59 @@
+import Cocoa
+import OSLog
+import AgentSshMacOS
+
+/// NSApplicationDelegate for the macOS app lifecycle.
+///
+/// - Initializes the Rust bridge on launch (`applicationDidFinishLaunching`)
+/// - Tears it down on termination (`applicationWillTerminate`)
+/// - Uses `os_log` for structured logging
+class AppDelegate: NSObject, NSApplicationDelegate {
+    private let logger = Logger(subsystem: "com.mc-ssh", category: "appdelegate")
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        logger.info("agent-ssh macOS app launching")
+        BridgeManager.shared.initialize()
+        logger.info("Rust bridge initialized — app ready")
+        
+        // Boot secure embedded MCP server
+        MCPServerManager.shared.startServer()
+        logger.info("Secure embedded MCP server started")
+        
+        WidgetSnapshotBootstrapper.seedPlaceholderSnapshotIfNeeded()
+        MonitoringAlertNotificationCenter.shared.start()
+
+        // Persist the main window's frame across launches via AppKit's
+        // built-in autosave. SwiftUI's WindowGroup doesn't expose a
+        // direct frameAutosaveName binding, so we set it on the
+        // first window once SwiftUI has materialised it. Defer to the
+        // next runloop turn — at this point in the launch sequence
+        // SwiftUI hasn't necessarily attached the window yet.
+        DispatchQueue.main.async {
+            for window in NSApp.windows {
+                // Only persist the user's main app window — settings
+                // panels and find-bar children open their own and
+                // shouldn't share an autosave entry with the workspace.
+                if window.contentViewController != nil
+                    && window.styleMask.contains(.titled)
+                    && window.frameAutosaveName.isEmpty
+                {
+                    window.setFrameAutosaveName("AgentSshMainWindow")
+                }
+            }
+        }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        WidgetMonitoringSnapshotCenter.shared.reloadTimelines()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        logger.info("agent-ssh shutting down")
+        MCPServerManager.shared.stopServer()
+        BridgeManager.shared.shutdown()
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+}

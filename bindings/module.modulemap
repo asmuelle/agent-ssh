@@ -1,0 +1,4 @@
+module agent_sshFFI {
+    header "agent_sshFFI.h"
+    export *
+}
