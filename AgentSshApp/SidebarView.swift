@@ -707,6 +707,8 @@ private struct ConnectionDetailsPanel: View {
                         if !profile.tags.isEmpty {
                             detailRow("Tags", profile.tags.joined(separator: ", "))
                         }
+
+                        SSHAlgorithmsSection(profile: profile)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -762,6 +764,146 @@ private struct ConnectionDetailsPanel: View {
                     .font(MidnightMacDesign.FontToken.metadataMono.monospacedDigit())
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+// MARK: - SSH algorithms section
+
+/// Server-offered key exchange algorithms and MACs, read from the
+/// plaintext `SSH_MSG_KEXINIT` via `SSHAlgorithmProbe`. Probed once
+/// per host:port per app session; weak algorithms are flagged.
+private struct SSHAlgorithmsSection: View {
+    let profile: ConnectionProfile
+    @ObservedObject private var cache = SSHAlgorithmProbeCache.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+                .padding(.vertical, 2)
+
+            HStack {
+                Text("SSH Algorithms")
+                    .font(MidnightMacDesign.FontToken.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                Spacer()
+                if case .loaded = cache.state(host: profile.host, port: profile.port) {
+                    Button {
+                        cache.probeIfNeeded(host: profile.host, port: profile.port, force: true)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(MidnightMacDesign.FontToken.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                    .help("Probe \(profile.host) again")
+                }
+            }
+
+            switch cache.state(host: profile.host, port: profile.port) {
+            case nil, .loading:
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Probing \(profile.host)…")
+                        .font(MidnightMacDesign.FontToken.caption)
+                        .foregroundStyle(.tertiary)
+                }
+
+            case .failed(let message):
+                HStack(spacing: 6) {
+                    Text("Unavailable — \(message)")
+                        .font(MidnightMacDesign.FontToken.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
+                    Button("Retry") {
+                        cache.probeIfNeeded(host: profile.host, port: profile.port, force: true)
+                    }
+                    .buttonStyle(.plain)
+                    .font(MidnightMacDesign.FontToken.caption)
+                    .foregroundStyle(Color.accentColor)
+                }
+
+            case .loaded(let algorithms):
+                VStack(alignment: .leading, spacing: 8) {
+                    serverRow(algorithms.serverBanner)
+                    algorithmGroup(
+                        "Key Exchange",
+                        algorithms.kexAlgorithms,
+                        isWeak: SSHAlgorithmStrength.isWeakKex
+                    )
+                    algorithmGroup(
+                        "MACs",
+                        algorithms.macs,
+                        isWeak: SSHAlgorithmStrength.isWeakMac
+                    )
+                }
+            }
+        }
+        .task(id: SSHAlgorithmProbeCache.key(host: profile.host, port: profile.port)) {
+            cache.probeIfNeeded(host: profile.host, port: profile.port)
+        }
+    }
+
+    private func serverRow(_ banner: String) -> some View {
+        // "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3" → "OpenSSH_9.6p1 Ubuntu-3"
+        let software = banner
+            .split(separator: "-", maxSplits: 2)
+            .dropFirst(2)
+            .joined(separator: "-")
+
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Server")
+                .font(MidnightMacDesign.FontToken.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 78, alignment: .leading)
+            Text(software.isEmpty ? banner : software)
+                .font(MidnightMacDesign.FontToken.metadataMono)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(banner)
+        }
+    }
+
+    private func algorithmGroup(
+        _ label: String,
+        _ algorithms: [String],
+        isWeak: @escaping (String) -> Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(MidnightMacDesign.FontToken.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(algorithms, id: \.self) { algorithm in
+                let weak = isWeak(algorithm)
+                HStack(spacing: 5) {
+                    Text(algorithm)
+                        .font(MidnightMacDesign.FontToken.metadataMono)
+                        .foregroundStyle(weak ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    if weak {
+                        Text("weak")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                Capsule().fill(Color.orange.opacity(0.12))
+                            )
+                            .help("Deprecated or weakened algorithm — consider disabling it in sshd_config")
+                    }
+                }
+            }
+
+            if algorithms.isEmpty {
+                Text("none offered")
+                    .font(MidnightMacDesign.FontToken.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 }

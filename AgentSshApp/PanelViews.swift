@@ -25,6 +25,8 @@ struct SidebarPanel: View {
 struct ConnectionWorkspaceStrip: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @Binding var dashboardVisible: Bool
+    @Binding var agentVisible: Bool
+    @ObservedObject private var triage = AgentTriageStore.shared
 
     private var connectedSSHTabs: [TerminalTab] {
         tabsStore.connectedSSHTabs
@@ -61,6 +63,18 @@ struct ConnectionWorkspaceStrip: View {
             dashboardVisible: dashboardVisible,
             onToggleDashboard: {
                 dashboardVisible.toggle()
+                if dashboardVisible {
+                    agentVisible = false
+                }
+            },
+            showsAgentButton: !tabsStore.tabs.isEmpty,
+            agentVisible: agentVisible,
+            agentIssueCount: triage.confirmedCount,
+            onToggleAgent: {
+                agentVisible.toggle()
+                if agentVisible {
+                    dashboardVisible = false
+                }
             }
         )
         .onChange(of: connectedSSHTabs.map(\.id)) { ids in
@@ -95,13 +109,6 @@ struct MainPanel: View {
                 ForEach(tabsStore.tabs) { tab in
                     let isActive = tab.id == tabsStore.activeTabId
                     connectionWorkspace(for: tab, isActive: isActive)
-                        .overlay {
-                            if tab.status == .disconnected || tab.status == .error {
-                                ReconnectOverlay(tab: tab) {
-                                    Task { await tabsStore.reconnect(tabId: tab.id) }
-                                }
-                            }
-                        }
                         .opacity(isActive ? 1 : 0)
                         .allowsHitTesting(isActive)
                         .id(tab.id)
@@ -299,38 +306,6 @@ struct TerminalTab: Identifiable {
     }
 }
 
-// MARK: - Reconnect overlay
-
-private struct ReconnectOverlay: View {
-    let tab: TerminalTab
-    let onReconnect: () -> Void
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: tab.status == .error ? "exclamationmark.triangle.fill" : "wifi.slash")
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(tab.status == .error ? .red : .yellow)
-
-            Text(tab.status == .error ? "Connection error" : "Disconnected")
-                .font(MidnightMacDesign.FontToken.title)
-
-            Text("\(tab.profile.username)@\(tab.profile.host):\(tab.profile.port)")
-                .font(MidnightMacDesign.FontToken.metadataMono)
-                .foregroundStyle(.secondary)
-
-            Button(action: onReconnect) {
-                Label("Reconnect", systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-        }
-        .padding(20)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.large))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.4))
-    }
-}
-
 // MARK: - Inspector
 
 /// Right-hand panel — System Monitor for the active tab. Mirrors the
@@ -443,6 +418,10 @@ struct DashboardPanel: View {
                                     resolvedIPAddresses: dashboardIPAddresses(for: tab.profile) ?? [],
                                     onDashboardHealthChange: { snapshot in
                                         recordDashboardHealthSnapshot(snapshot)
+                                        // The Agent view's hidden pollers are
+                                        // suspended while the dashboard is open;
+                                        // keep its triage store fed from here.
+                                        AgentTriageStore.shared.ingest(snapshot: snapshot, tabId: tab.id)
                                     }
                                 )
                                 .frame(width: columnWidth)

@@ -18,6 +18,12 @@ struct WorkspaceTabStripView: View {
     var showsDashboardButton = false
     var dashboardVisible = false
     var onToggleDashboard: (() -> Void)? = nil
+    var showsAgentButton = false
+    var agentVisible = false
+    /// Confirmed triage issues — when > 0 the Agent button turns loud
+    /// (red, with a count) even while the Agent view is closed.
+    var agentIssueCount = 0
+    var onToggleAgent: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
@@ -51,6 +57,47 @@ struct WorkspaceTabStripView: View {
             }
 
             Spacer(minLength: 0)
+
+            if showsAgentButton, let onToggleAgent {
+                Button(action: onToggleAgent) {
+                    HStack(spacing: 5) {
+                        Label("Agent", systemImage: "waveform.path.ecg")
+                            .font(MidnightMacDesign.FontToken.label)
+                            .labelStyle(.titleAndIcon)
+
+                        if agentIssueCount > 0 {
+                            Text("\(agentIssueCount)")
+                                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.red))
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small)
+                            .fill(
+                                agentVisible
+                                    ? Color.accentColor.opacity(0.18)
+                                    : Color.clear
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(
+                    agentVisible
+                        ? Color.accentColor
+                        : (agentIssueCount > 0 ? Color.red : Color.primary)
+                )
+                .help(
+                    agentIssueCount > 0
+                        ? "\(agentIssueCount) issue\(agentIssueCount == 1 ? "" : "s") need attention"
+                        : (agentVisible ? "Close agent view" : "Open agent view — silent unless something needs fixing")
+                )
+                .padding(.trailing, showsDashboardButton ? 4 : 8)
+            }
 
             if showsDashboardButton, let onToggleDashboard {
                 Button(action: onToggleDashboard) {

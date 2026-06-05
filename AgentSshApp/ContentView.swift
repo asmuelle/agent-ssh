@@ -32,6 +32,7 @@ struct ContentView: View {
     @StateObject private var transfersStore = TransferQueueStore()
     @State private var selectedConnection: ConnectionProfile?
     @State private var dashboardVisible = false
+    @State private var agentVisible = false
     @State private var showingCommandPalette = false
     @State private var serverDoctorTarget: ServerDoctorTarget?
 
@@ -55,7 +56,11 @@ struct ContentView: View {
 
             DetailColumn(
                 layoutManager: layoutManager,
-                dashboardVisible: $dashboardVisible
+                dashboardVisible: $dashboardVisible,
+                agentVisible: $agentVisible,
+                onDiagnose: { tab in
+                    serverDoctorTarget = ServerDoctorTarget(tab: tab)
+                }
             )
         }
         .environmentObject(transfersStore)
@@ -80,6 +85,9 @@ struct ContentView: View {
                 },
                 onOpenDashboard: {
                     dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
+                    if dashboardVisible {
+                        agentVisible = false
+                    }
                 },
                 onToggleSidebar: {
                     layoutManager.toggleSidebar()
@@ -110,6 +118,9 @@ struct ContentView: View {
                 showingCommandPalette = true
             case .showDashboard:
                 dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
+                if dashboardVisible {
+                    agentVisible = false
+                }
             default:
                 break
             }
@@ -169,6 +180,9 @@ struct ContentView: View {
                 selectedConnection = profile
             }
             dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
+            if dashboardVisible {
+                agentVisible = false
+            }
         case .server, .terminal, .folder:
             guard let profileId = link.profileId,
                   let profile = connectionStore.connection(withId: profileId) else {
@@ -255,6 +269,8 @@ private struct SidebarColumn: View {
 private struct DetailColumn: View {
     @ObservedObject var layoutManager: LayoutManager
     @Binding var dashboardVisible: Bool
+    @Binding var agentVisible: Bool
+    var onDiagnose: ((TerminalTab) -> Void)? = nil
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @State private var inspectorWidthDebounce: Task<Void, Never>?
 
@@ -266,18 +282,42 @@ private struct DetailColumn: View {
         dashboardVisible && tabsStore.connectedSSHTabs.count >= 2
     }
 
+    private var agentShouldRender: Bool {
+        agentVisible && !tabsStore.tabs.isEmpty
+    }
+
     private var connectedSSHTabIds: [UUID] {
         tabsStore.connectedSSHTabs.map(\.id)
+    }
+
+    /// Changes whenever any tab's connection status flips — drives the
+    /// triage store's connection-issue sync.
+    private var tabStatusKey: String {
+        tabsStore.tabs
+            .map { "\($0.id.uuidString):\($0.status.rawValue)" }
+            .joined(separator: ",")
     }
 
     var body: some View {
         VStack(spacing: 0) {
             if !tabsStore.tabs.isEmpty {
-                ConnectionWorkspaceStrip(dashboardVisible: $dashboardVisible)
+                ConnectionWorkspaceStrip(
+                    dashboardVisible: $dashboardVisible,
+                    agentVisible: $agentVisible
+                )
                 Divider()
             }
 
-            if dashboardShouldRender {
+            if agentShouldRender {
+                AgentPanel(
+                    onDiagnose: onDiagnose,
+                    onOpenHost: { tabId in
+                        tabsStore.setActive(tabId)
+                        agentVisible = false
+                    }
+                )
+                .frame(minWidth: 320, minHeight: 320)
+            } else if dashboardShouldRender {
                 DashboardPanel()
                     .frame(minWidth: 320, minHeight: 320)
             } else {
@@ -305,10 +345,24 @@ private struct DetailColumn: View {
                 }
             }
         }
+        .background {
+            // Keeps triage data (and the Agent badge) fresh whether or
+            // not the Agent view is open. Suspended while the dashboard
+            // renders its own monitors, which feed the same store.
+            AgentTriagePollers(isSuspended: dashboardShouldRender)
+        }
+        .task(id: tabStatusKey) {
+            AgentTriageStore.shared.syncTabs(tabsStore.tabs)
+        }
         .onPreferenceChange(InspectorWidthKey.self, perform: persistInspectorWidth)
         .onChange(of: connectedSSHTabIds) { ids in
             if ids.count < 2 {
                 dashboardVisible = false
+            }
+        }
+        .onChange(of: tabsStore.tabs.isEmpty) { isEmpty in
+            if isEmpty {
+                agentVisible = false
             }
         }
     }

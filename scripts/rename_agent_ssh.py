@@ -1,6 +1,6 @@
 import os
 
-root_dir = "/Users/andreasmuller/experiments/appstore/apps/agent-ssh"
+root_dir = "/Users/andreasmuller/projects/experiments/appstore/apps/agent-ssh"
 
 replacements = [
     ("McSshMacOS", "AgentSshMacOS"),

@@ -109,11 +109,18 @@ final class TerminalTabsStore: ObservableObject {
         logger.info("Opening connection \(profile.name, privacy: .public)")
         lastError = nil
 
-        // One tab per profile.
+        // One tab per profile. If the existing tab's session is dead
+        // (e.g., the server rebooted), reconnect it in place so clicking
+        // the connection in the manager re-establishes the session.
         if password == nil && passphrase == nil,
            let existing = tabs.first(where: { $0.profile.id == profile.id }) {
             activeTabId = existing.id
-            logger.info("Reusing existing tab for \(profile.name, privacy: .public)")
+            if existing.status == .disconnected || existing.status == .error {
+                logger.info("Existing tab for \(profile.name, privacy: .public) is dead — reconnecting")
+                await reconnect(tabId: existing.id)
+            } else {
+                logger.info("Reusing existing tab for \(profile.name, privacy: .public)")
+            }
             return
         }
 

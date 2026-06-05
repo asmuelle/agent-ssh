@@ -2,6 +2,26 @@
 
 A code-tour for AI agents (Claude Code, Cursor, etc.) joining this repo cold. Pair with [`README.md`](README.md) (build) and [`TOOLS.md`](TOOLS.md) (features).
 
+## Quick commands
+
+| Task | Command |
+|------|---------|
+| Fast Rust check | `just check` |
+| Lint (fmt + clippy) | `just lint` |
+| Rust tests | `just test-rust` |
+| Swift + FFI tests | `just mac-test` |
+| Full CI-local | `just ci-local` |
+| Build macOS app (signed release) | `just mac-build` |
+| Build macOS app (debug, dev signing) | `just mac-build-dev` |
+| Build + run macOS app (debug) | `just mac-run-dev` |
+| Regenerate FFI bindings | `just mac-bindings` |
+| Regenerate Xcode project | `just mac-gen` |
+| Build iPadOS simulator | `just ios-sim-build` |
+| Run on iPad simulator | `just run-on-ipad` |
+| Format Rust | `just fmt` |
+| Clean all artifacts | `just clean` |
+| Bootstrap prereqs | `just bootstrap` |
+
 ## Project shape
 
 Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [uniffi](https://mozilla.github.io/uniffi-rs/) gluing them together.
@@ -83,6 +103,32 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 - `BridgeManager` is the single FFI entry point; per-feature extensions follow `BridgeManager+<Feature>.swift`
 - `@MainActor` on UI-mutating code; off-main work goes through `Task` or `DispatchQueue.global()`
 - Keychain access via `KeychainManager.swift` (macOS) / `MobileSSHKeyVault.swift` (iOS)
+
+## File responsibility map
+
+| I want to... | Edit this file | Then run |
+|-------------|----------------|----------|
+| Add a Rust FFI function | `src/ffi.rs` | `just mac-bindings` |
+| Add a Swift feature (macOS) | `AgentSshApp/<Name>.swift` | `just mac-build` |
+| Add a Swift feature (iPadOS) | `AgentSshMobile/Mobile<Name>.swift` | `just run-on-ipad` |
+| Add shared model/logic | `Sources/AgentSshMacOS/<Name>.swift` | `just mac-test` |
+| Add Xcode target or dependency | `project.yml` | `just mac-gen` |
+| Add a new just command | `justfile` | `just --list` |
+| Add a Swift unit test | `Tests/AgentSshMacOSTests/` | `just mac-test` |
+| Add an FFI integration test | `Tests/AgentSshAppTests/` | `just mac-test` |
+| Add a CLI tool (Rust) | `src/` + `[[bin]]` in `Cargo.toml` | `just check` |
+
+## Error triage
+
+| Symptom | Root cause | Recovery | Stop condition |
+|---------|-----------|----------|----------------|
+| `_assertionFailure` at `rshellInit()` | FFI checksum mismatch (hand-edited bindings) | `just mac-bindings` + rebuild | If still crashes, check `cargo build --release` output for errors |
+| `No XCFramework found at .../Sparkle.xcframework` | Stale SPM cache (repo moved/renamed) | `rm -rf build .build && just mac-gen && just mac-build` | If persists, clear SPM global cache: `rm -rf ~/Library/Caches/org.swift.swiftpm` |
+| `xcrun: error: unable to find utility "xcodebuild"` | No Xcode / Xcode CLT not selected | `sudo xcode-select --switch /Applications/Xcode.app` | — |
+| `error: linking with cc failed` | Missing Rust target for Apple Silicon | `rustup target add aarch64-apple-darwin` | — |
+| `Code Sign error: No signing certificate` | No dev team set | `export APPLE_DEVELOPMENT_TEAM=<Team ID>` or use `just mac-ci-build` | CI builds should use `mac-ci-build` which skips signing |
+| `use of undeclared type 'MidnightSsh...'` in Swift | Bindings out of sync with FFI | `just mac-bindings` + rebuild | Never hand-add types to the generated Swift file |
+| Cargo.toml version mismatch | Dependency drift after upstream release | Verify `ssh-commander-core` version in `Cargo.toml` matches what `src/` expects | If breaking changes, update `Cargo.toml` + fix call sites |
 
 ## Common pitfalls (read before debugging)
 
