@@ -190,7 +190,6 @@ pub fn rshell_doctor_collect(
                 id: connection_id.clone(),
             }
         })?;
-        let guard = client.read().await;
         let bundle_id = format!("doctor-{}", doctor_now_ms());
         let collected_at = doctor_now_ms();
         let max_total_bytes = request.max_total_bytes.max(16 * 1024) as usize;
@@ -200,16 +199,39 @@ pub fn rshell_doctor_collect(
             request.per_command_timeout_ms.clamp(500, 30_000),
         ));
 
+        // Run every collector command concurrently. Each `execute_command_full`
+        // opens its own channel over the multiplexed SSH connection, so total
+        // wall time is the slowest single command rather than the sum (a full
+        // profile run was previously up to ~570s of strictly sequential waits).
+        // Results are gathered by command index so the bundle stays deterministic.
+        let mut tasks = tokio::task::JoinSet::new();
+        for (index, command) in commands.iter().enumerate() {
+            let client = client.clone();
+            let command_text = command.command.to_string();
+            tasks.spawn(async move {
+                let started_at = doctor_now_ms();
+                let started = std::time::Instant::now();
+                let guard = client.read().await;
+                let result =
+                    tokio::time::timeout(timeout, guard.execute_command_full(&command_text)).await;
+                let duration_ms = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+                (index, started_at, duration_ms, result)
+            });
+        }
+        let mut gathered = Vec::with_capacity(commands.len());
+        while let Some(joined) = tasks.join_next().await {
+            gathered.push(joined.map_err(|e| FfiDoctorError::CollectorFailed {
+                message: format!("collector task failed: {e}"),
+            })?);
+        }
+        gathered.sort_by_key(|entry| entry.0);
+
         let mut command_audits = Vec::with_capacity(commands.len());
         let mut evidence = Vec::with_capacity(commands.len());
         let mut warnings = Vec::new();
 
-        for (index, command) in commands.iter().enumerate() {
-            let started_at = doctor_now_ms();
-            let started = std::time::Instant::now();
-            let result =
-                tokio::time::timeout(timeout, guard.execute_command_full(command.command)).await;
-            let duration_ms = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+        for (index, started_at, duration_ms, result) in gathered {
+            let command = &commands[index];
             let evidence_id = format!("evidence-{}-{}", command.id, index);
             let audit_id = format!("audit-{}-{}", command.id, index);
 
