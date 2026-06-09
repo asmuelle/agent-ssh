@@ -32,18 +32,25 @@ fn cache() -> &'static Mutex<HashMap<String, OsKind>> {
 }
 
 pub fn cached(connection_id: &str) -> Option<OsKind> {
-    cache().lock().unwrap().get(connection_id).cloned()
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(connection_id)
+        .cloned()
 }
 
 pub fn store(connection_id: &str, os: OsKind) {
     cache()
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .insert(connection_id.to_string(), os);
 }
 
 pub fn evict(connection_id: &str) {
-    cache().lock().unwrap().remove(connection_id);
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(connection_id);
 }
 
 /// Map a `uname -s` output line to a typed kind. Trims whitespace and
@@ -276,9 +283,7 @@ pub mod linux {
     /// USER is right-padded to 32 chars by the `user:32` format spec
     /// so values containing spaces stay in one column.
     pub fn parse_processes(s: &str) -> Vec<super::ProcessRow> {
-        s.lines()
-            .filter_map(|line| super::parse_process_line(line))
-            .collect()
+        s.lines().filter_map(super::parse_process_line).collect()
     }
 }
 
@@ -471,9 +476,7 @@ pub mod darwin {
     pub const PROCESSES_COMMAND: &str = "ps -axo pid,user,pcpu,pmem,comm,args -r | tail -n +2";
 
     pub fn parse_processes(s: &str) -> Vec<super::ProcessRow> {
-        s.lines()
-            .filter_map(|line| super::parse_process_line(line))
-            .collect()
+        s.lines().filter_map(super::parse_process_line).collect()
     }
 }
 
