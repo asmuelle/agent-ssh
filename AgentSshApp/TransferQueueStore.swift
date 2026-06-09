@@ -38,6 +38,18 @@ final class TransferQueueStore: ObservableObject {
     private var revealTask: Task<Void, Never>?
     private static let revealDebounce: UInt64 = 500_000_000  // 500 ms
 
+    /// Live Activity persistence is a full read-modify-write of an App
+    /// Group JSON file (plus a Watch-status file). Doing that on the main
+    /// actor for every SFTP progress event — dozens per second during a
+    /// transfer — is the primary cause of UI stalls. We funnel all writes
+    /// through a serial actor (off-main, no concurrent file races) and
+    /// coalesce the high-frequency progress writes to ~4 Hz. Terminal and
+    /// enqueue states still write immediately (but still off-main).
+    private let liveActivityWriter = LiveActivityWriter()
+    private var pendingProgressSnapshots: [String: LiveActivitySnapshot] = [:]
+    private var liveActivityFlushScheduled = false
+    private static let liveActivityThrottle: UInt64 = 250_000_000  // 250 ms → 4 Hz
+
     init() {
         AgentSshEventBus.shared.events
             .receive(on: DispatchQueue.main)
@@ -54,7 +66,9 @@ final class TransferQueueStore: ObservableObject {
         connectionId: String,
         remotePath: String,
         localPath: String,
-        expectedSize: UInt64
+        expectedSize: UInt64,
+        revealsInFinder: Bool = true,
+        onCompleted: ((Bool) -> Void)? = nil
     ) {
         let transfer = Transfer(
             id: UUID(),
@@ -64,7 +78,9 @@ final class TransferQueueStore: ObservableObject {
             localPath: localPath,
             totalBytes: expectedSize,
             bytesTransferred: 0,
-            status: .queued
+            status: .queued,
+            revealsInFinder: revealsInFinder,
+            onCompleted: onCompleted
         )
         transfers.append(transfer)
         publishLiveActivity(for: transfer)
@@ -74,7 +90,8 @@ final class TransferQueueStore: ObservableObject {
     func enqueueUpload(
         connectionId: String,
         localPath: String,
-        remotePath: String
+        remotePath: String,
+        onCompleted: ((Bool) -> Void)? = nil
     ) {
         // Stat client-side so the queue UI can show a total even before
         // the first progress event arrives. Falls back to 0 (indeterminate
@@ -94,7 +111,8 @@ final class TransferQueueStore: ObservableObject {
             localPath: localPath,
             totalBytes: totalBytes,
             bytesTransferred: 0,
-            status: .queued
+            status: .queued,
+            onCompleted: onCompleted
         )
         transfers.append(transfer)
         publishLiveActivity(for: transfer)
@@ -116,10 +134,12 @@ final class TransferQueueStore: ObservableObject {
         switch transfers[idx].status {
         case .queued:
             removeLiveActivity(for: transfers[idx])
-            transfers.remove(at: idx)
+            let removed = transfers.remove(at: idx)
+            removed.onCompleted?(false)
         case .inProgress:
-            BridgeManager.shared.sftpCancel(transferId: transferId)
-            // The Task's failure path flips status to `.cancelled`.
+            // Fire-and-forget: the running transfer's Task observes
+            // `SftpError::Cancelled` and flips status to `.cancelled`.
+            Task { await BridgeManager.shared.sftpCancel(transferId: transferId) }
         case .completed, .failed, .cancelled:
             break
         }
@@ -183,9 +203,12 @@ final class TransferQueueStore: ObservableObject {
             // downloads finish within the debounce window they get
             // batched into a single Finder activation with all files
             // selected, instead of fronting Finder once per file.
-            if transfer.kind == .download {
+            // Relay legs of a server→server copy land in a temp dir
+            // the user never asked to see, so they opt out.
+            if transfer.kind == .download && transfer.revealsInFinder {
                 scheduleReveal(URL(fileURLWithPath: transfer.localPath))
             }
+            transfers[idx].onCompleted?(true)
         } catch let error as SftpError {
             guard let idx = transfers.firstIndex(where: { $0.id == transfer.id }) else { return }
             switch error {
@@ -199,12 +222,14 @@ final class TransferQueueStore: ObservableObject {
                 publishLiveActivity(for: transfers[idx])
                 logger.error("Transfer failed for \(transfer.remotePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
+            transfers[idx].onCompleted?(false)
         } catch {
             guard let idx = transfers.firstIndex(where: { $0.id == transfer.id }) else { return }
             transfers[idx].status = .failed
             transfers[idx].error = error.localizedDescription
             publishLiveActivity(for: transfers[idx])
             logger.error("Transfer failed for \(transfer.remotePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            transfers[idx].onCompleted?(false)
         }
     }
 
@@ -257,15 +282,74 @@ final class TransferQueueStore: ObservableObject {
         if wire.totalBytes > 0 && transfers[idx].totalBytes == 0 {
             transfers[idx].totalBytes = wire.totalBytes
         }
-        publishLiveActivity(for: transfers[idx])
+        throttledPublishLiveActivity(for: transfers[idx])
     }
 
+    // MARK: - Live Activity persistence (off-main, coalesced)
+
+    /// Immediate, durable write for low-frequency state changes (enqueue,
+    /// completed / failed / cancelled). Still hops off the main actor.
     private func publishLiveActivity(for transfer: Transfer) {
-        try? LiveActivitySnapshotStore().upsert(transfer.liveActivitySnapshot)
+        let snapshot = transfer.liveActivitySnapshot
+        // A definitive state supersedes any throttled progress write queued
+        // for the same id, so drop the pending one to avoid a stale overwrite.
+        pendingProgressSnapshots[snapshot.id] = nil
+        Task { await liveActivityWriter.upsert(snapshot) }
+    }
+
+    /// High-frequency progress path: keep only the latest snapshot per id
+    /// and flush the batch in a single file write at most every 250 ms.
+    private func throttledPublishLiveActivity(for transfer: Transfer) {
+        let snapshot = transfer.liveActivitySnapshot
+        pendingProgressSnapshots[snapshot.id] = snapshot
+        guard !liveActivityFlushScheduled else { return }
+        liveActivityFlushScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.liveActivityThrottle)
+            guard let self else { return }
+            self.liveActivityFlushScheduled = false
+            let batch = Array(self.pendingProgressSnapshots.values)
+            self.pendingProgressSnapshots.removeAll()
+            guard !batch.isEmpty else { return }
+            await self.liveActivityWriter.upsertBatch(batch)
+        }
     }
 
     private func removeLiveActivity(for transfer: Transfer) {
-        try? LiveActivitySnapshotStore().remove(id: transfer.liveActivitySnapshot.id)
+        let id = transfer.liveActivitySnapshot.id
+        pendingProgressSnapshots[id] = nil
+        Task { await liveActivityWriter.remove(id: id) }
+    }
+}
+
+/// Serializes Live Activity snapshot persistence off the main actor. Every
+/// `upsert`/`remove` is a full read-modify-write of an App Group JSON file;
+/// funnelling them through one actor keeps that I/O off the UI thread and
+/// stops concurrent writers from racing on the file.
+actor LiveActivityWriter {
+    private let store = LiveActivitySnapshotStore()
+
+    func upsert(_ snapshot: LiveActivitySnapshot) {
+        try? store.upsert(snapshot)
+    }
+
+    /// Applies a batch of snapshots in a single load-modify-save, so a burst
+    /// of coalesced progress events costs one file write, not one per event.
+    func upsertBatch(_ snapshots: [LiveActivitySnapshot]) {
+        guard !snapshots.isEmpty, var file = try? store.load() else { return }
+        for snapshot in snapshots {
+            if let index = file.snapshots.firstIndex(where: { $0.id == snapshot.id }) {
+                file.snapshots[index] = snapshot
+            } else {
+                file.snapshots.append(snapshot)
+            }
+        }
+        file.generatedAt = Date()
+        try? store.save(file)
+    }
+
+    func remove(id: String) {
+        try? store.remove(id: id)
     }
 }
 
@@ -285,6 +369,16 @@ struct Transfer: Identifiable {
     var bytesTransferred: UInt64
     var status: Status
     var error: String?
+    /// Downloads front Finder with the result by default; relay legs
+    /// of a server→server copy (temp-dir destinations) turn this off.
+    var revealsInFinder: Bool = true
+    /// Fired exactly once when the transfer reaches a terminal state:
+    /// `true` for `.completed`, `false` for `.failed` / `.cancelled`
+    /// (including queued items removed before they ever ran). Used by
+    /// `RemoteCopyCoordinator` to chain the upload leg of a
+    /// server→server copy onto its download leg and to clean up temp
+    /// files. Runs on the main actor.
+    var onCompleted: ((Bool) -> Void)?
 
     var progress: Double {
         totalBytes > 0 ? Double(bytesTransferred) / Double(totalBytes) : 0

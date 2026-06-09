@@ -9,6 +9,12 @@ class ConnectionStoreManager: ObservableObject {
     static let shared = ConnectionStoreManager()
     private let logger = Logger(subsystem: "com.mc-ssh", category: "connection-store")
 
+    /// Off-main serial writer for the connection database. See `save()`.
+    private let persister = ConnectionStorePersister(fileURL: ConnectionStoreManager.storeFileURL)
+    /// Monotonic save version; lets the persister drop snapshots a newer
+    /// save has already superseded if unstructured Tasks arrive out of order.
+    private var saveSeq: UInt64 = 0
+
     @Published var connections: [ConnectionProfile] = []
     @Published var folders: [ConnectionFolder] = []
 
@@ -501,19 +507,16 @@ class ConnectionStoreManager: ObservableObject {
 
     // MARK: - Persistence
 
-    /// Atomically replace the on-disk store so a crash mid-write never
-    /// leaves a zero-length or truncated file. Write to a temp file
-    /// first, then use `replaceItemAt` (Atomic rename on APFS/HFS+).
+    /// Snapshot the in-memory store and hand it to the off-main persister.
+    /// Previously this encoded and atomically wrote the file synchronously on
+    /// the main actor for every CRUD mutation (rename, drag, bulk service
+    /// toggles), stalling the UI on disk I/O. The encode + atomic replace now
+    /// runs on a serial actor; `saveSeq` guarantees the newest snapshot wins.
     private func save() {
-        do {
-            let data = try JSONEncoder().encode(ConnectionStoreData(connections: connections, folders: folders))
-            let target = Self.storeFileURL
-            let tmp = target.appendingPathExtension("tmp")
-            try data.write(to: tmp, options: [.atomic])
-            _ = try FileManager.default.replaceItemAt(target, withItemAt: tmp, backupItemName: nil, options: [])
-        } catch {
-            logger.error("Failed to save connections: \(error.localizedDescription)")
-        }
+        saveSeq &+= 1
+        let seq = saveSeq
+        let snapshot = ConnectionStoreData(connections: connections, folders: folders)
+        Task { await persister.save(snapshot, seq: seq) }
     }
 
     private func mergeSyncedSnippets(
@@ -591,6 +594,38 @@ class ConnectionStoreManager: ObservableObject {
         } catch {
             connections = []
             folders = []
+        }
+    }
+}
+
+/// Serializes connection-store persistence off the main actor. Each save is a
+/// full encode + atomic file replace; running them on one actor keeps that I/O
+/// off the UI thread and stops concurrent writers from racing on the file. The
+/// monotonic `seq` drops any snapshot a newer save has already superseded,
+/// since the unstructured `Task`s that drive saves can reach the actor out of
+/// order.
+actor ConnectionStorePersister {
+    private let fileURL: URL
+    private let logger = Logger(subsystem: "com.mc-ssh", category: "connection-store")
+    private var lastWrittenSeq: UInt64 = 0
+
+    init(fileURL: URL) {
+        self.fileURL = fileURL
+    }
+
+    /// Atomically replace the on-disk store so a crash mid-write never leaves a
+    /// zero-length or truncated file: write a temp file, then `replaceItemAt`
+    /// (atomic rename on APFS/HFS+).
+    func save(_ data: ConnectionStoreData, seq: UInt64) {
+        guard seq > lastWrittenSeq else { return }
+        lastWrittenSeq = seq
+        do {
+            let encoded = try JSONEncoder().encode(data)
+            let tmp = fileURL.appendingPathExtension("tmp")
+            try encoded.write(to: tmp, options: [.atomic])
+            _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tmp, backupItemName: nil, options: [])
+        } catch {
+            logger.error("Failed to save connections: \(error.localizedDescription)")
         }
     }
 }
