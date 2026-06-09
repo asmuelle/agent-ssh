@@ -341,11 +341,11 @@ fn validate_octal_mode(mode: &str) -> Result<String, SftpError> {
 pub fn rshell_connect(config: FfiConnectConfig) -> Result<String, ConnectError> {
     let bridge = MacOsBridge::global();
     let mut connection_id = format!("{}@{}:{}", config.username, config.host, config.port);
-    if let Some(sid) = config.session_id.as_ref() {
-        if !sid.is_empty() {
-            connection_id.push('#');
-            connection_id.push_str(sid);
-        }
+    if let Some(sid) = config.session_id.as_ref()
+        && !sid.is_empty()
+    {
+        connection_id.push('#');
+        connection_id.push_str(sid);
     }
 
     let auth_method = if config.use_agent {
@@ -726,13 +726,16 @@ fn register_transfer(transfer_id: &str) -> tokio_util::sync::CancellationToken {
     let token = tokio_util::sync::CancellationToken::new();
     transfer_registry()
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .insert(transfer_id.to_string(), token.clone());
     token
 }
 
 fn unregister_transfer(transfer_id: &str) {
-    transfer_registry().lock().unwrap().remove(transfer_id);
+    transfer_registry()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(transfer_id);
 }
 
 /// Cancel an in-flight transfer by its Swift-side UUID. Returns true
@@ -742,7 +745,11 @@ fn unregister_transfer(transfer_id: &str) {
 /// returns `SftpError::Cancelled`.
 #[uniffi::export]
 pub fn rshell_sftp_cancel(transfer_id: String) -> bool {
-    if let Some(token) = transfer_registry().lock().unwrap().get(&transfer_id) {
+    if let Some(token) = transfer_registry()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&transfer_id)
+    {
         token.cancel();
         true
     } else {
@@ -1541,7 +1548,11 @@ pub fn rshell_get_processes(connection_id: String) -> Result<Vec<FfiProcess>, Mo
         let rows = match os {
             OsKind::Linux => monitor::linux::parse_processes(&output),
             OsKind::Darwin => monitor::darwin::parse_processes(&output),
-            OsKind::Other(_) => unreachable!(),
+            // Unreachable today (the `cmd` match above returns early for
+            // `Other`), but returning an error rather than `unreachable!()`
+            // keeps a future refactor from turning a logic slip into a panic
+            // that aborts the host app across the FFI boundary.
+            OsKind::Other(name) => return Err(MonitorError::Unsupported { os: name }),
         };
 
         Ok(rows
@@ -2209,6 +2220,11 @@ impl From<ssh_commander_core::UpdateOutcome> for FfiPgUpdateResult {
 /// (`SET col = $1::<column_type>`). Identifiers are quoted defensively
 /// in the core layer — callers don't need to escape `schema` / `table`
 /// / `column`.
+// The eight parameters mirror the uniffi-exported Swift signature. Bundling
+// them into an `FfiPgUpdateCellRequest` record would satisfy clippy and read
+// better on the Swift side, but that reshapes the FFI surface and the generated
+// bindings — tracked as a follow-up rather than folded into a lint pass.
+#[allow(clippy::too_many_arguments)]
 #[uniffi::export]
 pub fn rshell_pg_update_cell(
     connection_id: String,
@@ -3990,6 +4006,25 @@ pub fn rshell_tcpdump_stop(capture_id: u64) -> Result<(), FfiToolsError> {
 // Model Context Protocol (MCP) Execution Engine
 // ---------------------------------------------------------------------------
 
+/// Builds a shell command that writes `content` verbatim to `path` on the
+/// remote host.
+///
+/// Both arguments are passed as single-quoted shell tokens via
+/// `shell_escape::unix::escape`, so neither the caller-supplied path nor the
+/// content can break out of quoting to inject additional commands. This
+/// replaces an earlier heredoc (`cat << 'EOF' …`) which terminated early — and
+/// executed the remainder of `content` as shell commands — whenever the content
+/// contained a line equal to the heredoc sentinel.
+///
+/// `printf '%s'` writes the content exactly as given: unlike `echo` or
+/// `printf '%b'`, it performs no backslash-escape interpretation.
+fn build_write_file_command(path: &str, content: &str) -> String {
+    use std::borrow::Cow;
+    let quoted_content = shell_escape::unix::escape(Cow::Borrowed(content));
+    let quoted_path = shell_escape::unix::escape(Cow::Borrowed(path));
+    format!("printf '%s' {quoted_content} > {quoted_path}")
+}
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiMcpError {
     #[error("connection not found: {connection_id}")]
@@ -4010,134 +4045,185 @@ pub fn rshell_mcp_execute(
     tool: String,
     arguments: String,
 ) -> Result<String, FfiMcpError> {
-    let parsed_args: serde_json::Value = serde_json::from_str(&arguments)
-        .map_err(|e| FfiMcpError::Serialization { message: e.to_string() })?;
+    let parsed_args: serde_json::Value =
+        serde_json::from_str(&arguments).map_err(|e| FfiMcpError::Serialization {
+            message: e.to_string(),
+        })?;
 
     match tool.as_str() {
         "run_command" => {
-            let command = parsed_args.get("command")
+            let command = parsed_args
+                .get("command")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| FfiMcpError::InvalidArguments { message: "missing 'command' parameter".into() })?;
+                .ok_or_else(|| FfiMcpError::InvalidArguments {
+                    message: "missing 'command' parameter".into(),
+                })?;
 
             let bridge = MacOsBridge::global();
             let cm = bridge.connection_manager.clone();
-            let output = bridge.runtime.block_on(async move {
-                let client = cm.get_connection(&connection_id).await;
-                match client {
-                    Some(c) => {
-                        let client = c.read().await;
-                        client.execute_command(command).await
+            let output = bridge
+                .runtime
+                .block_on(async move {
+                    let client = cm.get_connection(&connection_id).await;
+                    match client {
+                        Some(c) => {
+                            let client = c.read().await;
+                            client.execute_command(command).await
+                        }
+                        None => Err(anyhow::anyhow!("Connection not found: {}", connection_id)),
                     }
-                    None => Err(anyhow::anyhow!("Connection not found: {}", connection_id)),
-                }
-            }).map_err(|e| FfiMcpError::Execution { message: e.to_string() })?;
+                })
+                .map_err(|e| FfiMcpError::Execution {
+                    message: e.to_string(),
+                })?;
 
             Ok(output)
         }
         "read_file" => {
-            let path = parsed_args.get("path")
+            let path = parsed_args
+                .get("path")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| FfiMcpError::InvalidArguments { message: "missing 'path' parameter".into() })?;
+                .ok_or_else(|| FfiMcpError::InvalidArguments {
+                    message: "missing 'path' parameter".into(),
+                })?;
 
             let escaped_path = path.replace("'", "'\\''");
             let command = format!("cat '{}'", escaped_path);
 
             let bridge = MacOsBridge::global();
             let cm = bridge.connection_manager.clone();
-            let output = bridge.runtime.block_on(async move {
-                let client = cm.get_connection(&connection_id).await;
-                match client {
-                    Some(c) => {
-                        let client = c.read().await;
-                        client.execute_command(&command).await
+            let output = bridge
+                .runtime
+                .block_on(async move {
+                    let client = cm.get_connection(&connection_id).await;
+                    match client {
+                        Some(c) => {
+                            let client = c.read().await;
+                            client.execute_command(&command).await
+                        }
+                        None => Err(anyhow::anyhow!("Connection not found: {}", connection_id)),
                     }
-                    None => Err(anyhow::anyhow!("Connection not found: {}", connection_id)),
-                }
-            }).map_err(|e| FfiMcpError::Execution { message: e.to_string() })?;
+                })
+                .map_err(|e| FfiMcpError::Execution {
+                    message: e.to_string(),
+                })?;
 
             Ok(output)
         }
         "write_file" => {
-            let path = parsed_args.get("path")
+            let path = parsed_args
+                .get("path")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| FfiMcpError::InvalidArguments { message: "missing 'path' parameter".into() })?;
-            let content = parsed_args.get("content")
+                .ok_or_else(|| FfiMcpError::InvalidArguments {
+                    message: "missing 'path' parameter".into(),
+                })?;
+            let content = parsed_args
+                .get("content")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| FfiMcpError::InvalidArguments { message: "missing 'content' parameter".into() })?;
+                .ok_or_else(|| FfiMcpError::InvalidArguments {
+                    message: "missing 'content' parameter".into(),
+                })?;
 
-            let escaped_path = path.replace("'", "'\\''");
-            let command = format!(
-                "cat << 'EOF_AGENT_SSH_MCP' > '{}'\n{}\nEOF_AGENT_SSH_MCP",
-                escaped_path, content
-            );
+            let command = build_write_file_command(path, content);
 
             let bridge = MacOsBridge::global();
             let cm = bridge.connection_manager.clone();
-            let output = bridge.runtime.block_on(async move {
-                let client = cm.get_connection(&connection_id).await;
-                match client {
-                    Some(c) => {
-                        let client = c.read().await;
-                        client.execute_command(&command).await
+            let output = bridge
+                .runtime
+                .block_on(async move {
+                    let client = cm.get_connection(&connection_id).await;
+                    match client {
+                        Some(c) => {
+                            let client = c.read().await;
+                            client.execute_command(&command).await
+                        }
+                        None => Err(anyhow::anyhow!("Connection not found: {}", connection_id)),
                     }
-                    None => Err(anyhow::anyhow!("Connection not found: {}", connection_id)),
-                }
-            }).map_err(|e| FfiMcpError::Execution { message: e.to_string() })?;
+                })
+                .map_err(|e| FfiMcpError::Execution {
+                    message: e.to_string(),
+                })?;
 
             Ok(output)
         }
         "list_dir" => {
-            let path = parsed_args.get("path")
+            let path = parsed_args
+                .get("path")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| FfiMcpError::InvalidArguments { message: "missing 'path' parameter".into() })?;
+                .ok_or_else(|| FfiMcpError::InvalidArguments {
+                    message: "missing 'path' parameter".into(),
+                })?;
 
-            let entries = rshell_sftp_list_dir(connection_id, path.to_string())
-                .map_err(|e| FfiMcpError::Execution { message: e.to_string() })?;
+            let entries = rshell_sftp_list_dir(connection_id, path.to_string()).map_err(|e| {
+                FfiMcpError::Execution {
+                    message: e.to_string(),
+                }
+            })?;
 
-            let serialized_entries: Vec<serde_json::Value> = entries.iter().map(|e| {
-                let kind_str = match e.kind {
-                    FfiFileKind::File => "file",
-                    FfiFileKind::Directory => "directory",
-                    FfiFileKind::Symlink => "symlink",
-                };
-                serde_json::json!({
-                    "name": e.name,
-                    "size": e.size,
-                    "modified": e.modified,
-                    "modified_unix": e.modified_unix,
-                    "permissions": e.permissions,
-                    "owner": e.owner,
-                    "group": e.group,
-                    "kind": kind_str
+            let serialized_entries: Vec<serde_json::Value> = entries
+                .iter()
+                .map(|e| {
+                    let kind_str = match e.kind {
+                        FfiFileKind::File => "file",
+                        FfiFileKind::Directory => "directory",
+                        FfiFileKind::Symlink => "symlink",
+                    };
+                    serde_json::json!({
+                        "name": e.name,
+                        "size": e.size,
+                        "modified": e.modified,
+                        "modified_unix": e.modified_unix,
+                        "permissions": e.permissions,
+                        "owner": e.owner,
+                        "group": e.group,
+                        "kind": kind_str
+                    })
                 })
-            }).collect();
+                .collect();
 
-            let json_str = serde_json::to_string(&serialized_entries)
-                .map_err(|e| FfiMcpError::Serialization { message: e.to_string() })?;
+            let json_str = serde_json::to_string(&serialized_entries).map_err(|e| {
+                FfiMcpError::Serialization {
+                    message: e.to_string(),
+                }
+            })?;
 
             Ok(json_str)
         }
         "postgres_query" => {
-            let query = parsed_args.get("query")
+            let query = parsed_args
+                .get("query")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| FfiMcpError::InvalidArguments { message: "missing 'query' parameter".into() })?;
+                .ok_or_else(|| FfiMcpError::InvalidArguments {
+                    message: "missing 'query' parameter".into(),
+                })?;
 
-            let pg_res = rshell_pg_execute(connection_id, "mcp-session".into(), query.to_string(), 1000)
-                .map_err(|e| FfiMcpError::Execution { message: e.to_string() })?;
+            let pg_res =
+                rshell_pg_execute(connection_id, "mcp-session".into(), query.to_string(), 1000)
+                    .map_err(|e| FfiMcpError::Execution {
+                        message: e.to_string(),
+                    })?;
 
-            let columns: Vec<serde_json::Value> = pg_res.columns.iter().map(|c| {
-                serde_json::json!({
-                    "name": c.name,
-                    "type_oid": c.type_oid,
-                    "type_name": c.type_name
+            let columns: Vec<serde_json::Value> = pg_res
+                .columns
+                .iter()
+                .map(|c| {
+                    serde_json::json!({
+                        "name": c.name,
+                        "type_oid": c.type_oid,
+                        "type_name": c.type_name
+                    })
                 })
-            }).collect();
+                .collect();
 
-            let rows: Vec<serde_json::Value> = pg_res.rows.iter().map(|r| {
-                serde_json::json!({
-                    "cells": r.cells
+            let rows: Vec<serde_json::Value> = pg_res
+                .rows
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "cells": r.cells
+                    })
                 })
-            }).collect();
+                .collect();
 
             let json_res = serde_json::json!({
                 "columns": columns,
@@ -4146,8 +4232,10 @@ pub fn rshell_mcp_execute(
                 "cursor_id": pg_res.cursor_id
             });
 
-            let json_str = serde_json::to_string(&json_res)
-                .map_err(|e| FfiMcpError::Serialization { message: e.to_string() })?;
+            let json_str =
+                serde_json::to_string(&json_res).map_err(|e| FfiMcpError::Serialization {
+                    message: e.to_string(),
+                })?;
 
             Ok(json_str)
         }
@@ -4159,7 +4247,6 @@ pub fn rshell_mcp_execute(
 // Tests
 // ---------------------------------------------------------------------------
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4167,6 +4254,80 @@ mod tests {
     #[test]
     fn init_succeeds() {
         assert!(rshell_init());
+    }
+
+    // The MCP `write_file` command is executed by a remote POSIX shell. These
+    // tests run it through a local `sh` against a temp directory and assert on
+    // real side effects, so they prove the actual shell-parsing behaviour
+    // rather than coupling to `shell_escape`'s quoting internals.
+    fn run_in_shell(cmd: &str) {
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .status()
+            .expect("failed to spawn sh");
+        assert!(status.success(), "shell command failed: {cmd}");
+    }
+
+    #[test]
+    fn write_file_command_writes_exact_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("note.txt");
+        let content = "hello world\nline two\n";
+        run_in_shell(&build_write_file_command(target.to_str().unwrap(), content));
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), content);
+    }
+
+    #[test]
+    fn write_file_command_neutralizes_heredoc_sentinel_injection() {
+        // The old heredoc executed everything after a line equal to the
+        // sentinel as shell commands. The payload here would `touch` a canary
+        // file if it escaped the content token.
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("note.txt");
+        let canary = dir.path().join("pwned");
+        let content = format!("ok\nEOF_AGENT_SSH_MCP\ntouch {}\n", canary.display());
+        run_in_shell(&build_write_file_command(
+            target.to_str().unwrap(),
+            &content,
+        ));
+        assert!(
+            !canary.exists(),
+            "injected command executed — heredoc sentinel still breaks out"
+        );
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), content);
+    }
+
+    #[test]
+    fn write_file_command_neutralizes_quote_and_metacharacter_injection() {
+        let dir = tempfile::tempdir().unwrap();
+        let canary = dir.path().join("pwned");
+        let target = dir.path().join("weird");
+        let content = format!(
+            "a'b; touch {}; echo $(touch {})",
+            canary.display(),
+            canary.display()
+        );
+        run_in_shell(&build_write_file_command(
+            target.to_str().unwrap(),
+            &content,
+        ));
+        assert!(
+            !canary.exists(),
+            "metacharacter injection in content executed"
+        );
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), content);
+    }
+
+    #[test]
+    fn write_file_command_neutralizes_injection_via_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let canary = dir.path().join("pwned");
+        // A path containing shell metacharacters must not execute anything.
+        let target = dir.path().join("x'; touch");
+        run_in_shell(&build_write_file_command(target.to_str().unwrap(), "data"));
+        assert!(!canary.exists());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "data");
     }
 
     #[test]
@@ -4495,4 +4656,3 @@ mod tests {
         }
     }
 }
-

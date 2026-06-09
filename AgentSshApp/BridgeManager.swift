@@ -341,8 +341,13 @@ final class BridgeManager {
     }
 
     @discardableResult
-    func sftpCancel(transferId: UUID) -> Bool {
-        rshellSftpCancel(transferId: transferId.uuidString)
+    func sftpCancel(transferId: UUID) async -> Bool {
+        // Off the main actor like every other bridge call: even though the
+        // Rust side only flips a cancellation token (no SSH round-trip), it
+        // still contends on a registry lock and must not run on the UI thread.
+        (try? await runOnUtilityQueue {
+            rshellSftpCancel(transferId: transferId.uuidString)
+        }) ?? false
     }
 
     func sftpChmod(connectionId: String, path: String, mode: String) async throws {
