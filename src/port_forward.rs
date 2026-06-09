@@ -568,3 +568,163 @@ fn now_unix() -> u64 {
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_config(kind: PortForwardKind) -> PortForwardConfig {
+        PortForwardConfig {
+            id: "forward-1".into(),
+            profile_id: "profile-1".into(),
+            connection_id: "conn-1".into(),
+            name: "test forward".into(),
+            kind,
+            bind_host: "127.0.0.1".into(),
+            bind_port: 8080,
+            destination_host: Some("db.internal".into()),
+            destination_port: Some(5432),
+        }
+    }
+
+    fn invalid_config_message(config: &PortForwardConfig) -> String {
+        match validate_config(config) {
+            Err(PortForwardError::InvalidConfig(message)) => message,
+            other => panic!("expected InvalidConfig, got {other:?}"),
+        }
+    }
+
+    // MARK: - validate_config
+
+    #[test]
+    fn accepts_a_fully_specified_local_forward() {
+        assert!(validate_config(&sample_config(PortForwardKind::Local)).is_ok());
+    }
+
+    #[test]
+    fn accepts_a_socks_forward_without_a_destination() {
+        let mut config = sample_config(PortForwardKind::DynamicSocks);
+        config.destination_host = None;
+        config.destination_port = None;
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn rejects_blank_required_identity_fields() {
+        for mutate in [
+            |c: &mut PortForwardConfig| c.id = "  ".into(),
+            |c: &mut PortForwardConfig| c.profile_id = "".into(),
+            |c: &mut PortForwardConfig| c.connection_id = "\t".into(),
+            |c: &mut PortForwardConfig| c.bind_host = "".into(),
+        ] {
+            let mut config = sample_config(PortForwardKind::Local);
+            mutate(&mut config);
+            assert!(
+                matches!(
+                    validate_config(&config),
+                    Err(PortForwardError::InvalidConfig(_))
+                ),
+                "expected the blank field to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn requires_destination_for_local_and_remote_forwards() {
+        for kind in [PortForwardKind::Local, PortForwardKind::Remote] {
+            let mut missing_host = sample_config(kind);
+            missing_host.destination_host = None;
+            assert!(invalid_config_message(&missing_host).contains("destination_host"));
+
+            let mut blank_host = sample_config(kind);
+            blank_host.destination_host = Some("   ".into());
+            assert!(invalid_config_message(&blank_host).contains("destination_host"));
+
+            let mut missing_port = sample_config(kind);
+            missing_port.destination_port = None;
+            assert!(invalid_config_message(&missing_port).contains("destination_port"));
+
+            let mut zero_port = sample_config(kind);
+            zero_port.destination_port = Some(0);
+            assert!(invalid_config_message(&zero_port).contains("destination_port"));
+        }
+    }
+
+    // MARK: - SOCKS5 connect-request parser
+
+    /// Drives `read_socks_connect_request` (server side) against a client that
+    /// writes `client_bytes`, returning the parsed `(host, port)` or the error.
+    async fn parse_socks(client_bytes: Vec<u8>) -> anyhow::Result<(String, u16)> {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let client = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            stream.write_all(&client_bytes).await.unwrap();
+            // Drain whatever the server writes back (method selection / replies)
+            // so its writes never block; ends on EOF when the server drops.
+            let mut scratch = [0_u8; 64];
+            let _ = stream.read(&mut scratch).await;
+        });
+        let (mut server, _) = listener.accept().await.unwrap();
+        let result = read_socks_connect_request(&mut server).await;
+        drop(server);
+        let _ = client.await;
+        result
+    }
+
+    #[tokio::test]
+    async fn parses_ipv4_connect_request() {
+        // VER NMETHODS METHOD | VER CMD RSV ATYP | 1.2.3.4 | port 80
+        let bytes = vec![
+            0x05, 0x01, 0x00, 0x05, 0x01, 0x00, 0x01, 1, 2, 3, 4, 0x00, 0x50,
+        ];
+        let (host, port) = parse_socks(bytes).await.unwrap();
+        assert_eq!(host, "1.2.3.4");
+        assert_eq!(port, 80);
+    }
+
+    #[tokio::test]
+    async fn parses_domain_connect_request() {
+        let domain = b"example.com";
+        let mut bytes = vec![0x05, 0x01, 0x00, 0x05, 0x01, 0x00, 0x03, domain.len() as u8];
+        bytes.extend_from_slice(domain);
+        bytes.extend_from_slice(&443u16.to_be_bytes());
+        let (host, port) = parse_socks(bytes).await.unwrap();
+        assert_eq!(host, "example.com");
+        assert_eq!(port, 443);
+    }
+
+    #[tokio::test]
+    async fn parses_ipv6_connect_request() {
+        let mut bytes = vec![0x05, 0x01, 0x00, 0x05, 0x01, 0x00, 0x04];
+        let mut addr = [0_u8; 16];
+        addr[15] = 1; // ::1
+        bytes.extend_from_slice(&addr);
+        bytes.extend_from_slice(&22u16.to_be_bytes());
+        let (host, port) = parse_socks(bytes).await.unwrap();
+        assert_eq!(host, "::1");
+        assert_eq!(port, 22);
+    }
+
+    #[tokio::test]
+    async fn rejects_non_socks5_greeting() {
+        let bytes = vec![0x04, 0x01, 0x00];
+        assert!(parse_socks(bytes).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn rejects_client_without_no_auth_method() {
+        // Offers only GSSAPI (0x01), not no-auth (0x00).
+        let bytes = vec![0x05, 0x01, 0x01];
+        assert!(parse_socks(bytes).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn rejects_unsupported_command() {
+        // CMD 0x02 = BIND, not CONNECT.
+        let bytes = vec![
+            0x05, 0x01, 0x00, 0x05, 0x02, 0x00, 0x01, 1, 2, 3, 4, 0x00, 0x50,
+        ];
+        assert!(parse_socks(bytes).await.is_err());
+    }
+}
