@@ -1,5 +1,5 @@
-import SwiftUI
 import AgentSshMacOS
+import SwiftUI
 
 // MARK: - Sidebar
 
@@ -26,10 +26,17 @@ struct ConnectionWorkspaceStrip: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @Binding var dashboardVisible: Bool
     @Binding var agentVisible: Bool
+    @Binding var filesVisible: Bool
     @ObservedObject private var triage = AgentTriageStore.shared
 
     private var connectedSSHTabs: [TerminalTab] {
         tabsStore.connectedSSHTabs
+    }
+
+    /// Files view covers any connected tab (SFTP-only tabs browse
+    /// files too, unlike the dashboard's terminal-backed monitors).
+    private var connectedFileTabCount: Int {
+        tabsStore.tabs.filter { $0.status == .connected }.count
     }
 
     var body: some View {
@@ -65,6 +72,7 @@ struct ConnectionWorkspaceStrip: View {
                 dashboardVisible.toggle()
                 if dashboardVisible {
                     agentVisible = false
+                    filesVisible = false
                 }
             },
             showsAgentButton: !tabsStore.tabs.isEmpty,
@@ -74,6 +82,16 @@ struct ConnectionWorkspaceStrip: View {
                 agentVisible.toggle()
                 if agentVisible {
                     dashboardVisible = false
+                    filesVisible = false
+                }
+            },
+            showsFilesButton: connectedFileTabCount >= 1,
+            filesVisible: filesVisible,
+            onToggleFiles: {
+                filesVisible.toggle()
+                if filesVisible {
+                    dashboardVisible = false
+                    agentVisible = false
                 }
             }
         )
@@ -532,7 +550,7 @@ struct DashboardPanel: View {
             profile.host,
             String(profile.port),
             profile.networkOptions.tailscaleResolutionMode.rawValue,
-            profile.networkOptions.tailscaleHostOverride ?? ""
+            profile.networkOptions.tailscaleHostOverride ?? "",
         ].joined(separator: "|")
     }
 
@@ -562,7 +580,7 @@ struct DashboardPanel: View {
         resolvedIPAddresses = Dictionary(uniqueKeysWithValues: entries)
     }
 
-    nonisolated private static func resolveDashboardIPAddresses(for profile: ConnectionProfile) async -> [String] {
+    private nonisolated static func resolveDashboardIPAddresses(for profile: ConnectionProfile) async -> [String] {
         await Task.detached(priority: .utility) {
             let host = Self.dashboardConnectHost(for: profile)
             if TailscaleAddressClassifier.isTailscaleAddress(host) {
@@ -572,7 +590,7 @@ struct DashboardPanel: View {
         }.value
     }
 
-    nonisolated private static func dashboardConnectHost(for profile: ConnectionProfile) -> String {
+    private nonisolated static func dashboardConnectHost(for profile: ConnectionProfile) -> String {
         guard profile.networkOptions.tailscaleResolutionMode != .system else {
             return profile.host
         }
@@ -743,7 +761,9 @@ private enum DashboardSort: String, CaseIterable, Identifiable {
     case name
     case host
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var label: String {
         switch self {

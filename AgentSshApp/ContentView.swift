@@ -1,6 +1,5 @@
-import SwiftUI
 import AgentSshMacOS
-
+import SwiftUI
 
 /// Native macOS workspace.
 ///
@@ -33,6 +32,7 @@ struct ContentView: View {
     @State private var selectedConnection: ConnectionProfile?
     @State private var dashboardVisible = false
     @State private var agentVisible = false
+    @State private var filesVisible = false
     @State private var showingCommandPalette = false
     @State private var serverDoctorTarget: ServerDoctorTarget?
 
@@ -58,6 +58,7 @@ struct ContentView: View {
                 layoutManager: layoutManager,
                 dashboardVisible: $dashboardVisible,
                 agentVisible: $agentVisible,
+                filesVisible: $filesVisible,
                 onDiagnose: { tab in
                     serverDoctorTarget = ServerDoctorTarget(tab: tab)
                 }
@@ -87,6 +88,7 @@ struct ContentView: View {
                     dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
                     if dashboardVisible {
                         agentVisible = false
+                        filesVisible = false
                     }
                 },
                 onToggleSidebar: {
@@ -120,6 +122,7 @@ struct ContentView: View {
                 dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
                 if dashboardVisible {
                     agentVisible = false
+                    filesVisible = false
                 }
             default:
                 break
@@ -156,8 +159,8 @@ struct ContentView: View {
                    get: { tabsStore.pendingFallback != nil },
                    set: { if !$0 { tabsStore.pendingFallback = nil } }
                ),
-               presenting: tabsStore.pendingFallback
-        ) { fallback in
+               presenting: tabsStore.pendingFallback)
+        { fallback in
             Button("Convert profile to SFTP") {
                 connectionStore.setKind(profileId: fallback.profileId, kind: .sftp)
                 tabsStore.pendingFallback = nil
@@ -176,16 +179,19 @@ struct ContentView: View {
         switch link.kind {
         case .monitoring:
             if let profileId = link.profileId,
-               let profile = connectionStore.connection(withId: profileId) {
+               let profile = connectionStore.connection(withId: profileId)
+            {
                 selectedConnection = profile
             }
             dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
             if dashboardVisible {
                 agentVisible = false
+                filesVisible = false
             }
         case .server, .terminal, .folder:
             guard let profileId = link.profileId,
-                  let profile = connectionStore.connection(withId: profileId) else {
+                  let profile = connectionStore.connection(withId: profileId)
+            else {
                 return
             }
             selectedConnection = profile
@@ -195,7 +201,8 @@ struct ContentView: View {
         case .automation:
             guard let operationId = link.operationId,
                   let operation = try? BackgroundSSHOperationStore().load().operations.first(where: { $0.id == operationId }),
-                  let profile = connectionStore.connection(withId: operation.profileId) else {
+                  let profile = connectionStore.connection(withId: operation.profileId)
+            else {
                 return
             }
             selectedConnection = profile
@@ -204,7 +211,8 @@ struct ContentView: View {
 
     private func handleRouteActivity(_ activity: NSUserActivity) {
         if let rawURL = activity.userInfo?["url"] as? String,
-           let url = URL(string: rawURL) {
+           let url = URL(string: rawURL)
+        {
             handleDeepLink(url)
             return
         }
@@ -270,6 +278,7 @@ private struct DetailColumn: View {
     @ObservedObject var layoutManager: LayoutManager
     @Binding var dashboardVisible: Bool
     @Binding var agentVisible: Bool
+    @Binding var filesVisible: Bool
     var onDiagnose: ((TerminalTab) -> Void)? = nil
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @State private var inspectorWidthDebounce: Task<Void, Never>?
@@ -284,6 +293,17 @@ private struct DetailColumn: View {
 
     private var agentShouldRender: Bool {
         agentVisible && !tabsStore.tabs.isEmpty
+    }
+
+    /// Files view stays useful down to a single connected host (unlike
+    /// the dashboard's 2-host minimum) — one full-width pane is still a
+    /// better file workspace than nothing when the user asked for it.
+    private var filesShouldRender: Bool {
+        filesVisible && connectedFileTabCount >= 1
+    }
+
+    private var connectedFileTabCount: Int {
+        tabsStore.tabs.filter { $0.status == .connected }.count
     }
 
     private var connectedSSHTabIds: [UUID] {
@@ -303,7 +323,8 @@ private struct DetailColumn: View {
             if !tabsStore.tabs.isEmpty {
                 ConnectionWorkspaceStrip(
                     dashboardVisible: $dashboardVisible,
-                    agentVisible: $agentVisible
+                    agentVisible: $agentVisible,
+                    filesVisible: $filesVisible
                 )
                 Divider()
             }
@@ -317,6 +338,9 @@ private struct DetailColumn: View {
                     }
                 )
                 .frame(minWidth: 320, minHeight: 320)
+            } else if filesShouldRender {
+                FilesPanel()
+                    .frame(minWidth: 320, minHeight: 320)
             } else if dashboardShouldRender {
                 DashboardPanel()
                     .frame(minWidth: 320, minHeight: 320)
@@ -363,6 +387,11 @@ private struct DetailColumn: View {
         .onChange(of: tabsStore.tabs.isEmpty) { isEmpty in
             if isEmpty {
                 agentVisible = false
+            }
+        }
+        .onChange(of: connectedFileTabCount) { count in
+            if count < 1 {
+                filesVisible = false
             }
         }
     }

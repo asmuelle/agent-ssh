@@ -1,5 +1,5 @@
-import SwiftUI
 import AgentSshMacOS
+import SwiftUI
 
 /// Browser-style workspace session switcher. This is intentionally not a
 /// platform tab bar: it switches connected workspaces, not app sections.
@@ -24,6 +24,9 @@ struct WorkspaceTabStripView: View {
     /// (red, with a count) even while the Agent view is closed.
     var agentIssueCount = 0
     var onToggleAgent: (() -> Void)? = nil
+    var showsFilesButton = false
+    var filesVisible = false
+    var onToggleFiles: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
@@ -95,6 +98,32 @@ struct WorkspaceTabStripView: View {
                     agentIssueCount > 0
                         ? "\(agentIssueCount) issue\(agentIssueCount == 1 ? "" : "s") need attention"
                         : (agentVisible ? "Close agent view" : "Open agent view — silent unless something needs fixing")
+                )
+                .padding(.trailing, (showsFilesButton || showsDashboardButton) ? 4 : 8)
+            }
+
+            if showsFilesButton, let onToggleFiles {
+                Button(action: onToggleFiles) {
+                    Label("Files", systemImage: "folder")
+                        .font(MidnightMacDesign.FontToken.label)
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small)
+                                .fill(
+                                    filesVisible
+                                        ? Color.accentColor.opacity(0.18)
+                                        : Color.clear
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(filesVisible ? Color.accentColor : Color.primary)
+                .help(
+                    filesVisible
+                        ? "Close files view"
+                        : "Browse every connected host's files side by side — drag between panes to copy across servers"
                 )
                 .padding(.trailing, showsDashboardButton ? 4 : 8)
             }
@@ -202,10 +231,10 @@ struct WorkspaceTabItemView: View {
 
     private var statusTooltip: String {
         switch status {
-        case .connected:    return "Connected"
-        case .connecting:   return "Connecting…"
+        case .connected: return "Connected"
+        case .connecting: return "Connecting…"
         case .disconnected: return "Disconnected"
-        case .error:        return "Connection error"
+        case .error: return "Connection error"
         }
     }
 }
