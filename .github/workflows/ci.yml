@@ -64,9 +64,16 @@ jobs:
       - name: Build app (unsigned, compiler validation)
         run: just mac-ci-build
 
+      # Ad-hoc signing: the runner has no certificate for the project's
+      # DEVELOPMENT_TEAM, and framework unit tests don't need one.
       - name: Swift framework unit tests
         run: |
           xcodebuild test \
             -project Agent-Ssh.xcodeproj \
             -scheme AgentSshMacOS \
-            -destination 'platform=macOS'
+            -destination 'platform=macOS' \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM= \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES
