@@ -10,6 +10,15 @@ plist="${macos_dir}/AgentSshApp/Info.plist"
 app_name="agent-ssh"
 app_path="${macos_dir}/build/Build/Products/Release/${app_name}.app"
 
+# A release with an empty SUPublicEDKey ships updates that Sparkle cannot
+# signature-verify. Fail early instead of producing an unverifiable artifact.
+sparkle_key="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$plist" 2>/dev/null || true)"
+if [[ -z "$sparkle_key" ]]; then
+    echo "SUPublicEDKey is empty in ${plist}." >&2
+    echo "Run 'just mac-sparkle-keygen' and add the printed public key to Info.plist before releasing." >&2
+    exit 1
+fi
+
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
 build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -68,29 +77,11 @@ else
 fi
 
 if [[ -n "${MAC_RELEASE_BASE_URL:-}" ]]; then
-    download_url="${MAC_RELEASE_BASE_URL%/}/$(basename "$release_dmg")"
-    appcast_path="${release_dir}/appcast.xml"
-    file_size="$(stat -f%z "$release_dmg")"
-    cat > "$appcast_path" <<EOF
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>agent-ssh Changelog</title>
-    <item>
-      <title>Version ${version}</title>
-      <sparkle:version>${build}</sparkle:version>
-      <sparkle:shortVersionString>${version}</sparkle:shortVersionString>
-      <enclosure url="${download_url}"
-                 length="${file_size}"
-                 type="application/octet-stream" />
-      <description><![CDATA[
-        <h2>agent-ssh ${version}</h2>
-        <p>See release-notes.md for the release checklist.</p>
-      ]]></description>
-    </item>
-  </channel>
-</rss>
-EOF
+    # generate_appcast signs each DMG with the EdDSA private key from the
+    # keychain (created by `just mac-sparkle-keygen`), producing enclosure
+    # entries with a sparkle:edSignature that the app can verify.
+    generate_appcast="$("${script_dir}/find_sparkle_tool.sh" generate_appcast)"
+    "$generate_appcast" --download-url-prefix "${MAC_RELEASE_BASE_URL%/}/" "$release_dir"
 fi
 
 echo "Release artifact written to:"

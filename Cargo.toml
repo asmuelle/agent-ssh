@@ -36,3 +36,10 @@ uniffi = { version = "0.28", features = ["build"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+# Distributed inside the .app bundle — optimize for size and speed.
+# `strip = "debuginfo"` keeps symbol names for crash-report symbolication.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "debuginfo"

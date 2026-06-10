@@ -1,0 +1,22 @@
+# cargo-deny configuration — run with `cargo deny check advisories`.
+#
+# Every ignore below is a tracked exception, not a dismissal. When an entry's
+# upstream fix lands, remove it so CI starts enforcing again.
+
+[advisories]
+ignore = [
+    # russh 0.43 / russh-cryptovec 0.7.3 — GHSA-g9f8-wqj9-fjw5.
+    # Unchecked CryptoVec growth and unbounded agent frame allocation; fix is
+    # russh >= 0.60.3. We get russh via ssh-commander-core (our own upstream
+    # crate, github.com/asmuelle/ssh-commander-core), which pins russh 0.43.
+    # TRACKED: migrate ssh-commander-core to russh >= 0.60.3, publish, and bump
+    # the dependency here — then delete these two entries.
+    { id = "RUSTSEC-2026-0153", reason = "fix requires russh >= 0.60.3; migration tracked in ssh-commander-core" },
+    { id = "RUSTSEC-2026-0154", reason = "fix requires russh >= 0.60.3; migration tracked in ssh-commander-core" },
+
+    # Unmaintained (not vulnerabilities). All transitive via ssh-commander-core;
+    # revisit when its dependency tree is next overhauled.
+    { id = "RUSTSEC-2025-0052", reason = "async-std discontinued — transitive via ssh-commander-core/suppaftp" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode 1.x unmaintained but feature-complete — transitive" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — transitive proc-macro, build-time only" },
+]

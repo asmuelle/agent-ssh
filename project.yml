@@ -66,9 +66,14 @@ targets:
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.automation.apple-events: false
-        com.apple.security.cs.allow-unsigned-executable-memory: true
+        # Required for ad-hoc dev builds only: embedded SPM frameworks
+        # (Sparkle, SwiftTerm) carry ad-hoc signatures with no Team ID,
+        # which library validation rejects. The Rust core is a static
+        # lib, so no other unsigned code is loaded. Hardened-runtime
+        # exceptions beyond this one (dyld env vars, unsigned executable
+        # memory) were removed deliberately — do not re-add without a
+        # documented need.
         com.apple.security.cs.disable-library-validation: true
-        com.apple.security.cs.allow-dyld-environment-variables: true
         com.apple.security.device.audio-input: false
         com.apple.security.device.camera: false
         com.apple.security.files.user-selected.read-write: true

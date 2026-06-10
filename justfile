@@ -178,13 +178,17 @@ mac-test:
         -project {{xcode_proj}} \
         -scheme {{mac_fw}} \
         -destination 'platform=macOS'
+    # CODE_SIGN_ENTITLEMENTS= strips entitlements for the test build:
+    # current Xcode refuses ad-hoc signing when the app-groups
+    # entitlement is present, and unit/FFI tests don't need app groups.
     xcodebuild test \
         -project {{xcode_proj}} \
         -scheme {{mac_scheme}} \
         -destination 'platform=macOS' \
         CODE_SIGN_IDENTITY="-" \
         CODE_SIGNING_REQUIRED=YES \
-        CODE_SIGNING_ALLOWED=YES
+        CODE_SIGNING_ALLOWED=YES \
+        CODE_SIGN_ENTITLEMENTS=
 
 # Verify the .app's signature & Gatekeeper status.
 mac-verify:

@@ -12,10 +12,13 @@ pub struct MacOsBridge {
 }
 
 impl MacOsBridge {
+    /// Returns the global bridge, initializing it on first use.
+    ///
+    /// Lazy initialization (rather than `expect`) keeps a Rust panic from
+    /// unwinding across the FFI boundary if Swift calls any `rshell_*`
+    /// function before `rshell_init()`.
     pub fn global() -> &'static Self {
-        BRIDGE
-            .get()
-            .expect("MacOsBridge not initialized — call rshell_init() first")
+        Self::init()
     }
 
     pub fn init() -> &'static Self {

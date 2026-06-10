@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust — fmt, clippy, tests, advisories
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: extractions/setup-just@v2
+
+      - name: Lint (fmt + clippy)
+        run: just lint
+
+      - name: Rust tests
+        run: just test-rust
+
+      - name: Dependency advisories
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+
+  mac:
+    name: macOS — build + Swift unit tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: extractions/setup-just@v2
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build app (unsigned, compiler validation)
+        run: just mac-ci-build
+
+      - name: Swift framework unit tests
+        run: |
+          xcodebuild test \
+            -project Agent-Ssh.xcodeproj \
+            -scheme AgentSshMacOS \
+            -destination 'platform=macOS'

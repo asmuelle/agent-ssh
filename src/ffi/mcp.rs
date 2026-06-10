@@ -23,6 +23,17 @@ fn build_write_file_command(path: &str, content: &str) -> String {
     format!("printf '%s' {quoted_content} > {quoted_path}")
 }
 
+/// Builds a shell command that reads `path` on the remote host.
+///
+/// The path is passed as a single-quoted shell token via
+/// `shell_escape::unix::escape` — same quoting strategy as
+/// `build_write_file_command` — so it cannot break out and inject commands.
+fn build_read_file_command(path: &str) -> String {
+    use std::borrow::Cow;
+    let quoted_path = shell_escape::unix::escape(Cow::Borrowed(path));
+    format!("cat {quoted_path}")
+}
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiMcpError {
     #[error("connection not found: {connection_id}")]
@@ -49,6 +60,11 @@ pub fn rshell_mcp_execute(
         })?;
 
     match tool.as_str() {
+        // SECURITY: `run_command` is intentionally unrestricted (no read-only
+        // allowlist). The Swift side gates AI-initiated tool calls behind
+        // MCPSecurityGate (biometric auth for mutating commands); this layer
+        // trusts its caller. Never route tool calls here from a remote or
+        // otherwise untrusted source without adding a guard.
         "run_command" => {
             let command = parsed_args
                 .get("command")
@@ -85,8 +101,7 @@ pub fn rshell_mcp_execute(
                     message: "missing 'path' parameter".into(),
                 })?;
 
-            let escaped_path = path.replace("'", "'\\''");
-            let command = format!("cat '{}'", escaped_path);
+            let command = build_read_file_command(path);
 
             let bridge = MacOsBridge::global();
             let cm = bridge.connection_manager.clone();
@@ -317,6 +332,37 @@ mod tests {
         run_in_shell(&build_write_file_command(target.to_str().unwrap(), "data"));
         assert!(!canary.exists());
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "data");
+    }
+
+    #[test]
+    fn read_file_command_reads_exact_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("note.txt");
+        std::fs::write(&target, "hello\nworld\n").unwrap();
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(build_read_file_command(target.to_str().unwrap()))
+            .output()
+            .expect("failed to spawn sh");
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\nworld\n");
+    }
+
+    #[test]
+    fn read_file_command_neutralizes_injection_via_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let canary = dir.path().join("pwned");
+        // A path with quotes and metacharacters must not execute anything —
+        // `cat` just fails to find the literal filename.
+        let target = dir
+            .path()
+            .join(format!("x'; touch {}; '", canary.display()));
+        let _ = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(build_read_file_command(target.to_str().unwrap()))
+            .output()
+            .expect("failed to spawn sh");
+        assert!(!canary.exists(), "metacharacter injection in path executed");
     }
 
     #[test]
