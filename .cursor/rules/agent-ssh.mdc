@@ -1,0 +1,36 @@
+---
+description: agent-ssh project conventions — Swift + Rust + FFI
+globs: **/*.swift,**/*.rs,**/*.yml,**/*.md
+---
+# agent-ssh Project Rules
+
+## Build commands
+- `just check` — fast Rust compile check
+- `just lint` — format + clippy (CI gate, must pass)
+- `just mac-build` — full macOS signed build
+- `just mac-build-dev` — debug build with development signing
+- `just mac-test` — Swift framework + FFI integration tests
+- `just mac-bindings` — regenerate FFI bindings after editing `src/ffi.rs`
+
+## Architecture
+- macOS UI: `AgentSshApp/` — SwiftUI + AppKit
+- iPadOS UI: `AgentSshMobile/`
+- Shared framework: `Sources/AgentSshMacOS/`
+- Rust FFI surface: `src/ffi.rs` (uniffi exports)
+- Generated bindings: `bindings/midnight_ssh.swift`
+- Xcode project generated from `project.yml` — never hand-edit `.xcodeproj`
+
+## Swift conventions
+- `BridgeManager` is the single FFI entry point — extensions: `BridgeManager+<Feature>.swift`
+- `@MainActor` on all UI-mutating code
+- State classes use `*Store` / `*Manager` naming
+
+## Rust/FFI conventions
+- FFI functions exported via `#[uniffi::export]` in `src/ffi.rs`
+- Error returns at FFI boundary: `Result<T, String>`
+- Any network call: `RUNTIME.block_on(async { … })`
+
+## Critical rules
+- NEVER manually edit `bindings/midnight_ssh.swift` — FFI checksum mismatch causes crash at `rshellInit()`
+- After any FFI change: `just mac-bindings` + commit generated bindings
+- Stale SPM cache fix: `rm -rf build .build && just mac-gen && just mac-build`
