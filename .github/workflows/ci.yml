@@ -30,14 +30,23 @@ jobs:
       - name: Rust tests
         run: just test-rust
 
-      - name: Dependency advisories
-        uses: EmbarkStudios/cargo-deny-action@v2
+  # Separate job: cargo-deny-action is a container action (Linux-only),
+  # and advisory checking only parses Cargo.lock — no macOS deps needed.
+  advisories:
+    name: Dependency advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check advisories
 
   mac:
     name: macOS — build + Swift unit tests
-    runs-on: macos-15
+    # macos-26 image: the widgets target uses ControlWidget, which needs
+    # the macOS 26 SDK (Xcode 26); macos-15's Xcode 16.4 can't compile it.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
