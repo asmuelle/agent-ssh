@@ -2,7 +2,7 @@
 
 Native macOS / iPadOS SSH workspace. AppKit + SwiftUI shell, SwiftTerm for the PTY, [`ssh-commander-core`](https://github.com/asmuelle/ssh-commander-core) for the protocol layer, [uniffi](https://mozilla.github.io/uniffi-rs/) for the FFI bridge.
 
-> Private repository. See [TOOLS.md](TOOLS.md) for the in-app feature catalog and [AGENTS.md](AGENTS.md) for code-tour notes for AI agents.
+**→ [asmuelle.github.io/agent-ssh](https://asmuelle.github.io/agent-ssh/)** · See [TOOLS.md](TOOLS.md) for the in-app feature catalog and [AGENTS.md](AGENTS.md) for code-tour notes for AI agents.
 
 ## Stack
 
@@ -120,6 +120,13 @@ just mac-build
 
 **Build is slow on first run** — `russh` and `parquet` (transitive via `ssh-commander-pg-parquet`) compile from source. Subsequent incremental builds are fast.
 
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+local checks, and the FFI workflow. All contributors agree to the
+[CLA](CLA.md).
+
 ## License
 
-Private. All rights reserved.
+[GNU AGPL-3.0](LICENSE) © 2026 Andreas Mueller. The project is also available
+under separate commercial terms; reach out if AGPL doesn't fit your use.
