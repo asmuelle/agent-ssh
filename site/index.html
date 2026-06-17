@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>agent-ssh — native macOS &amp; iPadOS SSH workspace with a Rust core</title>
+    <meta
+      name="description"
+      content="A native macOS and iPadOS SSH workspace — terminal, SFTP, PostgreSQL, monitoring, and network tools — built on a memory-safe Rust protocol core bridged to Swift with UniFFI."
+    />
+    <meta name="theme-color" content="#0B0F14" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Open Graph / social -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="agent-ssh — SSH workspace for people who live in production" />
+    <meta
+      property="og:description"
+      content="Native macOS &amp; iPadOS. Terminal, SFTP, PostgreSQL, monitoring — over a memory-safe Rust core bridged to Swift with UniFFI."
+    />
+    <meta property="og:url" content="https://asmuelle.github.io/agent-ssh/" />
+    <meta property="og:image" content="https://asmuelle.github.io/agent-ssh/assets/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="agent-ssh — SSH workspace for people who live in production" />
+    <meta
+      name="twitter:description"
+      content="Native macOS &amp; iPadOS. Terminal, SFTP, PostgreSQL, monitoring — over a memory-safe Rust core."
+    />
+    <meta name="twitter:image" content="https://asmuelle.github.io/agent-ssh/assets/og-image.png" />
+
+    <link rel="icon" type="image/png" href="assets/icon.png" />
+    <link rel="apple-touch-icon" href="assets/icon.png" />
+    <link rel="preload" as="image" href="assets/icon.png" fetchpriority="high" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="aurora" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="#top" aria-label="agent-ssh home">
+          <img class="brand-mark" src="assets/icon.png" alt="" width="34" height="34" />
+          <span class="brand-name">agent<span class="brand-slash">/</span>ssh</span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#architecture">Architecture</a></li>
+          <li><a href="#stack">Stack</a></li>
+          <li><a href="#engineering">Engineering</a></li>
+        </ul>
+        <a class="btn btn-ghost nav-cta" href="https://github.com/asmuelle/agent-ssh">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          GitHub
+        </a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <!-- HERO -->
+      <section class="hero" aria-labelledby="hero-heading">
+        <div class="hero-copy" data-reveal>
+          <p class="eyebrow">macOS&nbsp;·&nbsp;iPadOS&nbsp;·&nbsp;Rust&nbsp;core</p>
+          <h1 id="hero-heading">
+            The SSH workspace for people who <span class="grad">live in production</span>.
+          </h1>
+          <p class="lede">
+            A native macOS &amp; iPadOS client that folds the terminal, SFTP, a full
+            PostgreSQL workspace, monitoring, and network tools into one window —
+            running over a memory-safe <strong>Rust</strong> protocol core bridged to
+            Swift with <strong>UniFFI</strong>.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/asmuelle/agent-ssh">
+              View the source
+              <span class="btn-arrow" aria-hidden="true">→</span>
+            </a>
+            <a class="btn btn-ghost" href="#architecture">How it's built</a>
+          </div>
+          <ul class="hero-chips" aria-label="At a glance">
+            <li><b>2&nbsp;platforms</b> one shared core</li>
+            <li><b>8+</b> tool surfaces</li>
+            <li><b>Rust 1.95</b> edition 2024</li>
+            <li><b>0</b> hand-edited FFI</li>
+          </ul>
+        </div>
+
+        <div class="hero-visual" data-reveal>
+          <div class="glow-icon">
+            <img src="assets/icon.png" alt="agent-ssh app icon" width="120" height="120" />
+          </div>
+          <div class="window" role="img" aria-label="Terminal session example">
+            <div class="window-bar">
+              <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+              <span class="window-title">prod-edge-01 — ssh</span>
+            </div>
+            <pre class="term" aria-hidden="true"><code><span class="c-prompt">andreas@prod-edge-01</span><span class="c-path"> ~</span> <span class="c-cmd">systemctl status nginx</span>
+<span class="c-ok">●</span> nginx.service — A high performance web server
+   Active: <span class="c-ok">active (running)</span> since Tue; 14d ago
+<span class="c-prompt">andreas@prod-edge-01</span><span class="c-path"> ~</span> <span class="c-cmd">psql -c "select count(*) from events"</span>
+ count
+<span class="c-dim">───────</span>
+ <span class="c-num">4821934</span>
+<span class="c-prompt">andreas@prod-edge-01</span><span class="c-path"> ~</span> <span class="typed" data-type="tcpdump -lnn port 443 | rg SYN"></span><span class="caret">▋</span></code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- STACK STRIP -->
+      <section class="stack-strip" id="stack" aria-label="Technology stack">
+        <ul class="ticker" data-reveal>
+          <li>SwiftUI</li><li>AppKit</li><li>SwiftTerm</li><li>Rust&nbsp;2024</li>
+          <li>UniFFI</li><li>tokio</li><li>russh</li><li>PostgreSQL</li>
+          <li>Parquet</li><li>Keychain</li><li>Sparkle&nbsp;2</li><li>XcodeGen</li>
+        </ul>
+      </section>
+
+      <!-- FEATURES -->
+      <section class="section" id="features" aria-labelledby="features-heading">
+        <div class="section-head" data-reveal>
+          <p class="kicker">What it does</p>
+          <h2 id="features-heading">One window, the whole operations surface.</h2>
+          <p class="section-sub">
+            Every panel is wired to the same Rust core through a typed event bus —
+            no shelling out, no per-tool re-auth.
+          </p>
+        </div>
+
+        <div class="bento">
+          <article class="card card-lg" data-reveal>
+            <div class="card-glyph">❯_</div>
+            <h3>Terminal</h3>
+            <p>
+              SwiftTerm PTY rendering full xterm-256color, with regex search, tabbed
+              sessions, split panes, and a ⌘K command palette over connections and
+              saved queries.
+            </p>
+            <ul class="tags"><li>SwiftTerm</li><li>split panes</li><li>⌘K palette</li></ul>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="card-glyph">⇄</div>
+            <h3>Dual-pane transfer</h3>
+            <p>
+              Side-by-side local/remote browsing, drag-and-drop, chmod, and a
+              three-way diff with snapshot-before-write so a typo in
+              <code>nginx.conf</code> never takes a host down.
+            </p>
+            <ul class="tags"><li>SFTP</li><li>safe-save</li></ul>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="card-glyph">⌥</div>
+            <h3>PostgreSQL workspace</h3>
+            <p>
+              Multi-database schema tree, per-tab query cursors, click-to-edit cells,
+              and cursor-paginated CSV / JSONL / <strong>Parquet</strong> export over
+              an SSH tunnel.
+            </p>
+            <ul class="tags"><li>query tabs</li><li>Parquet</li><li>tunneling</li></ul>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="card-glyph">◎</div>
+            <h3>Network tools</h3>
+            <p>
+              Multi-perspective DNS, a listening-port inventory with PID + process,
+              streaming <code>tcpdump</code>, and remote git deploy-state — all over an
+              existing session.
+            </p>
+            <ul class="tags"><li>tcpdump</li><li>DNS</li><li>ports</li></ul>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="card-glyph">∿</div>
+            <h3>Live monitoring</h3>
+            <p>
+              CPU, memory, disk, and load-average time series in SwiftUI Charts, plus a
+              sortable remote process list with a kill action.
+            </p>
+            <ul class="tags"><li>Charts</li><li>processes</li></ul>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="card-glyph">🔒</div>
+            <h3>Security model</h3>
+            <p>
+              Secrets live in the Keychain only. Host-key trust is TOFU and
+              <strong>fails closed</strong>. On iPadOS, destructive actions sit behind a
+              Face&nbsp;ID privacy gate.
+            </p>
+            <ul class="tags"><li>Keychain</li><li>fail-closed</li><li>Face ID</li></ul>
+          </article>
+
+          <article class="card card-wide" data-reveal>
+            <div class="card-glyph">⌘</div>
+            <h3>Runbooks &amp; an iPadOS-first surface</h3>
+            <p>
+              Repeatable command sequences with per-step recording and partial-failure
+              triage. On iPad: a connection map by latency, an incident-report builder,
+              SFTP that mounts into Files, and long tasks that survive backgrounding via
+              <code>BGTaskScheduler</code>.
+            </p>
+            <ul class="tags"><li>runbooks</li><li>incident reports</li><li>Files integration</li><li>BGTask</li></ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- ARCHITECTURE -->
+      <section class="section section-arch" id="architecture" aria-labelledby="arch-heading">
+        <div class="section-head" data-reveal>
+          <p class="kicker">How it's built</p>
+          <h2 id="arch-heading">A Swift shell over a Rust heart.</h2>
+          <p class="section-sub">
+            The UI is native SwiftUI/AppKit. Everything that touches the network is
+            Rust — generated, checksum-verified bindings keep the boundary honest.
+          </p>
+        </div>
+
+        <div class="arch" data-reveal>
+          <div class="layer layer-ui">
+            <span class="layer-tag">UI</span>
+            <h4>SwiftUI&nbsp;+&nbsp;AppKit shell</h4>
+            <p>Views, stores, SwiftTerm. macOS &amp; iPadOS targets share a framework.</p>
+          </div>
+          <div class="arch-arrow" aria-hidden="true">↓</div>
+          <div class="layer layer-ffi">
+            <span class="layer-tag">FFI</span>
+            <h4>UniFFI generated bindings</h4>
+            <p>Proc-macro exports → committed Swift bindings. Per-function checksums verified at init.</p>
+          </div>
+          <div class="arch-arrow" aria-hidden="true">↓</div>
+          <div class="layer layer-rt">
+            <span class="layer-tag">Runtime</span>
+            <h4>Rust bridge · one tokio runtime</h4>
+            <p>A typed event bus streams PTY output, transfer progress, and monitor samples back to Swift.</p>
+          </div>
+          <div class="arch-arrow" aria-hidden="true">↓</div>
+          <div class="layer layer-core">
+            <span class="layer-tag">Core</span>
+            <h4>ssh-commander-core</h4>
+            <p>SSH (russh), PostgreSQL, and Parquet — the memory-safe protocol layer, published on crates.io.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ENGINEERING HIGHLIGHTS -->
+      <section class="section" id="engineering" aria-labelledby="eng-heading">
+        <div class="section-head" data-reveal>
+          <p class="kicker">Why it's a good reference</p>
+          <h2 id="eng-heading">Engineering decisions worth a look.</h2>
+        </div>
+        <div class="highlights">
+          <div class="hl" data-reveal>
+            <h3>Cross-language FFI, done safely</h3>
+            <p>
+              UniFFI proc-macros generate the Swift surface; bindings are committed and
+              checksum-checked so a stale binding crashes loudly at init instead of
+              corrupting silently.
+            </p>
+          </div>
+          <div class="hl" data-reveal>
+            <h3>One async runtime, one event bus</h3>
+            <p>
+              A single tokio runtime backs every feature. Streaming work — PTY, tcpdump,
+              transfers, Parquet export — flows over one typed, back-pressured event bus.
+            </p>
+          </div>
+          <div class="hl" data-reveal>
+            <h3>Reproducible, signed pipeline</h3>
+            <p>
+              The Xcode project is generated from <code>project.yml</code> via XcodeGen;
+              <code>just</code> drives build, sign, notarize, and Sparkle delta updates.
+            </p>
+          </div>
+          <div class="hl" data-reveal>
+            <h3>Multi-platform from one core</h3>
+            <p>
+              macOS, iPadOS, plus widgets, share, shortcuts, and a File Provider
+              extension — all sharing the same Rust core and Swift models.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <section class="closing" data-reveal>
+        <h2>Read the code.</h2>
+        <p>Architecture notes in <code>AGENTS.md</code>, the full feature catalog in <code>TOOLS.md</code>.</p>
+        <a class="btn btn-primary btn-lg" href="https://github.com/asmuelle/agent-ssh">
+          Open on GitHub <span class="btn-arrow" aria-hidden="true">→</span>
+        </a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="foot-inner">
+        <span class="foot-brand">agent<span class="brand-slash">/</span>ssh</span>
+        <span class="foot-by">Designed &amp; engineered by <a href="https://github.com/asmuelle">Andreas&nbsp;Mueller</a></span>
+        <nav class="foot-links" aria-label="Footer">
+          <a href="https://github.com/asmuelle/agent-ssh">Repository</a>
+          <a href="https://github.com/asmuelle/agent-ssh/blob/main/TOOLS.md">Features</a>
+          <a href="https://github.com/asmuelle/agent-ssh/blob/main/AGENTS.md">Architecture</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script src="main.js" defer></script>
+  </body>
+</html>
