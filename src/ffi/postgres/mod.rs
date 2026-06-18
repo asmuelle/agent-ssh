@@ -237,7 +237,10 @@ pub fn rshell_pg_connect(config: FfiPgConfig) -> Result<String, FfiPgError> {
 
     bridge
         .runtime
-        .block_on(async move { cm.create_postgres_connection(conn_id, core_cfg, tunnel).await })
+        .block_on(async move {
+            cm.create_postgres_connection(conn_id, core_cfg, tunnel)
+                .await
+        })
         .map_err(|e| {
             // The manager wraps PgError in anyhow; downcast back so we
             // keep the typed classification through to Swift.

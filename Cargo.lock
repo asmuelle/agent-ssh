@@ -3404,9 +3404,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-core"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3defd551c9c796df47a08fd627a3cbb707f0e77adb2850db9ab10cd00c65a501"
+checksum = "9def1becc600026883a55e2c9153f88735943db8d8e289d51642583431279e04"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3430,9 +3430,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-keychain"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e732a937d3e0b311047cd479c62db5f43c359c7e973db2b5d444fb7adf3b4a"
+checksum = "d2cae426ebad691ab3d1cf663bcc8c11fa2fdb71745e9c80422ce271d54a332b"
 dependencies = [
  "anyhow",
  "security-framework",
@@ -3443,9 +3443,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-pg"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f0d5da0818d967a2249592fa81bca3ecb0f1e0ca86a7888f73187d723a026d4"
+checksum = "8f011d13f606b0fdcd04032eeb482f885c1bccf4c03f6c5557640626cff4493e"
 dependencies = [
  "rustls",
  "rustls-native-certs",
@@ -3463,9 +3463,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-pg-parquet"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faaa676277bff469f14572ded8b49829e25c47649f0051a5078c8a6a2893232b"
+checksum = "0ea0d59693b385ed4b9f27a6f850ddbb070d64c5503fef79c1fca87099884d96"
 dependencies = [
  "arrow-array",
  "arrow-schema",
