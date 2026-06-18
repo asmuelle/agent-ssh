@@ -20,8 +20,8 @@ path = "uniffi-bindgen.rs"
 
 [dependencies]
 # Full SSH/SFTP/FTP + Postgres client — keeps the default feature set.
-ssh-commander-core = "0.2.1"
-ssh-commander-pg-parquet = "0.2.1"
+ssh-commander-core = "0.2.2"
+ssh-commander-pg-parquet = "0.2.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
