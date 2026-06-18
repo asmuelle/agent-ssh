@@ -5,17 +5,17 @@
 
 [advisories]
 ignore = [
-    # russh 0.43 / russh-cryptovec 0.7.3 — GHSA-g9f8-wqj9-fjw5.
-    # Unchecked CryptoVec growth and unbounded agent frame allocation; fix is
-    # russh >= 0.60.3. We get russh via ssh-commander-core (our own upstream
-    # crate, github.com/asmuelle/ssh-commander-core), which pins russh 0.43.
-    # TRACKED: migrate ssh-commander-core to russh >= 0.60.3, publish, and bump
-    # the dependency here — then delete these two entries.
-    { id = "RUSTSEC-2026-0153", reason = "fix requires russh >= 0.60.3; migration tracked in ssh-commander-core" },
-    { id = "RUSTSEC-2026-0154", reason = "fix requires russh >= 0.60.3; migration tracked in ssh-commander-core" },
+    # rsa Marvin timing side-channel — no fixed release exists. Pulled in
+    # transitively by ssh-commander-core 0.2.2 → russh 0.61 → ssh-key → rsa
+    # for RSA key support (the russh 0.43 → 0.61 upgrade fixed the previous
+    # RUSTSEC-2026-0153/0154 russh advisories but surfaces this one). Low
+    # practical risk for an interactive SSH client.
+    # TRACKED: drop when the rsa crate ships a constant-time fix.
+    { id = "RUSTSEC-2023-0071", reason = "no fix available; transitive via russh 0.61 / ssh-key" },
 
-    # Unmaintained (not vulnerabilities). All transitive via ssh-commander-core;
-    # revisit when its dependency tree is next overhauled.
+    # Unmaintained / unsound (not exploitable here). All transitive via
+    # ssh-commander-core; revisit when its dependency tree is next overhauled.
+    { id = "RUSTSEC-2026-0097", reason = "rand unsoundness in a custom-logger edge case — transitive via russh 0.61" },
     { id = "RUSTSEC-2025-0052", reason = "async-std discontinued — transitive via ssh-commander-core/suppaftp" },
     { id = "RUSTSEC-2025-0141", reason = "bincode 1.x unmaintained but feature-complete — transitive" },
     { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — transitive proc-macro, build-time only" },

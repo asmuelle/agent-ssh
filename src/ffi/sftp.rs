@@ -554,9 +554,7 @@ pub fn rshell_sftp_list_dir(
                 group: e.group,
                 kind: match e.file_type {
                     ssh_commander_core::FileEntryType::File => FfiFileKind::File,
-                    ssh_commander_core::FileEntryType::Directory => {
-                        FfiFileKind::Directory
-                    }
+                    ssh_commander_core::FileEntryType::Directory => FfiFileKind::Directory,
                     ssh_commander_core::FileEntryType::Symlink => FfiFileKind::Symlink,
                 },
             })
