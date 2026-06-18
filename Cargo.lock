@@ -1197,7 +1197,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2625,9 +2625,9 @@ dependencies = [
 
 [[package]]
 name = "postgres-protocol"
-version = "0.6.11"
+version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56201207dac53e2f38e848e31b4b91616a6bb6e0c7205b77718994a7f49e70fc"
+checksum = "08808e3c483c46e999108051c78334f473d5adb59d78bb80a1268c7e6aa6c514"
 dependencies = [
  "base64",
  "byteorder",
@@ -2643,9 +2643,9 @@ dependencies = [
 
 [[package]]
 name = "postgres-types"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dc729a129e682e8d24170cd30ae1aa01b336b096cbb56df6d534ffec133d186"
+checksum = "851ca9db4932932d69f3ea811b1abe63087a0f740a47692619dd40d4899b68be"
 dependencies = [
  "bytes",
  "chrono",
@@ -3006,7 +3006,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3404,9 +3404,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-core"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3defd551c9c796df47a08fd627a3cbb707f0e77adb2850db9ab10cd00c65a501"
+checksum = "f272146dfb33fe718a813273fd57486f11c8fd3c16a98de3aced038e7323fb02"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3430,9 +3430,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-keychain"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e732a937d3e0b311047cd479c62db5f43c359c7e973db2b5d444fb7adf3b4a"
+checksum = "34003ce0806feec5cf21ff37b8a132786e64266576337dc4c73e80415ac9df26"
 dependencies = [
  "anyhow",
  "security-framework",
@@ -3443,9 +3443,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-pg"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f0d5da0818d967a2249592fa81bca3ecb0f1e0ca86a7888f73187d723a026d4"
+checksum = "438da93065bb58e741aa3a6512508b44639a14ffef7303b751f5d02f8689cc70"
 dependencies = [
  "rustls",
  "rustls-native-certs",
@@ -3463,9 +3463,9 @@ dependencies = [
 
 [[package]]
 name = "ssh-commander-pg-parquet"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faaa676277bff469f14572ded8b49829e25c47649f0051a5078c8a6a2893232b"
+checksum = "7e05fbcb9354cc369a55f2aaa0fa85a5fd5bcbdc4b226880355b9b7db16a1b5c"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -3598,7 +3598,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3746,9 +3746,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-postgres"
-version = "0.7.17"
+version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dd8df5ef180f6364759a6f00f7aadda4fbbac86cdee37480826a6ff9f3574ce"
+checksum = "a528f7d280f6d5b9cd149635c8705b0dd049754bc67d81d31fa25169a93809d3"
 dependencies = [
  "async-trait",
  "byteorder",
