@@ -1,0 +1,25 @@
+# agent-ssh
+
+> A native macOS and iPadOS SSH workspace that folds the terminal, SFTP, a full PostgreSQL workspace, monitoring, and network tools into one window, running over a memory-safe Rust protocol core bridged to Swift with UniFFI.
+
+## What it is
+
+agent-ssh is the SSH workspace for people who live in production. It is a native macOS and iPadOS client where every panel is wired to the same Rust core through a typed event bus — no shelling out, no per-tool re-auth. The UI is native SwiftUI/AppKit; everything that touches the network is Rust, with generated, checksum-verified UniFFI bindings keeping the boundary honest. A single tokio runtime backs every feature, streaming PTY output, transfer progress, and monitor samples over one typed, back-pressured event bus. The protocol core, ssh-commander-core (SSH via russh, PostgreSQL, and Parquet), is published on crates.io.
+
+## Who it's for
+
+People who operate production systems and want the terminal, file transfer, database work, monitoring, and network diagnostics in one native window instead of juggling separate tools. It is also a good reference for engineers interested in cross-language FFI done safely, a single async runtime and event bus, and multi-platform apps built from one shared core.
+
+## Key features
+
+- Terminal: SwiftTerm PTY rendering full xterm-256color, with regex search, tabbed sessions, split panes, and a ⌘K command palette over connections and saved queries.
+- Dual-pane transfer: side-by-side local/remote browsing, drag-and-drop, chmod, and a three-way diff with snapshot-before-write so a typo in nginx.conf never takes a host down.
+- PostgreSQL workspace: multi-database schema tree, per-tab query cursors, click-to-edit cells, and cursor-paginated CSV / JSONL / Parquet export over an SSH tunnel.
+- Network tools: multi-perspective DNS, a listening-port inventory with PID + process, streaming tcpdump, and remote git deploy-state — all over an existing session.
+- Live monitoring: CPU, memory, disk, and load-average time series in SwiftUI Charts, plus a sortable remote process list with a kill action.
+- Security model: secrets live in the Keychain only; host-key trust is TOFU and fails closed; on iPadOS, destructive actions sit behind a Face ID privacy gate.
+- Runbooks and an iPadOS-first surface: repeatable command sequences with per-step recording and partial-failure triage; on iPad, a connection map by latency, an incident-report builder, SFTP that mounts into Files, and long tasks that survive backgrounding via BGTaskScheduler.
+
+## Link
+
+- Source and documentation: https://github.com/asmuelle/agent-ssh
