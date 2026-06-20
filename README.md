@@ -1,5 +1,7 @@
 # agent-ssh
 
+[![CI](https://github.com/asmuelle/agent-ssh/actions/workflows/ci.yml/badge.svg)](https://github.com/asmuelle/agent-ssh/actions/workflows/ci.yml)
+
 Native macOS / iPadOS SSH workspace. AppKit + SwiftUI shell, SwiftTerm for the PTY, [`ssh-commander-core`](https://github.com/asmuelle/ssh-commander-core) for the protocol layer, [uniffi](https://mozilla.github.io/uniffi-rs/) for the FFI bridge.
 
 **→ [asmuelle.github.io/agent-ssh](https://asmuelle.github.io/agent-ssh/)** · See [TOOLS.md](TOOLS.md) for the in-app feature catalog and [AGENTS.md](AGENTS.md) for code-tour notes for AI agents.
