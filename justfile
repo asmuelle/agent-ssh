@@ -18,6 +18,8 @@ ios_scheme  := "AgentSshMobile"
 ios_bundle  := "com.agent-ssh.mobile"
 ios_sim_dd  := "/private/tmp/agent-ssh-ios-dd"
 ios_sim_app := ios_sim_dd + "/Build/Products/Debug-iphonesimulator/agent-ssh.app"
+ios_dev_dd  := "/private/tmp/agent-ssh-ios-device-dd"
+ios_dev_app := ios_dev_dd + "/Build/Products/Debug-iphoneos/agent-ssh.app"
 mac_build   := env_var_or_default("ASSH_MAC_DERIVED_DATA", ".derivedData/macos")
 mac_app     := mac_build + "/Build/Products/Release/agent-ssh.app"
 mac_debug_app := mac_build + "/Build/Products/Debug/agent-ssh.app"
@@ -356,13 +358,49 @@ ios-build config="Debug":
         -scheme {{ios_scheme}} \
         -configuration {{config}} \
         -destination 'generic/platform=iOS' \
-        -derivedDataPath /private/tmp/agent-ssh-ios-device-dd \
+        -derivedDataPath {{ios_dev_dd}} \
         ARCHS=arm64 \
         build
 
+# Build, install, and launch on a connected iPhone. Requires development
+# signing — set DEVELOPMENT_TEAM (or APPLE_DEVELOPMENT_TEAM) to your Apple
+# Developer Team ID, and the device must be paired & trusted in Xcode. Pass a
+# device name fragment to target a specific iPhone, e.g.
+# `just run-on-iphone "Andreas"`.
+run-on-iphone name="":
+    @just _ensure-xcodeproj
+    @just _ios-device-rust Debug
+    @team="${DEVELOPMENT_TEAM:-${APPLE_DEVELOPMENT_TEAM:-}}"; \
+      test -n "$team" || (echo "❌ Set DEVELOPMENT_TEAM=<Apple Team ID> or APPLE_DEVELOPMENT_TEAM=<Apple Team ID>"; exit 1); \
+      xcodebuild \
+        -allowProvisioningUpdates \
+        -project {{xcode_proj}} \
+        -scheme {{ios_scheme}} \
+        -configuration Debug \
+        -destination 'generic/platform=iOS' \
+        -derivedDataPath {{ios_dev_dd}} \
+        ARCHS=arm64 \
+        CODE_SIGN_STYLE=Automatic \
+        DEVELOPMENT_TEAM="$team" \
+        build
+    @app="{{ios_dev_app}}"; \
+    bundle="{{ios_bundle}}"; \
+    name="{{name}}"; \
+    test -d "$app" || (echo "iPhone app not found: $app"; exit 1); \
+    if [ -n "$name" ]; then \
+        line="$(xcrun devicectl list devices 2>/dev/null | grep -F "$name" | grep -i 'connected' | head -n1 || true)"; \
+    else \
+        line="$(xcrun devicectl list devices 2>/dev/null | grep -i 'iPhone' | grep -i 'connected' | head -n1 || true)"; \
+    fi; \
+    udid="$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' | head -n1 || true)"; \
+    test -n "$udid" || (echo "No connected iPhone found. Connect & trust the device, then:"; xcrun devicectl list devices; exit 1); \
+    xcrun devicectl device install app --device "$udid" "$app"; \
+    xcrun devicectl device process launch --device "$udid" "$bundle"; \
+    echo "Launched agent-ssh on iPhone $udid"
+
 # Clean only iOS build outputs.
 ios-clean:
-    rm -rf {{ios_sim_dd}} /private/tmp/agent-ssh-ios-device-dd
+    rm -rf {{ios_sim_dd}} {{ios_dev_dd}}
     rm -rf target/ios target/universal-ios
     rm -rf target/aarch64-apple-ios target/aarch64-apple-ios-sim target/x86_64-apple-ios
     @echo "✅ iOS build artifacts cleaned"

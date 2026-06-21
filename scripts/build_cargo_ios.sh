@@ -41,6 +41,13 @@ esac
 platform="${PLATFORM_NAME:-iphonesimulator}"
 archs="${ARCHS:-arm64}"
 
+# Pin the iOS deployment target so rustc and the `cc`-compiled C deps (zstd,
+# etc.) agree. Without this, rustc defaults `aarch64-apple-ios` to iOS 10.0
+# while `cc` builds against the current SDK — the mismatch leaves
+# `___chkstk_darwin` (iOS 13+) undefined at link time. Keep this in sync with
+# IPHONEOS_DEPLOYMENT_TARGET in project.yml.
+export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-17.0}"
+
 rust_target_for_arch() {
     local arch="$1"
     case "$platform:$arch" in
