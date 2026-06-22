@@ -188,6 +188,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile
         PRODUCT_NAME: "agent-ssh"
         PRODUCT_MODULE_NAME: AgentSshMobile
+        # iOS app icon lives in AgentSshMobile/Assets.xcassets (the macOS
+        # target has its own catalog). Without this the home-screen icon
+        # falls back to the blank placeholder.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: false
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/bindings
