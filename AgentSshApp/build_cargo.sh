@@ -97,14 +97,24 @@ HOST_DYLIB="$RUST_TARGET_DIR/$HOST_TARGET/$CARGO_PROFILE/libagent_ssh.dylib"
 
 # Skip regen if the bindings file is already newer than every FFI source —
 # protects incremental builds from a needless rebuild of the bindgen tool.
+#
+# The FFI surface is the whole `src/ffi/` directory (connection.rs, sftp.rs,
+# keychain.rs, …), plus `bridge.rs` (runtime/types) and `lib.rs`. A previous
+# version watched only the long-gone `src/ffi.rs`, which meant edits to any
+# real export never triggered regen — silently re-introducing the uniffi
+# checksum-mismatch fatalError at launch. Scan the directory so that can't
+# regress.
 needs_regen=0
-for src in "$RUST_PROJECT_DIR/src/ffi.rs" \
-           "$RUST_PROJECT_DIR/src/lib.rs"; do
-    if [ ! -f "$BINDINGS_SWIFT" ] || [ "$src" -nt "$BINDINGS_SWIFT" ]; then
+if [ ! -f "$BINDINGS_SWIFT" ]; then
+    needs_regen=1
+else
+    # Any FFI source newer than the committed bindings means they're stale.
+    if [ -n "$(find "$RUST_PROJECT_DIR/src/ffi" "$RUST_PROJECT_DIR/src/bridge.rs" \
+                    "$RUST_PROJECT_DIR/src/lib.rs" \
+                    -name '*.rs' -newer "$BINDINGS_SWIFT" -print -quit 2>/dev/null)" ]; then
         needs_regen=1
-        break
     fi
-done
+fi
 
 if [ "$needs_regen" -eq 1 ]; then
     UNIFFI_BIN="$RUST_TARGET_DIR/release/uniffi-bindgen"

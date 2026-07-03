@@ -189,10 +189,13 @@ fn start_event_listener(callback: Box<dyn FfiEventCallback>) {
 /// Initialise the macOS bridge. Must be called once before any other
 /// `rshell_*` function. Creates the Tokio runtime and connection manager.
 /// Safe to call multiple times — subsequent calls are no-ops.
+///
+/// Returns `false` if the Tokio runtime could not be created (e.g. under OS
+/// thread/memory pressure). The Swift `initialize()` path treats a `false`
+/// return as a recoverable "bridge unavailable" state rather than crashing.
 #[uniffi::export]
 pub fn rshell_init() -> bool {
-    MacOsBridge::init();
-    true
+    MacOsBridge::init()
 }
 
 /// Register an event callback. The callback receives `FfiEvent` messages
@@ -297,6 +300,19 @@ pub(crate) fn sanitize_error(e: anyhow::Error) -> String {
     }
     deduped.join(": ")
 }
+
+/// Ceiling for the SSH connection handshake. A host behind a firewall that
+/// silently drops packets (no TCP RST) would otherwise hang the calling native
+/// thread forever; with the bounded runtime worker pool that can eventually
+/// starve unrelated FFI work.
+pub(crate) const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Ceiling for a one-shot `execute_command` round-trip. Generous enough for the
+/// slow-but-legitimate maintenance commands the app runs, while still bounding a
+/// wedged connection so repeated monitor polls can't pile up blocked threads.
+/// Interactive shells use the PTY path, not this, so long-lived sessions are
+/// unaffected.
+pub(crate) const COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 pub(crate) fn command_failure_detail(
     output: &ssh_commander_core::ssh::CommandOutput,

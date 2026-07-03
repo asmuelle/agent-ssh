@@ -46,7 +46,17 @@ pub fn rshell_connect(config: FfiConnectConfig) -> Result<String, ConnectError> 
 
     bridge
         .runtime
-        .block_on(async move { cm.create_connection(conn_id, ssh_config).await })
+        .block_on(async move {
+            match tokio::time::timeout(CONNECT_TIMEOUT, cm.create_connection(conn_id, ssh_config))
+                .await
+            {
+                Ok(result) => result,
+                Err(_) => Err(anyhow::anyhow!(
+                    "Connection timed out after {}s",
+                    CONNECT_TIMEOUT.as_secs()
+                )),
+            }
+        })
         .map(|_| {
             // Surface the new state so the UI can light up the
             // connected indicator. Status events are best-effort —
@@ -299,7 +309,14 @@ pub fn rshell_execute_command(connection_id: String, command: String) -> FfiResu
         match client {
             Some(c) => {
                 let client = c.read().await;
-                client.execute_command(&command).await
+                match tokio::time::timeout(COMMAND_TIMEOUT, client.execute_command(&command)).await
+                {
+                    Ok(result) => result,
+                    Err(_) => Err(anyhow::anyhow!(
+                        "Command timed out after {}s",
+                        COMMAND_TIMEOUT.as_secs()
+                    )),
+                }
             }
             None => Err(anyhow::anyhow!("Connection not found: {}", conn_id)),
         }

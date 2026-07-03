@@ -30,6 +30,17 @@ jobs:
       - name: Rust tests
         run: just test-rust
 
+      # Regenerate the uniffi Swift bindings and fail if the committed copy is
+      # stale. A drift here means the .app would hit a checksum-mismatch
+      # fatalError at rshellInit() — catch it in CI instead of at launch.
+      - name: Bindings drift check
+        run: |
+          just mac-bindings
+          if ! git diff --exit-code -- bindings/; then
+            echo "::error::Committed Swift bindings are stale. Run 'just mac-bindings' and commit the result."
+            exit 1
+          fi
+
   # Separate job: cargo-deny-action is a container action (Linux-only),
   # and advisory checking only parses Cargo.lock — no macOS deps needed.
   advisories:

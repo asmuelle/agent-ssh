@@ -7213,6 +7213,10 @@ fileprivate struct FfiConverterSequenceOptionString: FfiConverterRustBuffer {
  * Initialise the macOS bridge. Must be called once before any other
  * `rshell_*` function. Creates the Tokio runtime and connection manager.
  * Safe to call multiple times — subsequent calls are no-ops.
+ *
+ * Returns `false` if the Tokio runtime could not be created (e.g. under OS
+ * thread/memory pressure). The Swift `initialize()` path treats a `false`
+ * return as a recoverable "bridge unavailable" state rather than crashing.
  */
 public func rshellInit() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
@@ -7938,7 +7942,7 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_init() != 10666) {
+    if (uniffi_agent_ssh_checksum_func_rshell_init() != 1636) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_agent_ssh_checksum_func_rshell_set_event_callback() != 31957) {

@@ -124,15 +124,17 @@ final class TerminalTabsStore: ObservableObject {
             return
         }
 
-        let isOutermost = !connectingProfileIds.contains(profile.id)
-        if isOutermost {
-            connectingProfileIds.insert(profile.id)
+        // Guard against a double-tap (or duplicated automation call) firing a
+        // second SSH connect + credential prompt for the same profile while
+        // the first is still in flight. `openConnection` is only ever entered
+        // fresh from the UI (never re-entrantly with explicit credentials), so
+        // an in-flight id means a genuine duplicate we should drop.
+        guard !connectingProfileIds.contains(profile.id) else {
+            logger.info("Connect already in flight for \(profile.name, privacy: .public); ignoring duplicate")
+            return
         }
-        defer {
-            if isOutermost {
-                connectingProfileIds.remove(profile.id)
-            }
-        }
+        connectingProfileIds.insert(profile.id)
+        defer { connectingProfileIds.remove(profile.id) }
 
         let sessionId = String(UUID().uuidString.prefix(8))
         let resolver = CredentialResolver(
