@@ -69,6 +69,22 @@ pub fn rshell_disconnect(connection_id: String) -> FfiResult {
     let bridge = MacOsBridge::global();
     let cm = bridge.connection_manager.clone();
     let conn_id_for_close = connection_id.clone();
+
+    // Cancel any in-flight SFTP transfers on this connection first. Each holds
+    // a read guard on the per-connection RwLock for its whole duration, while
+    // `close_connection` needs the write guard — so without this a disconnect
+    // during a large transfer would block this thread until the transfer
+    // finished. Cancelling lets the transfer loop drop its guard within one
+    // chunk, so the close below returns promptly.
+    let cancelled = cancel_transfers_for_connection(&connection_id);
+    if cancelled > 0 {
+        tracing::info!(
+            "Cancelled {} in-flight transfer(s) before disconnecting {}",
+            cancelled,
+            connection_id
+        );
+    }
+
     let result = bridge.runtime.block_on(async move {
         crate::port_forward::registry()
             .stop_for_connection(&conn_id_for_close)

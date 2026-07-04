@@ -48,34 +48,51 @@ pub enum SftpError {
     Other { detail: String },
 }
 
-/// Per-transfer cancellation registry. A transfer registers its token
-/// keyed by the Swift-side UUID; `rshell_sftp_cancel` looks the entry
-/// up and triggers it. The download/upload loop checks the token on
-/// every chunk.
+/// One in-flight transfer's cancellation handle, tagged with the
+/// connection it runs on so a disconnect can cancel every transfer for
+/// that connection (see `cancel_transfers_for_connection`).
+struct TransferHandle {
+    connection_id: String,
+    token: tokio_util::sync::CancellationToken,
+}
+
+/// Per-transfer cancellation registry, keyed by the Swift-side UUID. A
+/// transfer registers its handle on entry; `rshell_sftp_cancel` (by
+/// transfer id) and `cancel_transfers_for_connection` (by connection)
+/// look it up and trigger the token. The download/upload loop checks
+/// the token on every chunk.
 ///
 /// `OnceLock<Mutex<...>>` rather than RwLock because writes (register
 /// / deregister / cancel) are short and infrequent — no readers to
 /// optimise for.
 static TRANSFER_CANCELS: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<String, tokio_util::sync::CancellationToken>>,
+    std::sync::Mutex<std::collections::HashMap<String, TransferHandle>>,
 > = std::sync::OnceLock::new();
 
 fn transfer_registry()
--> &'static std::sync::Mutex<std::collections::HashMap<String, tokio_util::sync::CancellationToken>>
-{
+-> &'static std::sync::Mutex<std::collections::HashMap<String, TransferHandle>> {
     TRANSFER_CANCELS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
-/// Register a fresh `CancellationToken` for `transfer_id` and return
-/// it. The matching `unregister_transfer` call removes the entry on
-/// completion or failure so `rshell_sftp_cancel` can't leak past a
-/// transfer's lifetime.
-fn register_transfer(transfer_id: &str) -> tokio_util::sync::CancellationToken {
+/// Register a fresh `CancellationToken` for `transfer_id` on
+/// `connection_id` and return it. The matching `unregister_transfer`
+/// call removes the entry on completion or failure so a cancel can't
+/// leak past a transfer's lifetime.
+fn register_transfer(
+    transfer_id: &str,
+    connection_id: &str,
+) -> tokio_util::sync::CancellationToken {
     let token = tokio_util::sync::CancellationToken::new();
     transfer_registry()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .insert(transfer_id.to_string(), token.clone());
+        .insert(
+            transfer_id.to_string(),
+            TransferHandle {
+                connection_id: connection_id.to_string(),
+                token: token.clone(),
+            },
+        );
     token
 }
 
@@ -86,6 +103,31 @@ fn unregister_transfer(transfer_id: &str) {
         .remove(transfer_id);
 }
 
+/// Cancel every in-flight transfer running on `connection_id`. Returns
+/// the number of transfers signalled.
+///
+/// Called by `rshell_disconnect` *before* closing the SSH connection:
+/// each transfer holds a read guard on the per-connection `RwLock` for
+/// its whole duration, while `close_connection` needs the write guard,
+/// so without this a disconnect during a large transfer blocks the
+/// calling thread until the transfer finishes. Cancelling first lets
+/// the transfer loop drop its read guard within one 32 KiB chunk, so
+/// the disconnect's write-lock acquisition returns promptly. Entries
+/// are left in place; each transfer removes its own on exit.
+pub(crate) fn cancel_transfers_for_connection(connection_id: &str) -> usize {
+    let registry = transfer_registry()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut cancelled = 0;
+    for handle in registry.values() {
+        if handle.connection_id == connection_id {
+            handle.token.cancel();
+            cancelled += 1;
+        }
+    }
+    cancelled
+}
+
 /// Cancel an in-flight transfer by its Swift-side UUID. Returns true
 /// if a transfer was found and cancelled, false if the id wasn't
 /// registered (already finished, never started, or unknown). The
@@ -93,12 +135,12 @@ fn unregister_transfer(transfer_id: &str) {
 /// returns `SftpError::Cancelled`.
 #[uniffi::export]
 pub fn rshell_sftp_cancel(transfer_id: String) -> bool {
-    if let Some(token) = transfer_registry()
+    if let Some(handle) = transfer_registry()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .get(&transfer_id)
     {
-        token.cancel();
+        handle.token.cancel();
         true
     } else {
         false
@@ -129,7 +171,7 @@ pub fn rshell_sftp_download(
     let cm = bridge.connection_manager.clone();
     let conn_id = connection_id.clone();
     let remote_for_event = remote_path.clone();
-    let token = register_transfer(&transfer_id);
+    let token = register_transfer(&transfer_id, &connection_id);
     let transfer_id_for_cleanup = transfer_id.clone();
 
     let result = bridge.runtime.block_on(async move {
@@ -197,7 +239,7 @@ pub fn rshell_sftp_upload(
     let remote_for_event = remote_path.clone();
 
     let total_bytes = std::fs::metadata(&local_path).map(|m| m.len()).unwrap_or(0);
-    let token = register_transfer(&transfer_id);
+    let token = register_transfer(&transfer_id, &connection_id);
     let transfer_id_for_cleanup = transfer_id.clone();
 
     let result = bridge.runtime.block_on(async move {
@@ -582,4 +624,49 @@ fn validate_octal_mode(mode: &str) -> Result<String, SftpError> {
         });
     }
     Ok(trimmed.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_transfers_for_connection_only_cancels_matching_connection() {
+        // Unique ids so the shared global registry can't collide with other
+        // tests running in the same process.
+        let conn_a = "cancel-test-conn-A";
+        let conn_b = "cancel-test-conn-B";
+        let a1 = register_transfer("cancel-test-a1", conn_a);
+        let a2 = register_transfer("cancel-test-a2", conn_a);
+        let b1 = register_transfer("cancel-test-b1", conn_b);
+
+        let cancelled = cancel_transfers_for_connection(conn_a);
+
+        assert_eq!(cancelled, 2, "both transfers on conn A should be cancelled");
+        assert!(a1.is_cancelled());
+        assert!(a2.is_cancelled());
+        assert!(!b1.is_cancelled(), "conn B transfer must be untouched");
+
+        unregister_transfer("cancel-test-a1");
+        unregister_transfer("cancel-test-a2");
+        unregister_transfer("cancel-test-b1");
+    }
+
+    #[test]
+    fn cancel_transfers_for_unknown_connection_is_zero() {
+        assert_eq!(cancel_transfers_for_connection("no-such-connection-xyz"), 0);
+    }
+
+    #[test]
+    fn rshell_sftp_cancel_flips_the_token() {
+        let token = register_transfer("cancel-test-single", "cancel-test-single-conn");
+        assert!(!token.is_cancelled());
+        assert!(rshell_sftp_cancel("cancel-test-single".into()));
+        assert!(token.is_cancelled());
+        assert!(
+            !rshell_sftp_cancel("cancel-test-single-unknown".into()),
+            "cancelling an unknown transfer id returns false"
+        );
+        unregister_transfer("cancel-test-single");
+    }
 }

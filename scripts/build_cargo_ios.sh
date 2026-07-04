@@ -168,9 +168,16 @@ case "$HOST_ARCH" in
 esac
 HOST_DYLIB="$RUST_TARGET_DIR/$HOST_TARGET/$CARGO_PROFILE/libagent_ssh.dylib"
 
+# Cargo.lock/Cargo.toml are inputs too: a dependency bump (e.g. uniffi
+# 0.28 → 0.31) changes the generated bindings' contract version even when
+# ffi.rs/lib.rs are untouched. Missing this silently links a fresh static
+# lib against stale bindings → `UniFFI contract version mismatch` fatal at
+# launch. Keep these in lockstep with the lib's rebuild inputs above.
 needs_regen=0
 for src in "$RUST_PROJECT_DIR/src/ffi.rs" \
-           "$RUST_PROJECT_DIR/src/lib.rs"; do
+           "$RUST_PROJECT_DIR/src/lib.rs" \
+           "$RUST_PROJECT_DIR/Cargo.toml" \
+           "$RUST_PROJECT_DIR/Cargo.lock"; do
     if [ ! -f "$BINDINGS_SWIFT" ] || [ "$src" -nt "$BINDINGS_SWIFT" ]; then
         needs_regen=1
         break
