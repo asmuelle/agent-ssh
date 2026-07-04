@@ -470,6 +470,9 @@ targets:
       - path: Tests/AgentSshMobileTests/Products.storekit
         buildPhase: resources
       - path: AgentSshMobile/MobileEntitlementsStore.swift
+      # FFI-free health evaluator compiled directly into the logic-test target
+      # so it exercises the exact source the app ships.
+      - path: AgentSshMobile/MobileServerHealth.swift
     dependencies:
       - sdk: StoreKitTest.framework
     settings:
@@ -478,3 +481,15 @@ targets:
         PRODUCT_NAME: AgentSshMobileTests
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: ""
+
+schemes:
+  # Runs the iOS logic tests in isolation. The default AgentSshMobile scheme
+  # links the Rust FFI app, so it can't run these without a simulator-built
+  # static lib; this scheme builds only the FFI-free logic-test bundle.
+  AgentSshMobileLogicTests:
+    build:
+      targets:
+        AgentSshMobileTests: [test]
+    test:
+      targets:
+        - AgentSshMobileTests

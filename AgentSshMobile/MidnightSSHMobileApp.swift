@@ -6,6 +6,7 @@ struct MidnightSSHMobileApp: App {
     @StateObject private var keychainManager = MobileKeychainManager.shared
     @StateObject private var connectionStore = MobileConnectionStore()
     @StateObject private var sessionStore = MobileSessionStore()
+    @StateObject private var healthStore = MobileServerHealthStore()
     @StateObject private var terminalPreferences = MobileTerminalPreferences.shared
     @StateObject private var entitlementsStore = MobileEntitlementsStore.shared
 
@@ -18,6 +19,7 @@ struct MidnightSSHMobileApp: App {
                 .environmentObject(keychainManager)
                 .environmentObject(connectionStore)
                 .environmentObject(sessionStore)
+                .environmentObject(healthStore)
                 .environmentObject(terminalPreferences)
                 .environmentObject(entitlementsStore)
                 .task {

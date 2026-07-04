@@ -7,16 +7,18 @@ struct MobileContentView: View {
     @EnvironmentObject private var keychainManager: MobileKeychainManager
     @EnvironmentObject private var connectionStore: MobileConnectionStore
     @EnvironmentObject private var sessionStore: MobileSessionStore
+    @EnvironmentObject private var healthStore: MobileServerHealthStore
     @EnvironmentObject private var terminalPreferences: MobileTerminalPreferences
     @EnvironmentObject private var entitlementsStore: MobileEntitlementsStore
 
+    @State private var landingMode: LandingMode?
+    @State private var didRunStartup = false
     @State private var selectedConnectionId: String?
     @State private var compactPath = NavigationPath()
     @State private var connectionSearch = ""
     @State private var editorTarget: MobileConnectionProfile?
     @State private var creatingConnection = false
     @State private var showingProUpgrade = false
-    @State private var showingFleetDashboard = false
     @State private var showingSecurityVault = false
     @State private var showingCommandPalette = false
     @State private var exportingDiagnostics = false
@@ -68,12 +70,14 @@ struct MobileContentView: View {
 
     var body: some View {
         Group {
-            if horizontalSizeClass == .compact {
-                compactLayout
-            } else {
-                regularLayout
+            switch landingMode ?? .connections {
+            case .dashboard:
+                dashboardLanding
+            case .connections:
+                connectionsLayout
             }
         }
+        .task { await runStartup() }
         .sheet(isPresented: $creatingConnection) {
             MobileConnectionEditorView(profile: nil) { profile in
                 connectionStore.upsert(profile)
@@ -89,9 +93,6 @@ struct MobileContentView: View {
         }
         .sheet(isPresented: $showingProUpgrade) {
             MobileProUpgradeView(currentSavedHosts: connectionStore.connections.count)
-        }
-        .sheet(isPresented: $showingFleetDashboard) {
-            MobileFleetDashboardView(profiles: connectionStore.connections)
         }
         .sheet(isPresented: $showingSecurityVault) {
             MobileSecurityVaultView(profiles: connectionStore.connections)
@@ -111,7 +112,7 @@ struct MobileContentView: View {
                     beginCreateConnection()
                 },
                 onOpenFleet: {
-                    showingFleetDashboard = true
+                    landingMode = .dashboard
                 },
                 onOpenSecurityVault: {
                     showingSecurityVault = true
@@ -277,6 +278,123 @@ struct MobileContentView: View {
         }
     }
 
+    enum LandingMode {
+        case dashboard
+        case connections
+    }
+
+    private var connectionsLayout: some View {
+        Group {
+            if horizontalSizeClass == .compact {
+                compactLayout
+            } else {
+                regularLayout
+            }
+        }
+    }
+
+    private var dashboardLanding: some View {
+        NavigationStack(path: $compactPath) {
+            MobileFleetOverviewDashboardView(
+                profiles: connectionStore.connections,
+                onAddConnection: { beginCreateConnection() }
+            )
+            .navigationDestination(for: String.self) { profileId in
+                detailDestination(profileId)
+            }
+            .toolbar {
+                dashboardToolbar
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detailDestination(_ profileId: String) -> some View {
+        if let profile = connectionStore.connections.first(where: { $0.id == profileId }) {
+            MobileServerDetailView(
+                profile: profile,
+                route: route(for: profile.id)
+            )
+            .id(profile.id)
+        } else {
+            ContentUnavailableView(
+                "Connection Removed",
+                systemImage: "trash",
+                description: Text("This saved connection is no longer available.")
+            )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var dashboardToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                compactPath = NavigationPath()
+                landingMode = .connections
+            } label: {
+                Label("Connections", systemImage: "list.bullet")
+            }
+            .accessibilityLabel("Show connections")
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                moreActionsMenu
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel("More actions")
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                beginCreateConnection()
+            } label: {
+                Image(systemName: "plus")
+            }
+            .accessibilityLabel("Add connection")
+        }
+    }
+
+    /// Runs once per launch: decides the landing surface and kicks off
+    /// auto-connect for every profile that has stored credentials.
+    @MainActor
+    private func runStartup() async {
+        guard !didRunStartup else { return }
+        didRunStartup = true
+
+        // The app entry also loads connections; reload only if that hasn't
+        // landed yet so the landing decision sees the saved profiles.
+        if connectionStore.connections.isEmpty {
+            connectionStore.load()
+        }
+
+        let hasAutoConnectable = connectionStore.connections.contains { profile in
+            MobileCredentialResolver.canAutoConnect(
+                profile: profile,
+                keychainManager: keychainManager
+            )
+        }
+
+        if landingMode == nil {
+            landingMode = hasAutoConnectable ? .dashboard : .connections
+        }
+
+        await MobileAutoConnectCoordinator.connectEligible(
+            profiles: connectionStore.connections,
+            sessionStore: sessionStore,
+            keychainManager: keychainManager,
+            connectionStore: connectionStore
+        )
+    }
+
+    private var hasConnectedServer: Bool {
+        connectionStore.connections.contains { profile in
+            if case .connected = sessionStore.status(for: profile) { return true }
+            return false
+        }
+    }
+
     private var regularLayout: some View {
         NavigationSplitView {
             List(selection: $selectedConnectionId) {
@@ -379,19 +497,7 @@ struct MobileContentView: View {
                 connectionToolbar
             }
             .navigationDestination(for: String.self) { profileId in
-                if let profile = connectionStore.connections.first(where: { $0.id == profileId }) {
-                    MobileServerDetailView(
-                        profile: profile,
-                        route: route(for: profile.id)
-                    )
-                        .id(profile.id)
-                } else {
-                    ContentUnavailableView(
-                        "Connection Removed",
-                        systemImage: "trash",
-                        description: Text("This saved connection is no longer available.")
-                    )
-                }
+                detailDestination(profileId)
             }
             .safeAreaInset(edge: .bottom) {
                 sidebarFooter
@@ -422,68 +528,23 @@ struct MobileContentView: View {
     private var connectionToolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Menu {
-                Button {
-                    showingProUpgrade = true
-                } label: {
-                    Label(
-                        entitlementsStore.isPro ? "Pro Active" : "Upgrade to Pro",
-                        systemImage: entitlementsStore.isPro ? "checkmark.seal.fill" : "sparkles"
-                    )
-                }
-
-                Button {
-                    showingCommandPalette = true
-                } label: {
-                    Label("Command Palette", systemImage: "command")
-                }
-
-                Button {
-                    showingFleetDashboard = true
-                } label: {
-                    Label("Fleet Dashboard", systemImage: "rectangle.grid.2x2")
-                }
-
-                Button {
-                    showingSecurityVault = true
-                } label: {
-                    Label("Security Vault", systemImage: "lock.shield")
-                }
-
-                Button {
-                    exportDiagnostics()
-                } label: {
-                    Label("Export Diagnostics", systemImage: "square.and.arrow.up")
-                }
-
-                Divider()
-
-                Button {
-                    publishSyncSnapshot()
-                } label: {
-                    Label("Publish Sync Snapshot", systemImage: "icloud.and.arrow.up")
-                }
-
-                Button {
-                    applySyncSnapshot()
-                } label: {
-                    Label("Apply Latest Sync", systemImage: "icloud.and.arrow.down")
-                }
-
-                Button {
-                    importingConnectionsCSV = true
-                } label: {
-                    Label("Import Connections CSV", systemImage: "tray.and.arrow.down")
-                }
-
-                Button {
-                    exportConnectionsCSV()
-                } label: {
-                    Label("Export Connections CSV", systemImage: "square.and.arrow.up")
-                }
+                moreActionsMenu
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
             .accessibilityLabel("More actions")
+        }
+
+        if hasConnectedServer {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    compactPath = NavigationPath()
+                    landingMode = .dashboard
+                } label: {
+                    Image(systemName: "square.grid.2x2")
+                }
+                .accessibilityLabel("Show dashboard")
+            }
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -493,6 +554,69 @@ struct MobileContentView: View {
                 Image(systemName: "plus")
             }
             .accessibilityLabel("Add connection")
+        }
+    }
+
+    @ViewBuilder
+    private var moreActionsMenu: some View {
+        Button {
+            showingProUpgrade = true
+        } label: {
+            Label(
+                entitlementsStore.isPro ? "Pro Active" : "Upgrade to Pro",
+                systemImage: entitlementsStore.isPro ? "checkmark.seal.fill" : "sparkles"
+            )
+        }
+
+        Button {
+            showingCommandPalette = true
+        } label: {
+            Label("Command Palette", systemImage: "command")
+        }
+
+        Button {
+            compactPath = NavigationPath()
+            landingMode = .dashboard
+        } label: {
+            Label("Fleet Dashboard", systemImage: "rectangle.grid.2x2")
+        }
+
+        Button {
+            showingSecurityVault = true
+        } label: {
+            Label("Security Vault", systemImage: "lock.shield")
+        }
+
+        Button {
+            exportDiagnostics()
+        } label: {
+            Label("Export Diagnostics", systemImage: "square.and.arrow.up")
+        }
+
+        Divider()
+
+        Button {
+            publishSyncSnapshot()
+        } label: {
+            Label("Publish Sync Snapshot", systemImage: "icloud.and.arrow.up")
+        }
+
+        Button {
+            applySyncSnapshot()
+        } label: {
+            Label("Apply Latest Sync", systemImage: "icloud.and.arrow.down")
+        }
+
+        Button {
+            importingConnectionsCSV = true
+        } label: {
+            Label("Import Connections CSV", systemImage: "tray.and.arrow.down")
+        }
+
+        Button {
+            exportConnectionsCSV()
+        } label: {
+            Label("Export Connections CSV", systemImage: "square.and.arrow.up")
         }
     }
 
@@ -659,7 +783,7 @@ struct MobileContentView: View {
                 return
             }
             selectedConnectionId = profileId
-            if horizontalSizeClass == .compact {
+            if horizontalSizeClass == .compact || landingMode == .dashboard {
                 compactPath = NavigationPath()
                 compactPath.append(profileId)
             }
@@ -673,7 +797,7 @@ struct MobileContentView: View {
                 return
             }
             selectedConnectionId = operation.profileId
-            if horizontalSizeClass == .compact {
+            if horizontalSizeClass == .compact || landingMode == .dashboard {
                 compactPath = NavigationPath()
                 compactPath.append(operation.profileId)
             }
