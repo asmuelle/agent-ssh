@@ -41,10 +41,16 @@ enum HostKeyPrompt {
         alert.messageText = "Host key has changed"
         alert.alertStyle = .warning
         alert.informativeText = formattedBody(host: host, port: port, parsed: parsed)
-        alert.addButton(withTitle: "Trust New Key")
-        alert.addButton(withTitle: "Cancel")
-        // Cancel is the safe default — protects against accidentally
-        // accepting a MITM by mashing Return.
+        let trustButton = alert.addButton(withTitle: "Trust New Key")
+        let cancelButton = alert.addButton(withTitle: "Cancel")
+        // Cancel is the safe default — protects against accidentally accepting
+        // a MITM by mashing Return. AppKit auto-assigns Return ("\r") to the
+        // first-added button, so clearing `defaultButtonCell` alone is not
+        // enough: we must strip Return from "Trust New Key" and give it to
+        // Cancel, and set Escape on Cancel for good measure.
+        trustButton.keyEquivalent = ""
+        cancelButton.keyEquivalent = "\r"
+        cancelButton.keyEquivalentModifierMask = []
         alert.window.defaultButtonCell = nil
 
         let response = alert.runModal()
