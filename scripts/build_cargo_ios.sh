@@ -170,19 +170,20 @@ HOST_DYLIB="$RUST_TARGET_DIR/$HOST_TARGET/$CARGO_PROFILE/libagent_ssh.dylib"
 
 # Cargo.lock/Cargo.toml are inputs too: a dependency bump (e.g. uniffi
 # 0.28 → 0.31) changes the generated bindings' contract version even when
-# ffi.rs/lib.rs are untouched. Missing this silently links a fresh static
+# the Rust sources are untouched. Missing this silently links a fresh static
 # lib against stale bindings → `UniFFI contract version mismatch` fatal at
-# launch. Keep these in lockstep with the lib's rebuild inputs above.
+# launch. Scan the same input set as the static-lib staleness check above —
+# the FFI surface lives across src/ffi/*.rs, not a single file.
 needs_regen=0
-for src in "$RUST_PROJECT_DIR/src/ffi.rs" \
-           "$RUST_PROJECT_DIR/src/lib.rs" \
-           "$RUST_PROJECT_DIR/Cargo.toml" \
-           "$RUST_PROJECT_DIR/Cargo.lock"; do
-    if [ ! -f "$BINDINGS_SWIFT" ] || [ "$src" -nt "$BINDINGS_SWIFT" ]; then
-        needs_regen=1
-        break
-    fi
-done
+if [ ! -f "$BINDINGS_SWIFT" ] || \
+   find "$RUST_PROJECT_DIR/src" \
+        "$RUST_PROJECT_DIR/Cargo.toml" \
+        "$RUST_PROJECT_DIR/Cargo.lock" \
+        "$RUST_PROJECT_DIR/build.rs" \
+        "$RUST_PROJECT_DIR/uniffi-bindgen.rs" \
+        -newer "$BINDINGS_SWIFT" | grep -q .; then
+    needs_regen=1
+fi
 
 if [ "$needs_regen" -eq 1 ]; then
     ensure_rust_target "$HOST_TARGET"

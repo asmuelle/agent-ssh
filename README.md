@@ -13,7 +13,7 @@ Native macOS / iPadOS SSH workspace. AppKit + SwiftUI shell, SwiftTerm for the P
 | App shell | `AgentSshApp/`, `AgentSshMobile/` | AppKit window + SwiftUI views, SwiftTerm |
 | Swift framework | `Sources/AgentSshMacOS/` | Cross-target models, stores |
 | FFI bridge | `src/` | Rust → Swift via uniffi proc-macros |
-| Generated bindings | `bindings/` | `midnight_ssh.swift`, `midnight_sshFFI.h`, `module.modulemap` |
+| Generated bindings | `bindings/` | `agent_ssh.swift`, `agent_sshFFI.h`, `module.modulemap` |
 | Protocol layer | crates.io: `ssh-commander-core`, `ssh-commander-pg-parquet` | external |
 | Xcode project | `Mc-Ssh.xcodeproj` | generated from `project.yml` by xcodegen |
 
@@ -49,14 +49,14 @@ Run `just` (no args) for the full recipe list.
 ### Edit Rust FFI surface
 
 ```bash
-# 1. Edit src/ffi.rs or src/lib.rs
+# 1. Edit src/ffi/ (or src/lib.rs)
 # 2. Regenerate Swift bindings
 just mac-bindings
 # 3. Rebuild
 just mac-build
 ```
 
-The bindings under `bindings/` are committed — regenerate and commit them whenever the FFI changes. Hand-patching `bindings/midnight_ssh.swift` will appear to work but the per-function uniffi checksums will diverge from what the Rust lib reports at runtime, and `rshellInit()` will panic with `_assertionFailure`.
+The bindings under `bindings/` are committed — regenerate and commit them whenever the FFI changes. Hand-patching `bindings/agent_ssh.swift` will appear to work but the per-function uniffi checksums will diverge from what the Rust lib reports at runtime, and `rshellInit()` will panic with `_assertionFailure`.
 
 ### Edit `project.yml`
 

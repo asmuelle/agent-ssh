@@ -46,11 +46,11 @@ locally and CI is green.
 ## Changing the Rust ↔ Swift FFI
 
 The Swift bindings under `bindings/` are **generated and committed**. Never
-hand-edit `bindings/midnight_ssh.swift` — the per-function UniFFI checksums will
+hand-edit `bindings/agent_ssh.swift` — the per-function UniFFI checksums will
 diverge from the Rust library and `rshellInit()` will crash at launch.
 
 ```bash
-# 1. Edit src/ffi.rs (or src/lib.rs) and export with #[uniffi::export]
+# 1. Edit src/ffi/ (or src/lib.rs) and export with #[uniffi::export]
 # 2. Regenerate bindings
 just mac-bindings
 # 3. Rebuild and commit the regenerated bindings together with your Rust change

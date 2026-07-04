@@ -20,16 +20,16 @@
 //
 // ## Generating Swift bindings
 //
-// After every FFI change:
+// After every FFI change run `just mac-bindings`, which is equivalent to:
 //
-//   cargo build -p agent-ssh --release --target aarch64-apple-darwin
+//   cargo build --release --lib
 //   uniffi-bindgen generate \
-//     target/aarch64-apple-darwin/release/libmidnight_ssh.dylib \
+//     --library target/release/libagent_ssh.dylib \
 //     --language swift \
 //     --out-dir bindings
 //
-// Then add the generated `midnight_sshFFI.h` and `midnight_sshFFI.modulemap`
-// to the Xcode project's "Swift Compiler — General" > "Import Paths".
+// followed by renaming `agent_sshFFI.modulemap` to `module.modulemap` so
+// Swift auto-discovers it along SWIFT_INCLUDE_PATHS.
 
 import PackageDescription
 

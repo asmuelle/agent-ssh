@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -3944,7 +3990,8 @@ public func FfiConverterTypeFfiSystemStats_lower(_ value: FfiSystemStats) -> Rus
  * well-known message phrases — uniffi 0.28 doesn't propagate Rust types
  * through `anyhow`, so this is the natural place for the classification.
  */
-public enum ConnectError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum ConnectError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -4094,8 +4141,7 @@ public func FfiConverterTypeConnectError_lower(_ value: ConnectError) -> RustBuf
     return FfiConverterTypeConnectError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiCredentialKind: Equatable, Hashable {
     
@@ -4189,8 +4235,7 @@ public func FfiConverterTypeFfiCredentialKind_lower(_ value: FfiCredentialKind) 
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiDnsRecordType: Equatable, Hashable {
     
@@ -4284,8 +4329,7 @@ public func FfiConverterTypeFfiDnsRecordType_lower(_ value: FfiDnsRecordType) ->
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiDoctorCollectorProfile: Equatable, Hashable {
     
@@ -4366,7 +4410,8 @@ public func FfiConverterTypeFfiDoctorCollectorProfile_lower(_ value: FfiDoctorCo
 
 
 
-public enum FfiDoctorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum FfiDoctorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -4459,8 +4504,7 @@ public func FfiConverterTypeFfiDoctorError_lower(_ value: FfiDoctorError) -> Rus
     return FfiConverterTypeFfiDoctorError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiDoctorEvidenceKind: Equatable, Hashable {
     
@@ -4540,8 +4584,7 @@ public func FfiConverterTypeFfiDoctorEvidenceKind_lower(_ value: FfiDoctorEviden
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiFileKind: Equatable, Hashable {
     
@@ -4615,7 +4658,8 @@ public func FfiConverterTypeFfiFileKind_lower(_ value: FfiFileKind) -> RustBuffe
 
 
 
-public enum FfiMcpError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum FfiMcpError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -4728,8 +4772,7 @@ public func FfiConverterTypeFfiMcpError_lower(_ value: FfiMcpError) -> RustBuffe
     return FfiConverterTypeFfiMcpError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 /**
  * How the Swift layer authenticates to Postgres. The two variants map 1:1
  * to `PgAuthMethod`. `Keychain` defers password lookup to the keychain at
@@ -4812,7 +4855,8 @@ public func FfiConverterTypeFfiPgAuthMethod_lower(_ value: FfiPgAuthMethod) -> R
  * classifications the core layer produces; pattern-matchable from Swift
  * without substring-checking error strings.
  */
-public enum FfiPgError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum FfiPgError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -4982,8 +5026,7 @@ public func FfiConverterTypeFfiPgError_lower(_ value: FfiPgError) -> RustBuffer 
     return FfiConverterTypeFfiPgError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiPgObjectTypeKind: Equatable, Hashable {
     
@@ -5063,8 +5106,7 @@ public func FfiConverterTypeFfiPgObjectTypeKind_lower(_ value: FfiPgObjectTypeKi
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiPgRelationKind: Equatable, Hashable {
     
@@ -5151,8 +5193,7 @@ public func FfiConverterTypeFfiPgRelationKind_lower(_ value: FfiPgRelationKind) 
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiPgRoutineKind: Equatable, Hashable {
     
@@ -5232,8 +5273,7 @@ public func FfiConverterTypeFfiPgRoutineKind_lower(_ value: FfiPgRoutineKind) ->
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiPgTlsMode: Equatable, Hashable {
     
@@ -5314,7 +5354,8 @@ public func FfiConverterTypeFfiPgTlsMode_lower(_ value: FfiPgTlsMode) -> RustBuf
 
 
 
-public enum FfiPortForwardError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum FfiPortForwardError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -5427,8 +5468,7 @@ public func FfiConverterTypeFfiPortForwardError_lower(_ value: FfiPortForwardErr
     return FfiConverterTypeFfiPortForwardError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiPortForwardKind: Equatable, Hashable {
     
@@ -5501,8 +5541,7 @@ public func FfiConverterTypeFfiPortForwardKind_lower(_ value: FfiPortForwardKind
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiSecurityPatchCollectorProfile: Equatable, Hashable {
     
@@ -5590,7 +5629,8 @@ public func FfiConverterTypeFfiSecurityPatchCollectorProfile_lower(_ value: FfiS
 
 
 
-public enum FfiSecurityPatchError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum FfiSecurityPatchError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -5683,8 +5723,7 @@ public func FfiConverterTypeFfiSecurityPatchError_lower(_ value: FfiSecurityPatc
     return FfiConverterTypeFfiSecurityPatchError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 
 public enum FfiSecurityPatchEvidenceKind: Equatable, Hashable {
     
@@ -5778,8 +5817,7 @@ public func FfiConverterTypeFfiSecurityPatchEvidenceKind_lower(_ value: FfiSecur
 }
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 /**
  * POSIX signal number. Limited to the two cases the UI actually
  * surfaces today; widening this means the signal-routing match in
@@ -5858,7 +5896,8 @@ public func FfiConverterTypeFfiSignal_lower(_ value: FfiSignal) -> RustBuffer {
 
 
 
-public enum FfiToolsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum FfiToolsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -5992,7 +6031,8 @@ public func FfiConverterTypeFfiToolsError_lower(_ value: FfiToolsError) -> RustB
 }
 
 
-public enum MonitorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum MonitorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -6106,7 +6146,8 @@ public func FfiConverterTypeMonitorError_lower(_ value: MonitorError) -> RustBuf
 }
 
 
-public enum SftpError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum SftpError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -7220,7 +7261,8 @@ fileprivate struct FfiConverterSequenceOptionString: FfiConverterRustBuffer {
  */
 public func rshellInit() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_agent_ssh_fn_func_rshell_init($0
+        uniffiCallStatus in
+    uniffi_agent_ssh_fn_func_rshell_init(uniffiCallStatus
     )
 })
 }
@@ -7232,8 +7274,9 @@ public func rshellInit() -> Bool  {
  * operations (PTY start, file transfer, etc.).
  */
 public func rshellSetEventCallback(callback: FfiEventCallback)  {try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_set_event_callback(
-        FfiConverterCallbackInterfaceFfiEventCallback_lower(callback),$0
+        FfiConverterCallbackInterfaceFfiEventCallback_lower(callback),uniffiCallStatus
     )
 }
 }
@@ -7244,8 +7287,9 @@ public func rshellSetEventCallback(callback: FfiEventCallback)  {try! rustCall()
  */
 public func rshellConnect(config: FfiConnectConfig)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeConnectError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_connect(
-        FfiConverterTypeFfiConnectConfig_lower(config),$0
+        FfiConverterTypeFfiConnectConfig_lower(config),uniffiCallStatus
     )
 })
 }
@@ -7254,8 +7298,9 @@ public func rshellConnect(config: FfiConnectConfig)throws  -> String  {
  */
 public func rshellDisconnect(connectionId: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_disconnect(
-        FfiConverterString.lower(connectionId),$0
+        FfiConverterString.lower(connectionId),uniffiCallStatus
     )
 })
 }
@@ -7265,9 +7310,10 @@ public func rshellDisconnect(connectionId: String) -> FfiResult  {
  */
 public func rshellExecuteCommand(connectionId: String, command: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_execute_command(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(command),$0
+        FfiConverterString.lower(command),uniffiCallStatus
     )
 })
 }
@@ -7278,9 +7324,10 @@ public func rshellExecuteCommand(connectionId: String, command: String) -> FfiRe
  */
 public func rshellPtyClose(connectionId: String, expectedGeneration: UInt64) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pty_close(
         FfiConverterString.lower(connectionId),
-        FfiConverterUInt64.lower(expectedGeneration),$0
+        FfiConverterUInt64.lower(expectedGeneration),uniffiCallStatus
     )
 })
 }
@@ -7289,10 +7336,11 @@ public func rshellPtyClose(connectionId: String, expectedGeneration: UInt64) -> 
  */
 public func rshellPtyResize(connectionId: String, cols: UInt32, rows: UInt32) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pty_resize(
         FfiConverterString.lower(connectionId),
         FfiConverterUInt32.lower(cols),
-        FfiConverterUInt32.lower(rows),$0
+        FfiConverterUInt32.lower(rows),uniffiCallStatus
     )
 })
 }
@@ -7309,10 +7357,11 @@ public func rshellPtyResize(connectionId: String, cols: UInt32, rows: UInt32) ->
  */
 public func rshellPtyStart(connectionId: String, cols: UInt32, rows: UInt32) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pty_start(
         FfiConverterString.lower(connectionId),
         FfiConverterUInt32.lower(cols),
-        FfiConverterUInt32.lower(rows),$0
+        FfiConverterUInt32.lower(rows),uniffiCallStatus
     )
 })
 }
@@ -7321,70 +7370,79 @@ public func rshellPtyStart(connectionId: String, cols: UInt32, rows: UInt32) -> 
  */
 public func rshellPtyWrite(connectionId: String, data: Data) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pty_write(
         FfiConverterString.lower(connectionId),
-        FfiConverterData.lower(data),$0
+        FfiConverterData.lower(data),uniffiCallStatus
     )
 })
 }
 public func rshellDoctorCollect(request: FfiDoctorCollectRequest)throws  -> FfiDoctorCollectionBundle  {
     return try  FfiConverterTypeFfiDoctorCollectionBundle_lift(try rustCallWithError(FfiConverterTypeFfiDoctorError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_doctor_collect(
-        FfiConverterTypeFfiDoctorCollectRequest_lower(request),$0
+        FfiConverterTypeFfiDoctorCollectRequest_lower(request),uniffiCallStatus
     )
 })
 }
 public func rshellDoctorPreview(request: FfiDoctorCollectRequest)throws  -> FfiDoctorCollectionPreview  {
     return try  FfiConverterTypeFfiDoctorCollectionPreview_lift(try rustCallWithError(FfiConverterTypeFfiDoctorError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_doctor_preview(
-        FfiConverterTypeFfiDoctorCollectRequest_lower(request),$0
+        FfiConverterTypeFfiDoctorCollectRequest_lower(request),uniffiCallStatus
     )
 })
 }
 public func rshellKeychainDelete(kind: FfiCredentialKind, account: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_keychain_delete(
         FfiConverterTypeFfiCredentialKind_lower(kind),
-        FfiConverterString.lower(account),$0
+        FfiConverterString.lower(account),uniffiCallStatus
     )
 })
 }
 public func rshellKeychainIsSupported() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_agent_ssh_fn_func_rshell_keychain_is_supported($0
+        uniffiCallStatus in
+    uniffi_agent_ssh_fn_func_rshell_keychain_is_supported(uniffiCallStatus
     )
 })
 }
 public func rshellKeychainList(kind: FfiCredentialKind) -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_keychain_list(
-        FfiConverterTypeFfiCredentialKind_lower(kind),$0
+        FfiConverterTypeFfiCredentialKind_lower(kind),uniffiCallStatus
     )
 })
 }
 public func rshellKeychainLoad(kind: FfiCredentialKind, account: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_keychain_load(
         FfiConverterTypeFfiCredentialKind_lower(kind),
-        FfiConverterString.lower(account),$0
+        FfiConverterString.lower(account),uniffiCallStatus
     )
 })
 }
 public func rshellKeychainSave(kind: FfiCredentialKind, account: String, secret: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_keychain_save(
         FfiConverterTypeFfiCredentialKind_lower(kind),
         FfiConverterString.lower(account),
-        FfiConverterString.lower(secret),$0
+        FfiConverterString.lower(secret),uniffiCallStatus
     )
 })
 }
 public func rshellMcpExecute(connectionId: String, tool: String, arguments: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiMcpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_mcp_execute(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(tool),
-        FfiConverterString.lower(arguments),$0
+        FfiConverterString.lower(arguments),uniffiCallStatus
     )
 })
 }
@@ -7397,9 +7455,10 @@ public func rshellMcpExecute(connectionId: String, tool: String, arguments: Stri
  */
 public func rshellForgetHostKey(host: String, port: UInt16) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_forget_host_key(
         FfiConverterString.lower(host),
-        FfiConverterUInt16.lower(port),$0
+        FfiConverterUInt16.lower(port),uniffiCallStatus
     )
 })
 }
@@ -7410,8 +7469,9 @@ public func rshellForgetHostKey(host: String, port: UInt16) -> FfiResult  {
  */
 public func rshellGetProcesses(connectionId: String)throws  -> [FfiProcess]  {
     return try  FfiConverterSequenceTypeFfiProcess.lift(try rustCallWithError(FfiConverterTypeMonitorError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_get_processes(
-        FfiConverterString.lower(connectionId),$0
+        FfiConverterString.lower(connectionId),uniffiCallStatus
     )
 })
 }
@@ -7421,8 +7481,9 @@ public func rshellGetProcesses(connectionId: String)throws  -> [FfiProcess]  {
  */
 public func rshellGetSystemStats(connectionId: String)throws  -> FfiSystemStats  {
     return try  FfiConverterTypeFfiSystemStats_lift(try rustCallWithError(FfiConverterTypeMonitorError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_get_system_stats(
-        FfiConverterString.lower(connectionId),$0
+        FfiConverterString.lower(connectionId),uniffiCallStatus
     )
 })
 }
@@ -7432,37 +7493,42 @@ public func rshellGetSystemStats(connectionId: String)throws  -> FfiSystemStats 
  * through `MonitorError::Other` with the remote's stderr line.
  */
 public func rshellSignalProcess(connectionId: String, pid: UInt32, signal: FfiSignal)throws   {try rustCallWithError(FfiConverterTypeMonitorError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_signal_process(
         FfiConverterString.lower(connectionId),
         FfiConverterUInt32.lower(pid),
-        FfiConverterTypeFfiSignal_lower(signal),$0
+        FfiConverterTypeFfiSignal_lower(signal),uniffiCallStatus
     )
 }
 }
 public func rshellPortForwardList(connectionId: String?) -> [FfiPortForwardStatus]  {
     return try!  FfiConverterSequenceTypeFfiPortForwardStatus.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_port_forward_list(
-        FfiConverterOptionString.lower(connectionId),$0
+        FfiConverterOptionString.lower(connectionId),uniffiCallStatus
     )
 })
 }
 public func rshellPortForwardStart(config: FfiPortForwardConfig)throws  -> FfiPortForwardStatus  {
     return try  FfiConverterTypeFfiPortForwardStatus_lift(try rustCallWithError(FfiConverterTypeFfiPortForwardError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_port_forward_start(
-        FfiConverterTypeFfiPortForwardConfig_lower(config),$0
+        FfiConverterTypeFfiPortForwardConfig_lower(config),uniffiCallStatus
     )
 })
 }
 public func rshellPortForwardStatus(id: String)throws  -> FfiPortForwardStatus  {
     return try  FfiConverterTypeFfiPortForwardStatus_lift(try rustCallWithError(FfiConverterTypeFfiPortForwardError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_port_forward_status(
-        FfiConverterString.lower(id),$0
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
 public func rshellPortForwardStop(id: String)throws   {try rustCallWithError(FfiConverterTypeFfiPortForwardError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_port_forward_stop(
-        FfiConverterString.lower(id),$0
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 }
 }
@@ -7472,10 +7538,11 @@ public func rshellPortForwardStop(id: String)throws   {try rustCallWithError(Ffi
  */
 public func rshellPgCloseQuery(connectionId: String, sessionId: String, cursorId: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_close_query(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(sessionId),
-        FfiConverterString.lower(cursorId),$0
+        FfiConverterString.lower(cursorId),uniffiCallStatus
     )
 })
 }
@@ -7485,15 +7552,17 @@ public func rshellPgCloseQuery(connectionId: String, sessionId: String, cursorId
  */
 public func rshellPgConnect(config: FfiPgConfig)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_connect(
-        FfiConverterTypeFfiPgConfig_lower(config),$0
+        FfiConverterTypeFfiPgConfig_lower(config),uniffiCallStatus
     )
 })
 }
 public func rshellPgDisconnect(connectionId: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_disconnect(
-        FfiConverterString.lower(connectionId),$0
+        FfiConverterString.lower(connectionId),uniffiCallStatus
     )
 })
 }
@@ -7506,11 +7575,12 @@ public func rshellPgDisconnect(connectionId: String) -> FfiResult  {
  */
 public func rshellPgExecute(connectionId: String, sessionId: String, sql: String, pageSize: UInt32)throws  -> FfiPgExecutionResult  {
     return try  FfiConverterTypeFfiPgExecutionResult_lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_execute(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(sessionId),
         FfiConverterString.lower(sql),
-        FfiConverterUInt32.lower(pageSize),$0
+        FfiConverterUInt32.lower(pageSize),uniffiCallStatus
     )
 })
 }
@@ -7522,26 +7592,29 @@ public func rshellPgExecute(connectionId: String, sessionId: String, sql: String
  */
 public func rshellPgFetchPage(connectionId: String, sessionId: String, cursorId: String, count: UInt32)throws  -> FfiPgPageResult  {
     return try  FfiConverterTypeFfiPgPageResult_lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_fetch_page(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(sessionId),
         FfiConverterString.lower(cursorId),
-        FfiConverterUInt32.lower(count),$0
+        FfiConverterUInt32.lower(count),uniffiCallStatus
     )
 })
 }
 public func rshellPgListDatabases(connectionId: String)throws  -> [FfiPgDatabase]  {
     return try  FfiConverterSequenceTypeFfiPgDatabase.lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_list_databases(
-        FfiConverterString.lower(connectionId),$0
+        FfiConverterString.lower(connectionId),uniffiCallStatus
     )
 })
 }
 public func rshellPgListSchemas(connectionId: String, database: String?)throws  -> [FfiPgSchema]  {
     return try  FfiConverterSequenceTypeFfiPgSchema.lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_list_schemas(
         FfiConverterString.lower(connectionId),
-        FfiConverterOptionString.lower(database),$0
+        FfiConverterOptionString.lower(database),uniffiCallStatus
     )
 })
 }
@@ -7551,9 +7624,10 @@ public func rshellPgListSchemas(connectionId: String, database: String?)throws  
  * list passed to `rshell_pg_parquet_open` in length.
  */
 public func rshellPgParquetAppend(writerId: UInt64, rows: [FfiPgRow])throws   {try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_parquet_append(
         FfiConverterUInt64.lower(writerId),
-        FfiConverterSequenceTypeFfiPgRow.lower(rows),$0
+        FfiConverterSequenceTypeFfiPgRow.lower(rows),uniffiCallStatus
     )
 }
 }
@@ -7564,8 +7638,9 @@ public func rshellPgParquetAppend(writerId: UInt64, rows: [FfiPgRow])throws   {t
  * caller surfaces that as a no-op since the file is already valid).
  */
 public func rshellPgParquetClose(writerId: UInt64)throws   {try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_parquet_close(
-        FfiConverterUInt64.lower(writerId),$0
+        FfiConverterUInt64.lower(writerId),uniffiCallStatus
     )
 }
 }
@@ -7577,9 +7652,10 @@ public func rshellPgParquetClose(writerId: UInt64)throws   {try rustCallWithErro
  */
 public func rshellPgParquetOpen(path: String, columns: [String])throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_parquet_open(
         FfiConverterString.lower(path),
-        FfiConverterSequenceString.lower(columns),$0
+        FfiConverterSequenceString.lower(columns),uniffiCallStatus
     )
 })
 }
@@ -7592,6 +7668,7 @@ public func rshellPgParquetOpen(path: String, columns: [String])throws  -> UInt6
  */
 public func rshellPgUpdateCell(connectionId: String, sessionId: String, schema: String, table: String, column: String, columnType: String, newValue: String?, rowId: String)throws  -> FfiPgUpdateResult  {
     return try  FfiConverterTypeFfiPgUpdateResult_lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_update_cell(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(sessionId),
@@ -7600,7 +7677,7 @@ public func rshellPgUpdateCell(connectionId: String, sessionId: String, schema: 
         FfiConverterString.lower(column),
         FfiConverterString.lower(columnType),
         FfiConverterOptionString.lower(newValue),
-        FfiConverterString.lower(rowId),$0
+        FfiConverterString.lower(rowId),uniffiCallStatus
     )
 })
 }
@@ -7611,9 +7688,10 @@ public func rshellPgUpdateCell(connectionId: String, sessionId: String, schema: 
  */
 public func rshellPgCancel(connectionId: String, sessionId: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_cancel(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(sessionId),$0
+        FfiConverterString.lower(sessionId),uniffiCallStatus
     )
 })
 }
@@ -7624,21 +7702,23 @@ public func rshellPgCancel(connectionId: String, sessionId: String) -> FfiResult
  */
 public func rshellPgDeleteRows(connectionId: String, sessionId: String, schema: String, table: String, rowIds: [String])throws  -> FfiPgUpdateResult  {
     return try  FfiConverterTypeFfiPgUpdateResult_lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_delete_rows(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(sessionId),
         FfiConverterString.lower(schema),
         FfiConverterString.lower(table),
-        FfiConverterSequenceString.lower(rowIds),$0
+        FfiConverterSequenceString.lower(rowIds),uniffiCallStatus
     )
 })
 }
 public func rshellPgDescribeColumns(connectionId: String, schema: String, table: String)throws  -> [FfiPgColumnDetail]  {
     return try  FfiConverterSequenceTypeFfiPgColumnDetail.lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_describe_columns(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(schema),
-        FfiConverterString.lower(table),$0
+        FfiConverterString.lower(table),uniffiCallStatus
     )
 })
 }
@@ -7650,22 +7730,24 @@ public func rshellPgDescribeColumns(connectionId: String, schema: String, table:
  */
 public func rshellPgInsertRow(connectionId: String, sessionId: String, schema: String, table: String, inputs: [FfiPgInsertColumn], returnColumns: [String])throws  -> FfiPgInsertedRow  {
     return try  FfiConverterTypeFfiPgInsertedRow_lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_insert_row(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(sessionId),
         FfiConverterString.lower(schema),
         FfiConverterString.lower(table),
         FfiConverterSequenceTypeFfiPgInsertColumn.lower(inputs),
-        FfiConverterSequenceString.lower(returnColumns),$0
+        FfiConverterSequenceString.lower(returnColumns),uniffiCallStatus
     )
 })
 }
 public func rshellPgListRelations(connectionId: String, schema: String, database: String?)throws  -> [FfiPgRelation]  {
     return try  FfiConverterSequenceTypeFfiPgRelation.lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_list_relations(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(schema),
-        FfiConverterOptionString.lower(database),$0
+        FfiConverterOptionString.lower(database),uniffiCallStatus
     )
 })
 }
@@ -7676,10 +7758,11 @@ public func rshellPgListRelations(connectionId: String, schema: String, database
  */
 public func rshellPgListSchemaContents(connectionId: String, schema: String, database: String?)throws  -> FfiPgSchemaContents  {
     return try  FfiConverterTypeFfiPgSchemaContents_lift(try rustCallWithError(FfiConverterTypeFfiPgError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_list_schema_contents(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(schema),
-        FfiConverterOptionString.lower(database),$0
+        FfiConverterOptionString.lower(database),uniffiCallStatus
     )
 })
 }
@@ -7690,23 +7773,26 @@ public func rshellPgListSchemaContents(connectionId: String, schema: String, dat
  */
 public func rshellPgReleaseSession(connectionId: String, sessionId: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_pg_release_session(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(sessionId),$0
+        FfiConverterString.lower(sessionId),uniffiCallStatus
     )
 })
 }
 public func rshellSecurityPatchPreview(request: FfiSecurityPatchScanRequest)throws  -> FfiSecurityPatchScanPreview  {
     return try  FfiConverterTypeFfiSecurityPatchScanPreview_lift(try rustCallWithError(FfiConverterTypeFfiSecurityPatchError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_security_patch_preview(
-        FfiConverterTypeFfiSecurityPatchScanRequest_lower(request),$0
+        FfiConverterTypeFfiSecurityPatchScanRequest_lower(request),uniffiCallStatus
     )
 })
 }
 public func rshellSecurityPatchScan(request: FfiSecurityPatchScanRequest)throws  -> FfiSecurityPatchScanBundle  {
     return try  FfiConverterTypeFfiSecurityPatchScanBundle_lift(try rustCallWithError(FfiConverterTypeFfiSecurityPatchError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_security_patch_scan(
-        FfiConverterTypeFfiSecurityPatchScanRequest_lower(request),$0
+        FfiConverterTypeFfiSecurityPatchScanRequest_lower(request),uniffiCallStatus
     )
 })
 }
@@ -7719,8 +7805,9 @@ public func rshellSecurityPatchScan(request: FfiSecurityPatchScanRequest)throws 
  */
 public func rshellSftpCancel(transferId: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_cancel(
-        FfiConverterString.lower(transferId),$0
+        FfiConverterString.lower(transferId),uniffiCallStatus
     )
 })
 }
@@ -7729,10 +7816,11 @@ public func rshellSftpCancel(transferId: String) -> Bool  {
  * (e.g. `"20"`) or a group name.
  */
 public func rshellSftpChgrp(connectionId: String, path: String, gid: String)throws   {try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_chgrp(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(path),
-        FfiConverterString.lower(gid),$0
+        FfiConverterString.lower(gid),uniffiCallStatus
     )
 }
 }
@@ -7741,10 +7829,11 @@ public func rshellSftpChgrp(connectionId: String, path: String, gid: String)thro
  * e.g. `"755"`, `"644"`, `"700"`.
  */
 public func rshellSftpChmod(connectionId: String, path: String, mode: String)throws   {try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_chmod(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(path),
-        FfiConverterString.lower(mode),$0
+        FfiConverterString.lower(mode),uniffiCallStatus
     )
 }
 }
@@ -7753,10 +7842,11 @@ public func rshellSftpChmod(connectionId: String, path: String, mode: String)thr
  * (e.g. `"501"`) or a username.
  */
 public func rshellSftpChown(connectionId: String, path: String, uid: String)throws   {try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_chown(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(path),
-        FfiConverterString.lower(uid),$0
+        FfiConverterString.lower(uid),uniffiCallStatus
     )
 }
 }
@@ -7765,9 +7855,10 @@ public func rshellSftpChown(connectionId: String, path: String, uid: String)thro
  * exist or the name is already taken.
  */
 public func rshellSftpCreateDir(connectionId: String, path: String)throws   {try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_create_dir(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 }
 }
@@ -7776,9 +7867,10 @@ public func rshellSftpCreateDir(connectionId: String, path: String)throws   {try
  * responsibility — list_dir + per-entry delete in a loop with progress.
  */
 public func rshellSftpDeleteDir(connectionId: String, path: String)throws   {try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_delete_dir(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 }
 }
@@ -7786,9 +7878,10 @@ public func rshellSftpDeleteDir(connectionId: String, path: String)throws   {try
  * Delete a regular file. For directories, use `rshell_sftp_delete_dir`.
  */
 public func rshellSftpDeleteFile(connectionId: String, path: String)throws   {try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_delete_file(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 }
 }
@@ -7808,20 +7901,22 @@ public func rshellSftpDeleteFile(connectionId: String, path: String)throws   {tr
  */
 public func rshellSftpDownload(transferId: String, connectionId: String, remotePath: String, localPath: String, expectedSize: UInt64)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_download(
         FfiConverterString.lower(transferId),
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(remotePath),
         FfiConverterString.lower(localPath),
-        FfiConverterUInt64.lower(expectedSize),$0
+        FfiConverterUInt64.lower(expectedSize),uniffiCallStatus
     )
 })
 }
 public func rshellSftpListDir(connectionId: String, path: String)throws  -> [FfiFileEntry]  {
     return try  FfiConverterSequenceTypeFfiFileEntry.lift(try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_list_dir(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
@@ -7829,10 +7924,11 @@ public func rshellSftpListDir(connectionId: String, path: String)throws  -> [Ffi
  * Rename or move a file or directory.
  */
 public func rshellSftpRename(connectionId: String, oldPath: String, newPath: String)throws   {try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_rename(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(oldPath),
-        FfiConverterString.lower(newPath),$0
+        FfiConverterString.lower(newPath),uniffiCallStatus
     )
 }
 }
@@ -7842,9 +7938,10 @@ public func rshellSftpRename(connectionId: String, oldPath: String, newPath: Str
  */
 public func rshellSftpResolveGid(connectionId: String, gid: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_resolve_gid(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(gid),$0
+        FfiConverterString.lower(gid),uniffiCallStatus
     )
 })
 }
@@ -7854,9 +7951,10 @@ public func rshellSftpResolveGid(connectionId: String, gid: String)throws  -> St
  */
 public func rshellSftpResolveUid(connectionId: String, uid: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_resolve_uid(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(uid),$0
+        FfiConverterString.lower(uid),uniffiCallStatus
     )
 })
 }
@@ -7868,11 +7966,12 @@ public func rshellSftpResolveUid(connectionId: String, uid: String)throws  -> St
  */
 public func rshellSftpUpload(transferId: String, connectionId: String, localPath: String, remotePath: String)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeSftpError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_sftp_upload(
         FfiConverterString.lower(transferId),
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(localPath),
-        FfiConverterString.lower(remotePath),$0
+        FfiConverterString.lower(remotePath),uniffiCallStatus
     )
 })
 }
@@ -7883,25 +7982,28 @@ public func rshellSftpUpload(transferId: String, connectionId: String, localPath
  */
 public func rshellDnsResolve(name: String, recordType: FfiDnsRecordType, perspectives: [String]) -> [FfiDnsAnswer]  {
     return try!  FfiConverterSequenceTypeFfiDnsAnswer.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_dns_resolve(
         FfiConverterString.lower(name),
         FfiConverterTypeFfiDnsRecordType_lower(recordType),
-        FfiConverterSequenceString.lower(perspectives),$0
+        FfiConverterSequenceString.lower(perspectives),uniffiCallStatus
     )
 })
 }
 public func rshellGitStatus(connectionId: String, repoPath: String)throws  -> FfiGitStatus  {
     return try  FfiConverterTypeFfiGitStatus_lift(try rustCallWithError(FfiConverterTypeFfiToolsError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_git_status(
         FfiConverterString.lower(connectionId),
-        FfiConverterString.lower(repoPath),$0
+        FfiConverterString.lower(repoPath),uniffiCallStatus
     )
 })
 }
 public func rshellListeningPorts(connectionId: String)throws  -> [FfiListeningPort]  {
     return try  FfiConverterSequenceTypeFfiListeningPort.lift(try rustCallWithError(FfiConverterTypeFfiToolsError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_listening_ports(
-        FfiConverterString.lower(connectionId),$0
+        FfiConverterString.lower(connectionId),uniffiCallStatus
     )
 })
 }
@@ -7912,17 +8014,19 @@ public func rshellListeningPorts(connectionId: String)throws  -> [FfiListeningPo
  */
 public func rshellTcpdumpStart(connectionId: String, interface: String, filter: String, snaplen: UInt32?)throws  -> UInt64  {
     return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeFfiToolsError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_tcpdump_start(
         FfiConverterString.lower(connectionId),
         FfiConverterString.lower(interface),
         FfiConverterString.lower(filter),
-        FfiConverterOptionUInt32.lower(snaplen),$0
+        FfiConverterOptionUInt32.lower(snaplen),uniffiCallStatus
     )
 })
 }
 public func rshellTcpdumpStop(captureId: UInt64)throws   {try rustCallWithError(FfiConverterTypeFfiToolsError_lift) {
+        uniffiCallStatus in
     uniffi_agent_ssh_fn_func_rshell_tcpdump_stop(
-        FfiConverterUInt64.lower(captureId),$0
+        FfiConverterUInt64.lower(captureId),uniffiCallStatus
     )
 }
 }
@@ -7942,196 +8046,196 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_init() != 1636) {
+    if (uniffi_agent_ssh_checksum_func_rshell_init() != 48055) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_set_event_callback() != 31957) {
+    if (uniffi_agent_ssh_checksum_func_rshell_set_event_callback() != 55817) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_connect() != 50387) {
+    if (uniffi_agent_ssh_checksum_func_rshell_connect() != 14897) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_disconnect() != 26108) {
+    if (uniffi_agent_ssh_checksum_func_rshell_disconnect() != 23737) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_execute_command() != 17938) {
+    if (uniffi_agent_ssh_checksum_func_rshell_execute_command() != 639) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pty_close() != 48197) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pty_close() != 56142) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pty_resize() != 13838) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pty_resize() != 37779) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pty_start() != 31796) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pty_start() != 1558) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pty_write() != 9943) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pty_write() != 51628) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_doctor_collect() != 11078) {
+    if (uniffi_agent_ssh_checksum_func_rshell_doctor_collect() != 62649) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_doctor_preview() != 45177) {
+    if (uniffi_agent_ssh_checksum_func_rshell_doctor_preview() != 9114) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_keychain_delete() != 32052) {
+    if (uniffi_agent_ssh_checksum_func_rshell_keychain_delete() != 13027) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_keychain_is_supported() != 8795) {
+    if (uniffi_agent_ssh_checksum_func_rshell_keychain_is_supported() != 44463) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_keychain_list() != 12170) {
+    if (uniffi_agent_ssh_checksum_func_rshell_keychain_list() != 22583) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_keychain_load() != 62224) {
+    if (uniffi_agent_ssh_checksum_func_rshell_keychain_load() != 47347) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_keychain_save() != 59860) {
+    if (uniffi_agent_ssh_checksum_func_rshell_keychain_save() != 38831) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_mcp_execute() != 30376) {
+    if (uniffi_agent_ssh_checksum_func_rshell_mcp_execute() != 54149) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_forget_host_key() != 40412) {
+    if (uniffi_agent_ssh_checksum_func_rshell_forget_host_key() != 50352) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_get_processes() != 14613) {
+    if (uniffi_agent_ssh_checksum_func_rshell_get_processes() != 29431) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_get_system_stats() != 18467) {
+    if (uniffi_agent_ssh_checksum_func_rshell_get_system_stats() != 46182) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_signal_process() != 30586) {
+    if (uniffi_agent_ssh_checksum_func_rshell_signal_process() != 61749) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_list() != 58347) {
+    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_list() != 49307) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_start() != 12863) {
+    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_start() != 35926) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_status() != 24096) {
+    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_status() != 40232) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_stop() != 41099) {
+    if (uniffi_agent_ssh_checksum_func_rshell_port_forward_stop() != 3879) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_close_query() != 35505) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_close_query() != 34441) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_connect() != 53954) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_connect() != 1129) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_disconnect() != 32185) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_disconnect() != 15769) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_execute() != 32184) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_execute() != 31884) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_fetch_page() != 40511) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_fetch_page() != 51773) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_databases() != 34453) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_databases() != 16842) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_schemas() != 14243) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_schemas() != 34641) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_parquet_append() != 1331) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_parquet_append() != 41563) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_parquet_close() != 38210) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_parquet_close() != 57620) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_parquet_open() != 2437) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_parquet_open() != 18155) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_update_cell() != 53751) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_update_cell() != 50899) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_cancel() != 43052) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_cancel() != 7801) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_delete_rows() != 34661) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_delete_rows() != 36598) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_describe_columns() != 18950) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_describe_columns() != 13524) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_insert_row() != 12431) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_insert_row() != 38226) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_relations() != 15543) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_relations() != 20869) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_schema_contents() != 38583) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_list_schema_contents() != 48160) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pg_release_session() != 50901) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pg_release_session() != 4340) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_security_patch_preview() != 63360) {
+    if (uniffi_agent_ssh_checksum_func_rshell_security_patch_preview() != 19702) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_security_patch_scan() != 59378) {
+    if (uniffi_agent_ssh_checksum_func_rshell_security_patch_scan() != 8158) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_cancel() != 64208) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_cancel() != 5081) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_chgrp() != 21928) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_chgrp() != 15180) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_chmod() != 46393) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_chmod() != 24291) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_chown() != 48719) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_chown() != 35175) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_create_dir() != 65024) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_create_dir() != 20701) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_delete_dir() != 8641) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_delete_dir() != 6768) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_delete_file() != 55593) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_delete_file() != 26191) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_download() != 29710) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_download() != 54973) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_list_dir() != 38696) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_list_dir() != 38564) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_rename() != 43851) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_rename() != 36147) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_resolve_gid() != 44832) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_resolve_gid() != 11625) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_resolve_uid() != 41603) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_resolve_uid() != 46502) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_sftp_upload() != 11215) {
+    if (uniffi_agent_ssh_checksum_func_rshell_sftp_upload() != 63140) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_dns_resolve() != 47463) {
+    if (uniffi_agent_ssh_checksum_func_rshell_dns_resolve() != 60472) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_git_status() != 37345) {
+    if (uniffi_agent_ssh_checksum_func_rshell_git_status() != 62770) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_listening_ports() != 58054) {
+    if (uniffi_agent_ssh_checksum_func_rshell_listening_ports() != 57186) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_tcpdump_start() != 35833) {
+    if (uniffi_agent_ssh_checksum_func_rshell_tcpdump_start() != 5664) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_tcpdump_stop() != 47429) {
+    if (uniffi_agent_ssh_checksum_func_rshell_tcpdump_stop() != 32760) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_method_ffieventcallback_on_event() != 51861) {
+    if (uniffi_agent_ssh_checksum_method_ffieventcallback_on_event() != 23094) {
         return InitializationResult.apiChecksumMismatch
     }
 

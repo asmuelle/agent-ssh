@@ -49,12 +49,12 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 └──────────────────────────┬──────────────────────────────────┘
                            │ Swift → uniffi → C
 ┌──────────────────────────▼──────────────────────────────────┐
-│ bindings/midnight_ssh.swift  (generated, committed)         │
+│ bindings/agent_ssh.swift  (generated, committed)            │
 │   Swift facade over the Rust FFI                            │
 └──────────────────────────┬──────────────────────────────────┘
                            │ C ABI
 ┌──────────────────────────▼──────────────────────────────────┐
-│ src/ffi.rs, src/lib.rs, src/bridge.rs  (uniffi proc-macros) │
+│ src/ffi/, src/lib.rs, src/bridge.rs  (uniffi proc-macros)   │
 │   FFI surface; owns a Tokio runtime; block_on per call      │
 └──────────────────────────┬──────────────────────────────────┘
                            │ Rust async
@@ -71,11 +71,11 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 | App entry | `AgentSshApp/AgentSshApp.swift` | `@main` SwiftUI App, scene setup |
 | FFI entry point on Swift side | `AgentSshApp/BridgeManager.swift` | The single `BridgeManager.initialize()` call routes everything |
 | FFI extensions per feature | `BridgeManager+Postgres.swift`, `BridgeManager+Tools.swift` | Postgres explorer, network tools |
-| FFI surface | `src/ffi.rs` | The uniffi-exported functions and types — most edits land here |
+| FFI surface | `src/ffi/` | The uniffi-exported functions and types, split into per-feature modules — most edits land here |
 | FFI runtime | `src/bridge.rs` | Owns the Tokio runtime + connection-manager singleton |
-| Swift bindings | `bindings/midnight_ssh.swift` | **Generated, do not hand-edit** — see "FFI checksum gotcha" below |
+| Swift bindings | `bindings/agent_ssh.swift` | **Generated, do not hand-edit** — see "FFI checksum gotcha" below |
 | XcodeGen manifest | `project.yml` | Single source of truth for Xcode targets, deps, build phases |
-| Rust → static lib | `AgentSshApp/build_cargo.sh` | Xcode build phase: `cargo build` for arm64 + x86_64, `lipo` into `target/universal/release/libmidnight_ssh.a` |
+| Rust → static lib | `AgentSshApp/build_cargo.sh` | Xcode build phase: `cargo build` for arm64 + x86_64, `lipo` into `target/universal/release/libagent_ssh.a` |
 | iOS variant | `AgentSshMobile/Mobile*.swift` | Separate views/stores for iPadOS — keychain, SFTP bridge, etc. |
 | Sparkle integration | `AgentSshApp/UpdateManager.swift`, `scripts/find_sparkle_tool.sh` | Auto-updates via Sparkle 2.x |
 | Postgres UI | `AgentSshApp/Postgres*.swift` | Browser, query tabs, results table, history, saved queries |
@@ -83,9 +83,9 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 
 ## FFI lifecycle
 
-1. **Compile-time** — `cargo build --release` produces `libmidnight_ssh.a` (static for app linking) and `libmidnight_ssh.dylib` (for `uniffi-bindgen` to scan).
-2. **Bind-gen** — `cargo run --bin uniffi-bindgen -- generate --library libmidnight_ssh.dylib --language swift` writes `bindings/midnight_ssh.swift` + `midnight_sshFFI.h` + `midnight_sshFFI.modulemap`. The justfile recipe (`just mac-bindings`) renames the modulemap to `module.modulemap` so Swift auto-discovers it.
-3. **Build** — Xcode links the static lib with `-lmidnight_ssh`; the bindings expose Swift-native types.
+1. **Compile-time** — `cargo build --release` produces `libagent_ssh.a` (static for app linking) and `libagent_ssh.dylib` (for `uniffi-bindgen` to scan).
+2. **Bind-gen** — `cargo run --bin uniffi-bindgen -- generate --library libagent_ssh.dylib --language swift` writes `bindings/agent_ssh.swift` + `agent_sshFFI.h` + `agent_sshFFI.modulemap`. The justfile recipe (`just mac-bindings`) renames the modulemap to `module.modulemap` so Swift auto-discovers it.
+3. **Build** — Xcode links the static lib with `-lagent_ssh`; the bindings expose Swift-native types.
 4. **Init** — Swift calls `BridgeManager.initialize()` once at app start. This invokes `rshellInit()` which uniffi-runtime-checks contract version + per-function checksums against the lib. **Mismatch = `_assertionFailure`**.
 
 ## Coding conventions
@@ -132,9 +132,9 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 
 ## Common pitfalls (read before debugging)
 
-1. **FFI checksum gotcha.** Hand-editing `bindings/midnight_ssh.swift` will appear to work — symbols resolve fine — but uniffi computes a per-function checksum from the FFI signature and bakes it into both the lib and the bindings. They have to match. Always regenerate via `just mac-bindings`. Symptom: `Thread … Crashed: rshellInit() → _assertionFailure`.
+1. **FFI checksum gotcha.** Hand-editing `bindings/agent_ssh.swift` will appear to work — symbols resolve fine — but uniffi computes a per-function checksum from the FFI signature and bakes it into both the lib and the bindings. They have to match. Always regenerate via `just mac-bindings`. Symptom: `Thread … Crashed: rshellInit() → _assertionFailure`. The same crash appears when *committed* bindings go stale — e.g. two PRs merge where one changes the FFI (or bumps uniffi) and the other regenerated bindings against the older state. CI's "Bindings drift check" fails on main when this happens; fix with `just mac-bindings` + commit.
 2. **Stale Xcode SourcePackages.** Xcode caches absolute paths to SPM artifacts (Sparkle, SwiftTerm). Renaming or moving the repo root breaks them. Symptom: `error: There is no XCFramework found at .../Sparkle.xcframework`. Fix: `rm -rf build .build Mc-Ssh.xcodeproj && just mac-gen && just mac-build`.
-3. **Bundle ids and Xcode schemes still say `mc-ssh` / `AgentSsh*`.** Intentional — repo was extracted from the upstream mc-ssh project; renaming the bundle id changes app-data paths and signing identities, so it's deferred. The build artifacts (`agent-ssh.app`, `libmidnight_ssh.a`) carry the new brand.
+3. **Bundle ids and Xcode schemes still say `mc-ssh` / `AgentSsh*`.** Intentional — repo was extracted from the upstream mc-ssh project; renaming the bundle id changes app-data paths and signing identities, so it's deferred. The build artifacts (`agent-ssh.app`, `libagent_ssh.a`) carry the new brand.
 4. **TOFU host-key store.** SSH known-hosts live at `$XDG_CONFIG_HOME/agent-ssh/known_hosts` via `ssh-commander-core`. Unreadable / unwritable trust state fails closed — do not loosen.
 5. **iPad simulator selection.** `just run-on-ipad` defaults to any booted iPad sim, falls back to the first available. Pass a name fragment to pin: `just run-on-ipad "iPad Pro"`.
 6. **`build_cargo.sh` runs every build.** The Xcode build phase is intentionally not gated by dependency analysis (cargo's incremental layer handles that). The "will be run during every build" note in xcodebuild output is expected, not a misconfiguration.
@@ -156,6 +156,6 @@ Test targets in `Tests/`:
 ## When in doubt
 
 - The build pipeline is `just`-driven. Read [`justfile`](justfile) before inventing your own commands.
-- The FFI surface lives in [`src/ffi.rs`](src/ffi.rs). The Swift facade lives in [`bindings/midnight_ssh.swift`](bindings/midnight_ssh.swift) — generated.
+- The FFI surface lives in [`src/ffi/`](src/ffi/). The Swift facade lives in [`bindings/agent_ssh.swift`](bindings/agent_ssh.swift) — generated.
 - The Xcode project is regenerated from [`project.yml`](project.yml) — never hand-edit the `.xcodeproj`.
 - For protocol-layer questions (SSH, SFTP, Postgres), the source is in the [`ssh-commander-core`](https://github.com/asmuelle/ssh-commander-core) repo, not here.
