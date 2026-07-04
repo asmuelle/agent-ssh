@@ -388,9 +388,9 @@ run-on-iphone name="":
     name="{{name}}"; \
     test -d "$app" || (echo "iPhone app not found: $app"; exit 1); \
     if [ -n "$name" ]; then \
-        line="$(xcrun devicectl list devices 2>/dev/null | grep -F "$name" | grep -i 'connected' | head -n1 || true)"; \
+        line="$(xcrun devicectl list devices 2>/dev/null | grep -F "$name" | grep -iE '(^|[[:space:]])(connected|available)' | head -n1 || true)"; \
     else \
-        line="$(xcrun devicectl list devices 2>/dev/null | grep -i 'iPhone' | grep -i 'connected' | head -n1 || true)"; \
+        line="$(xcrun devicectl list devices 2>/dev/null | grep -i 'iPhone' | grep -iE '(^|[[:space:]])(connected|available)' | head -n1 || true)"; \
     fi; \
     udid="$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' | head -n1 || true)"; \
     test -n "$udid" || (echo "No connected iPhone found. Connect & trust the device, then:"; xcrun devicectl list devices; exit 1); \
