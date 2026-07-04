@@ -95,8 +95,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos
         PRODUCT_NAME: "agent-ssh"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: "1"
-        MARKETING_VERSION: "1.3.2"
         # Auto-derived module name would be "agent_ssh" (dash → underscore).
         # Force a clean identifier so the test bundle's `@testable import
         # AgentSshApp` resolves.
@@ -389,8 +387,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos.widgets
         PRODUCT_NAME: AgentSshWidgets
         PRODUCT_MODULE_NAME: AgentSshWidgets
-        CURRENT_PROJECT_VERSION: "1"
-        MARKETING_VERSION: "1.3.2"
         CODE_SIGN_ENTITLEMENTS: AgentSshWidgets/AgentSshWidgets.entitlements
         APPLICATION_EXTENSION_API_ONLY: true
         SKIP_INSTALL: YES
