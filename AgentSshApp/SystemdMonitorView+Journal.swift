@@ -192,7 +192,7 @@ extension SystemdMonitorView {
                 .frame(width: 142, alignment: .leading)
                 .textSelection(.enabled)
                 .help(parts.process)
-            Text(parts.message)
+            Text(JournalSyntaxHighlighting.highlighted(message: parts.message))
                 .font(.caption.monospaced())
                 .foregroundStyle(foregroundColor)
                 .textSelection(.enabled)
@@ -245,7 +245,26 @@ extension SystemdMonitorView {
     }
 
     func journalSeverity(_ line: String) -> JournalSeverity {
-        let upper = line.uppercased()
+        // Structured entries carry an explicit level — trust it for the
+        // payload (substring heuristics misfire on payload contents), but
+        // still scan the text outside the payload: a wrapper like
+        // "Failed to deliver: {level:info,…}" is an error.
+        let assessment = JournalSyntaxHighlighting.assess(message: line)
+        let keyword = keywordJournalSeverity(assessment.residualText)
+        guard let level = assessment.level else { return keyword }
+        let structured: JournalSeverity
+        switch level {
+        case .critical: structured = .critical
+        case .error: structured = .error
+        case .warning: structured = .warning
+        case .notice: structured = .notice
+        case .trace, .debug, .info: structured = .info
+        }
+        return structured.rank >= keyword.rank ? structured : keyword
+    }
+
+    func keywordJournalSeverity(_ text: String) -> JournalSeverity {
+        let upper = text.uppercased()
         if upper.contains(" CRIT") || upper.contains("CRITICAL") || upper.contains(" EMERG") || upper.contains(" ALERT") {
             return .critical
         }
@@ -263,6 +282,18 @@ extension SystemdMonitorView {
 
     enum JournalSeverity {
         case info, notice, warning, error, critical
+
+        /// Ordering for combining structured-level and keyword severity.
+        var rank: Int {
+            switch self {
+            case .info: return 0
+            case .notice: return 1
+            case .warning: return 2
+            case .error: return 3
+            case .critical: return 4
+            }
+        }
+
         var accentColor: Color {
             switch self {
             case .info: return .clear

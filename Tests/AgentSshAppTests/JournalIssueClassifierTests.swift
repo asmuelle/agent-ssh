@@ -30,4 +30,33 @@ final class JournalIssueClassifierTests: XCTestCase {
 
         XCTAssertEqual(counts, .zero)
     }
+
+    func testJSONLevelBeatsScaryWordsInPayload() {
+        // A DEBUG-level tracing line whose URI contains "denied" must not
+        // count as an error — the explicit level wins over keyword regexes.
+        let line = #"2026-07-04T10:50:26 host app[1]: {"timestamp":"2026-07-04T10:50:26Z","level":"DEBUG","fields":{"message":"started processing request"},"span":{"uri":"/auth/login?error=denied","name":"http_request"}}"#
+
+        XCTAssertNil(JournalIssueClassifier.classify(line))
+    }
+
+    func testJSONErrorLevelCountsWithoutKeywordMatch() {
+        // ERROR level with an innocuous message — only the level says error.
+        let line = #"2026-07-04T10:50:26 host app[1]: {"level":"ERROR","fields":{"message":"upstream said no"}}"#
+
+        XCTAssertEqual(JournalIssueClassifier.classify(line), .error)
+    }
+
+    func testJSONWarnLevelCountsAsWarning() {
+        let line = #"{"level":"WARN","fields":{"message":"queue depth climbing"}}"#
+
+        XCTAssertEqual(JournalIssueClassifier.classify(line), .warning)
+    }
+
+    func testWrapperTextStillCountsDespiteBenignEmbeddedLevel() {
+        // The embedded payload says info, but the wrapper text is the actual
+        // log statement — "Failed" must keep counting as an error.
+        let line = #"2026-07-04T10:50:26 host relay[1]: Failed to deliver webhook: {"level":"info","event":"user.created"}"#
+
+        XCTAssertEqual(JournalIssueClassifier.classify(line), .error)
+    }
 }

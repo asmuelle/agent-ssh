@@ -36,11 +36,30 @@ enum JournalIssueClassifier {
 
     static func classify(_ line: String) -> Issue? {
         let message = journalMessage(in: line)
-        let range = NSRange(message.startIndex..<message.endIndex, in: message)
-        if errorRegex?.firstMatch(in: message, range: range) != nil {
+        // Structured entries carry an explicit level — trust it for the
+        // payload (keyword regexes misfire on scary words inside URIs), but
+        // still scan the text outside the payload: a wrapper like
+        // "Failed to deliver: {level:info,…}" is an error.
+        let assessment = JournalSyntaxHighlighting.assess(message: message)
+        let keyword = keywordIssue(in: assessment.residualText)
+        guard let level = assessment.level else { return keyword }
+        let structured: Issue?
+        switch level {
+        case .error, .critical: structured = .error
+        case .warning: structured = .warning
+        case .trace, .debug, .info, .notice: structured = nil
+        }
+        if structured == .error || keyword == .error { return .error }
+        if structured == .warning || keyword == .warning { return .warning }
+        return nil
+    }
+
+    static func keywordIssue(in text: String) -> Issue? {
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        if errorRegex?.firstMatch(in: text, range: range) != nil {
             return .error
         }
-        if warningRegex?.firstMatch(in: message, range: range) != nil {
+        if warningRegex?.firstMatch(in: text, range: range) != nil {
             return .warning
         }
         return nil

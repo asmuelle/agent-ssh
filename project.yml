@@ -169,6 +169,7 @@ targets:
       - path: Sources/AgentSshMacOS/SharedUploadStagingStore.swift
       - path: Sources/AgentSshMacOS/ServerDoctorModels.swift
       - path: Sources/AgentSshMacOS/ServerDoctorSharedSummary.swift
+      - path: Sources/AgentSshMacOS/JournalSyntaxHighlighting.swift
       - path: bindings/agent_ssh.swift
         optional: true
     dependencies:

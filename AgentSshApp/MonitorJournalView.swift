@@ -39,6 +39,16 @@ enum MonitorJournalSeverity: String, CaseIterable, Hashable, Identifiable {
         case .debug: return .secondary
         }
     }
+
+    /// Ordering for combining structured-level and keyword-derived severity.
+    var rank: Int {
+        switch self {
+        case .error: return 3
+        case .warn:  return 2
+        case .debug: return 1
+        case .info:  return 0
+        }
+    }
 }
 
 struct MonitorJournalLine: Identifiable {
@@ -107,10 +117,28 @@ struct MonitorJournalLine: Identifiable {
     )
 
     private static func severity(for message: String) -> MonitorJournalSeverity {
-        let range = NSRange(message.startIndex..<message.endIndex, in: message)
-        if errorRegex?.firstMatch(in: message, range: range) != nil { return .error }
-        if warnRegex?.firstMatch(in: message, range: range) != nil { return .warn }
-        if debugRegex?.firstMatch(in: message, range: range) != nil { return .debug }
+        // Structured entries carry an explicit level — trust it for the
+        // payload (keyword heuristics misfire on scary words inside URIs),
+        // but still scan the text outside the payload: a wrapper like
+        // "Failed to deliver: {level:info,…}" is an error.
+        let assessment = JournalSyntaxHighlighting.assess(message: message)
+        let keyword = keywordSeverity(for: assessment.residualText)
+        guard let level = assessment.level else { return keyword }
+        let structured: MonitorJournalSeverity
+        switch level {
+        case .trace, .debug: structured = .debug
+        case .info, .notice: structured = .info
+        case .warning: structured = .warn
+        case .error, .critical: structured = .error
+        }
+        return structured.rank >= keyword.rank ? structured : keyword
+    }
+
+    private static func keywordSeverity(for text: String) -> MonitorJournalSeverity {
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        if errorRegex?.firstMatch(in: text, range: range) != nil { return .error }
+        if warnRegex?.firstMatch(in: text, range: range) != nil { return .warn }
+        if debugRegex?.firstMatch(in: text, range: range) != nil { return .debug }
         return .info
     }
 
@@ -486,6 +514,11 @@ struct MonitorJournalLogView: View {
             Button("Copy line") {
                 RemoteCommandRunner.copy(line.raw)
             }
+            if let pretty = JournalSyntaxHighlighting.prettyPrintedJSON(in: line.message) {
+                Button("Copy as pretty JSON") {
+                    RemoteCommandRunner.copy(pretty)
+                }
+            }
             if let ip = line.extractedIPv4 {
                 Button("Copy IP \(ip)") {
                     RemoteCommandRunner.copy(ip)
@@ -508,7 +541,7 @@ struct MonitorJournalLogView: View {
     }
 
     private func highlightedMessage(_ message: String) -> AttributedString {
-        var attributed = AttributedString(message)
+        var attributed = JournalSyntaxHighlighting.highlighted(message: message)
         let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return attributed }
         var searchRange = attributed.startIndex..<attributed.endIndex
