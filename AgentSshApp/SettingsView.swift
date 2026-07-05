@@ -88,9 +88,20 @@ struct SettingsView: View {
         }
     }
 
+    /// Sidebar sections, minus the License pane while entitlement enforcement
+    /// is off. `.preview` status is produced exactly when
+    /// `MSSHEnforceEntitlements` is false, so it stands in for that flag
+    /// without re-reading Info.plist; the pane returns as soon as enforcement
+    /// is switched on.
+    private var visibleSections: [SettingsSection] {
+        SettingsSection.available.filter { section in
+            section != .license || entitlementsStore.snapshot.status != .preview
+        }
+    }
+
     var body: some View {
         NavigationSplitView {
-            List(SettingsSection.available, selection: $selectedSection) { section in
+            List(visibleSections, selection: $selectedSection) { section in
                 Label(section.label, systemImage: section.systemImage)
                     .tag(section)
             }
