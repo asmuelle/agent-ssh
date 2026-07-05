@@ -78,7 +78,7 @@ public struct LiveActivitySnapshot: Codable, Identifiable, Equatable, Sendable {
         self.profileId = profileId?.nilIfBlank
         self.connectionId = connectionId?.nilIfBlank
         self.kind = kind
-        self.title = title.trimmingCharacters(in: .whitespacesAndNewlines).fallback("Midnight SSH")
+        self.title = title.trimmingCharacters(in: .whitespacesAndNewlines).fallback("agent-ssh")
         self.subtitle = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
         self.state = state
         self.progress = progress.map { min(1, max(0, $0)) }

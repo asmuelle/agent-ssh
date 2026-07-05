@@ -74,7 +74,7 @@ private struct SmallMobileMonitoringWidgetView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 stateIcon(model.overallState, size: 18)
-                Text("Midnight SSH")
+                Text("agent-ssh")
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -145,7 +145,7 @@ private struct LargeMobileMonitoringWidgetView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 stateIcon(model.overallState, size: 18)
-                Text("Midnight SSH")
+                Text("agent-ssh")
                     .font(.headline)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -249,7 +249,7 @@ struct MidnightSSHMobileMonitoringWidget: Widget {
         ) { entry in
             MobileMonitoringWidgetView(entry: entry)
         }
-        .configurationDisplayName("Midnight SSH")
+        .configurationDisplayName("agent-ssh")
         .description("Shows recent monitoring checks.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }

@@ -44,7 +44,7 @@ public struct WatchStatusItem: Codable, Identifiable, Equatable, Sendable {
     ) {
         self.id = id
         self.kind = kind
-        self.title = title.trimmingCharacters(in: .whitespacesAndNewlines).watchFallback("Midnight SSH")
+        self.title = title.trimmingCharacters(in: .whitespacesAndNewlines).watchFallback("agent-ssh")
         self.subtitle = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines).watchNilIfBlank
         self.state = state
         self.updatedAt = updatedAt

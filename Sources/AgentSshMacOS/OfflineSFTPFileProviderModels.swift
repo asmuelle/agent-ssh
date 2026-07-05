@@ -252,7 +252,7 @@ public struct FileProviderCatalog: Sendable {
             parentId: OfflineSFTPFileProviderIdentifier.root.rawValue,
             folderId: nil,
             remotePath: nil,
-            filename: "Midnight SSH",
+            filename: "agent-ssh",
             fileType: .directory,
             size: 0,
             modifiedAt: nil,

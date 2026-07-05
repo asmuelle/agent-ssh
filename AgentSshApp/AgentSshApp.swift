@@ -12,7 +12,7 @@ struct AgentSshApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        Window("Midnight SSH", id: "main") {
+        Window("agent-ssh", id: "main") {
             ContentView()
                 .environmentObject(layoutManager)
                 .environmentObject(tabsStore)

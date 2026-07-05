@@ -158,7 +158,7 @@ private struct SmallMonitoringWidgetView: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .center, spacing: 6) {
                 StatusGlyph(state: model.overallState, size: 18)
-                Text("Midnight SSH")
+                Text("agent-ssh")
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -260,7 +260,7 @@ private struct MediumMonitoringWidgetView: View {
                         .minimumScaleFactor(0.8)
                 }
 
-                Text("Midnight SSH")
+                Text("agent-ssh")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -363,7 +363,7 @@ private struct LargeMonitoringWidgetView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         StatusGlyph(state: model.overallState, size: 18)
-                        Text("Midnight SSH")
+                        Text("agent-ssh")
                             .font(.headline)
                             .lineLimit(1)
                     }
@@ -553,7 +553,7 @@ struct MidnightSSHMonitoringWidget: Widget {
         StaticConfiguration(kind: kind, provider: MonitoringTimelineProvider()) { entry in
             MonitoringWidgetView(entry: entry)
         }
-        .configurationDisplayName("Midnight SSH")
+        .configurationDisplayName("agent-ssh")
         .description("Shows recent monitoring checks.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
@@ -635,7 +635,7 @@ public struct ServerQuickCheckControl: ControlWidget {
                 Label(state.title, systemImage: state.iconName)
             }
         }
-        .displayName("Midnight Quick-Check")
+        .displayName("agent-ssh Quick-Check")
     }
 
     private func fetchCurrentScannerState() -> (title: String, iconName: String) {

@@ -1079,7 +1079,7 @@ struct MobileServerDetailView: View {
     private func truncatedShortcutOutput(_ output: String) -> String {
         let limit = 8_000
         guard output.count > limit else { return output }
-        return String(output.prefix(limit)) + "\n... truncated by Midnight SSH ..."
+        return String(output.prefix(limit)) + "\n... truncated by agent-ssh ..."
     }
 
     private func renamedRemotePath(oldPath: String, filename: String) -> String {
@@ -1143,7 +1143,7 @@ struct MobileServerDetailView: View {
                 try store.update(
                     id: operation.id,
                     status: .cancelled,
-                    errorMessage: "Rejected in Midnight SSH."
+                    errorMessage: "Rejected in agent-ssh."
                 )
             }
             refreshPendingShortcutApprovals()
@@ -1156,8 +1156,8 @@ struct MobileServerDetailView: View {
     private func authenticateShortcutApproval(count: Int) async throws {
         let context = LAContext()
         let reason = count == 1
-            ? "Approve this Midnight SSH shortcut."
-            : "Approve \(count) Midnight SSH shortcuts."
+            ? "Approve this agent-ssh shortcut."
+            : "Approve \(count) agent-ssh shortcuts."
 
         var error: NSError?
         let policy: LAPolicy = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)

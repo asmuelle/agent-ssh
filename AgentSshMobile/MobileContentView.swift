@@ -402,7 +402,7 @@ struct MobileContentView: View {
                     ContentUnavailableView(
                         "No Connections",
                         systemImage: "server.rack",
-                        description: Text("Add an SSH or SFTP profile to start testing the mobile bridge.")
+                        description: Text("Add an SSH or SFTP profile to get started.")
                     )
                     .listRowSeparator(.hidden)
                 } else if filteredConnections.isEmpty {
@@ -462,7 +462,7 @@ struct MobileContentView: View {
                     ContentUnavailableView(
                         "No Connections",
                         systemImage: "server.rack",
-                        description: Text("Add an SSH or SFTP profile to start testing the mobile bridge.")
+                        description: Text("Add an SSH or SFTP profile to get started.")
                     )
                     .listRowSeparator(.hidden)
                 } else if filteredConnections.isEmpty {

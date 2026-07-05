@@ -139,7 +139,7 @@ public struct WidgetMonitorSnapshot: Codable, Identifiable, Equatable, Sendable 
             lastCheckedAt: nil,
             lastChangedAt: now,
             summary: "Monitoring not configured",
-            detail: "Choose watched hosts in Midnight SSH.",
+            detail: "Choose watched hosts in agent-ssh.",
             openURL: nil
         )
     }
@@ -153,7 +153,7 @@ public struct WidgetMonitorSnapshot: Codable, Identifiable, Equatable, Sendable 
             lastCheckedAt: nil,
             lastChangedAt: now,
             summary: "No matching checks",
-            detail: "Adjust widget scope in Midnight SSH.",
+            detail: "Adjust widget scope in agent-ssh.",
             openURL: WidgetSnapshotPresenter.monitoringOverviewURL
         )
     }

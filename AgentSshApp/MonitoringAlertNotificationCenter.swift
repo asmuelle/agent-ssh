@@ -20,7 +20,7 @@ final class MonitoringAlertNotificationCenter: NSObject {
 
         let openAction = UNNotificationAction(
             identifier: "open-monitoring",
-            title: "Open Midnight SSH",
+            title: "Open agent-ssh",
             options: [.foreground]
         )
         let category = UNNotificationCategory(

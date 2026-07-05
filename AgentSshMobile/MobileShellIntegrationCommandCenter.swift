@@ -22,7 +22,7 @@ final class MobileShellIntegrationCommandCenter {
     }
 
     private func deliverNotification(_ command: ShellIntegrationCommand, connectionId: String) {
-        let title = command.title ?? "Midnight SSH"
+        let title = command.title ?? "agent-ssh"
         let body = command.body ?? "Remote command notification"
 
         MobileActivityLogStore.shared.record(

@@ -392,7 +392,7 @@ struct SidebarView: View {
                     .font(MidnightMacDesign.FontToken.headline)
             }
 
-            Text("Add a saved SSH profile to start a session. Existing profiles from the Tauri build can be imported.")
+            Text("Add your first SSH or SFTP host to start a session, or import existing profiles.")
                 .font(MidnightMacDesign.FontToken.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
