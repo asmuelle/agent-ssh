@@ -13,8 +13,21 @@ struct ServerDoctorSettingsView: View {
     @AppStorage(ServerDoctorPreferences.privacyPresetKey)
     private var privacyPresetRaw = ServerDoctorPrivacyPreset.balanced.rawValue
 
+    @AppStorage(ServerDoctorLocalLLMConfig.endpointDefaultsKey)
+    private var localEndpoint = ""
+
+    @AppStorage(ServerDoctorLocalLLMConfig.modelDefaultsKey)
+    private var localModel = ""
+
+    @State private var localToken = ""
+    @State private var tokenSaveFailed = false
+
     private var providerKind: ServerDoctorProviderKind {
         ServerDoctorProviderKind(rawValue: providerKindRaw) ?? .default
+    }
+
+    private var isEnvironmentOverrideActive: Bool {
+        ServerDoctorLocalLLMConfig.isEnvironmentOverrideActive()
     }
 
     private var appleStatus: AppleFoundationModelsDoctorAvailability.Status {
@@ -62,22 +75,81 @@ struct ServerDoctorSettingsView: View {
             }
 
             if providerKind == .localLLM {
-                Section("Local LLM endpoint") {
-                    Text("Configured via environment variables:")
-                        .font(.caption)
-                    Label(LocalOpenAICompatibleServerDoctorProvider.modelEnvironmentKey, systemImage: "cpu")
-                        .font(.system(size: 11, design: .monospaced))
-                        .textSelection(.enabled)
-                    Label(LocalOpenAICompatibleServerDoctorProvider.endpointEnvironmentKey, systemImage: "network")
-                        .font(.system(size: 11, design: .monospaced))
-                        .textSelection(.enabled)
-                    Text("The endpoint must be a loopback address (localhost / 127.0.0.1 / ::1). Evidence is redacted with the policy above before it is sent.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                localLLMSection
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var localLLMSection: some View {
+        Section("Local LLM endpoint") {
+            TextField(
+                "Endpoint URL",
+                text: $localEndpoint,
+                prompt: Text(LocalOpenAICompatibleServerDoctorProvider.defaultEndpoint)
+            )
+            .autocorrectionDisabled()
+            if let endpointValidationError {
+                Label(endpointValidationError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            TextField("Model name", text: $localModel, prompt: Text("e.g. llama3.1"))
+                .autocorrectionDisabled()
+            if localModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !isEnvironmentOverrideActive {
+                Text("Set a model name to enable the local LLM. Until then, diagnosis uses the built-in heuristics.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            SecureField("API token (optional)", text: $localToken)
+                .onAppear {
+                    localToken = ServerDoctorLocalLLMConfig.loadToken() ?? ""
+                }
+                .onChange(of: localToken) { newValue in
+                    tokenSaveFailed = !ServerDoctorLocalLLMConfig.saveToken(newValue)
+                }
+            if tokenSaveFailed {
+                Label("The token could not be saved to the Keychain.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            if isEnvironmentOverrideActive {
+                Label(
+                    "MIDNIGHT_SSH_DOCTOR_LLM_* environment variables are set and override the values above.",
+                    systemImage: "info.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Text("The endpoint must be a loopback address (localhost / 127.0.0.1 / ::1). Evidence is redacted with the policy above before it is sent. The token is stored in the Keychain.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Runs the field value through the same validator the provider factory
+    /// uses (`makeValidated`), so the inline error can never diverge from the
+    /// enforced loopback-only invariant. Empty means the default loopback
+    /// endpoint is used.
+    private var endpointValidationError: String? {
+        let trimmed = localEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            _ = try LocalOpenAICompatibleServerDoctorProvider.makeValidated(
+                endpointValue: trimmed,
+                model: "validation-probe"
+            )
+            return nil
+        } catch ServerDoctorLocalLLMError.nonLocalEndpoint {
+            return "Endpoint must be a loopback address (localhost, 127.0.0.1, or ::1)."
+        } catch {
+            return "Enter a valid http(s) URL."
+        }
     }
 
     private var privacyDetail: String {
