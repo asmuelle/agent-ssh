@@ -6,6 +6,7 @@ import SwiftUI
 final class MobileEntitlementsStore: ObservableObject {
     static let shared = MobileEntitlementsStore()
     static let freeSavedHostLimit = 3
+    static let freeSavedRunbookLimit = 2
     static let proLifetimeProductId = "com.agent-ssh.mobile.pro.lifetime"
 
     @Published private(set) var isPro = false
@@ -36,6 +37,10 @@ final class MobileEntitlementsStore: ObservableObject {
 
     func canCreateConnection(currentCount: Int) -> Bool {
         isUnlocked(.unlimitedHosts) || currentCount < Self.freeSavedHostLimit
+    }
+
+    func canSaveRunbook(currentCount: Int) -> Bool {
+        isUnlocked(.runbookLibrary) || currentCount < Self.freeSavedRunbookLimit
     }
 
     func start() {
@@ -158,34 +163,29 @@ enum MobileStoreStatus: Equatable {
 
 /// High-value capabilities behind Pro. Ordered for the paywall: lead with the
 /// operational outcomes users pay for, not with saved-host capacity.
+/// Every case listed here MUST have an enforced `isUnlocked` gate at its
+/// feature entry point — the paywall renders `allCases`, so an unenforced
+/// case is a false advertisement. Fleet dashboard, widgets, and Server
+/// Doctor runs stay free on purpose: they are the first-session hook.
 enum ProFeature: String, CaseIterable, Identifiable {
-    case serverDoctorHistory
     case runbookLibrary
     case incidentExport
-    case fleetDashboard
-    case widgetsAndAlerts
     case unlimitedHosts
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .serverDoctorHistory: return "Server Doctor history & trends"
-        case .runbookLibrary: return "Full runbook library with safety gates"
+        case .runbookLibrary: return "Unlimited saved runbooks"
         case .incidentExport: return "Export redacted incident reports"
-        case .fleetDashboard: return "Fleet dashboard across every host"
-        case .widgetsAndAlerts: return "Home Screen widgets & health alerts"
         case .unlimitedHosts: return "Unlimited saved SSH & SFTP hosts"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .serverDoctorHistory: return "stethoscope"
         case .runbookLibrary: return "list.bullet.rectangle"
         case .incidentExport: return "doc.text.magnifyingglass"
-        case .fleetDashboard: return "rectangle.3.group"
-        case .widgetsAndAlerts: return "bell.badge"
         case .unlimitedHosts: return "server.rack"
         }
     }
@@ -246,7 +246,7 @@ struct MobileProUpgradeView: View {
             .font(.title2.weight(.semibold))
             .foregroundStyle(entitlementsStore.isPro ? .green : .primary)
 
-            Text("Diagnose and safely fix your servers from your pocket. Pro unlocks the full operations toolkit — the free plan keeps core terminal, SFTP, and \(MobileEntitlementsStore.freeSavedHostLimit) saved hosts (you have \(currentSavedHosts)).")
+            Text("Diagnose and safely fix your servers from your pocket. The free plan keeps the core toolkit — terminal, SFTP, fleet dashboard, widgets, Server Doctor, and \(MobileEntitlementsStore.freeSavedHostLimit) saved hosts (you have \(currentSavedHosts)). Pro removes the limits.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

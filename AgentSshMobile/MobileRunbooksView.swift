@@ -277,6 +277,8 @@ struct MobileRunbook: Identifiable {
 struct MobileRunbooksView: View {
     let connectionId: String
 
+    @EnvironmentObject private var entitlementsStore: MobileEntitlementsStore
+    @EnvironmentObject private var connectionStore: MobileConnectionStore
     @ObservedObject private var savedStore = MobileSavedRunbooksStore.shared
     @ObservedObject private var historyStore = MobileRunbookHistoryStore.shared
 
@@ -289,6 +291,7 @@ struct MobileRunbooksView: View {
     @State private var customTitle = ""
     @State private var customCommand = ""
     @State private var customRisk: MobileTaskRisk = .readOnly
+    @State private var showingProUpgrade = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -334,6 +337,9 @@ struct MobileRunbooksView: View {
         .sheet(item: $result) { result in
             MobileRawOutputSheet(title: result.title, command: result.command, output: result.output)
         }
+        .sheet(isPresented: $showingProUpgrade) {
+            MobileProUpgradeView(currentSavedHosts: connectionStore.connections.count)
+        }
     }
 
     private var header: some View {
@@ -371,6 +377,10 @@ struct MobileRunbooksView: View {
 
                 HStack {
                     Button("Save") {
+                        guard entitlementsStore.canSaveRunbook(currentCount: savedStore.runbooks.count) else {
+                            showingProUpgrade = true
+                            return
+                        }
                         savedStore.add(title: customTitle, command: customCommand, risk: customRisk)
                         customTitle = ""
                         customCommand = ""
@@ -394,6 +404,12 @@ struct MobileRunbooksView: View {
                     .disabled(isRunning || customCommand.trimmed.isEmpty)
                 }
                 .controlSize(.small)
+
+                if !entitlementsStore.isUnlocked(.runbookLibrary) {
+                    Text("Free plan saves up to \(MobileEntitlementsStore.freeSavedRunbookLimit) runbooks — Pro removes the limit.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.top, 8)
         } label: {

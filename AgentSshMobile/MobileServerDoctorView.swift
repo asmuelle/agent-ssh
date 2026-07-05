@@ -6,12 +6,15 @@ struct MobileServerDoctorView: View {
     let profileName: String
     let sshPort: UInt16
 
+    @EnvironmentObject private var entitlementsStore: MobileEntitlementsStore
+    @EnvironmentObject private var connectionStore: MobileConnectionStore
     @State private var report: MobileDoctorReport?
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var inspectedFinding: MobileFinding?
     @State private var exportingReport = false
     @State private var exportDocument = MobileTextDocument()
+    @State private var showingProUpgrade = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -50,6 +53,9 @@ struct MobileServerDoctorView: View {
             contentType: .plainText,
             defaultFilename: "agent-ssh-incident-\(safeFilename(profileName)).md"
         ) { _ in }
+        .sheet(isPresented: $showingProUpgrade) {
+            MobileProUpgradeView(currentSavedHosts: connectionStore.connections.count)
+        }
     }
 
     private var header: some View {
@@ -70,7 +76,11 @@ struct MobileServerDoctorView: View {
             .disabled(isLoading)
 
             Button {
-                exportReport()
+                if entitlementsStore.isUnlocked(.incidentExport) {
+                    exportReport()
+                } else {
+                    showingProUpgrade = true
+                }
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
