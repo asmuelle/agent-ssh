@@ -27,6 +27,7 @@ struct SettingsView: View {
     @State private var licenseError: String?
     @State private var csvImportPlan: ConnectionCSVImportPlan?
     @State private var importExportError: String?
+    @State private var sshConfigImportSummary: String?
     @State private var syncStatus: String?
     @State private var syncError: String?
 
@@ -144,6 +145,17 @@ struct SettingsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(importExportError ?? "")
+        }
+        .alert(
+            "SSH Config Import",
+            isPresented: Binding(
+                get: { sshConfigImportSummary != nil },
+                set: { if !$0 { sshConfigImportSummary = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(sshConfigImportSummary ?? "")
         }
         .alert(
             "Sync Failed",
@@ -391,8 +403,8 @@ struct SettingsView: View {
 
                         Spacer()
 
-                        Button("Import from Tauri…") {
-                            importFromTauri()
+                        Button("Import from ~/.ssh/config") {
+                            importFromSSHConfig()
                         }
 
                         Button("Import CSV...") {
@@ -409,14 +421,29 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    private func importFromTauri() {
+    private func importFromSSHConfig() {
+        let defaultConfig = ImportManager.defaultSSHConfigURL
+        if FileManager.default.fileExists(atPath: defaultConfig.path) {
+            runSSHConfigImport(from: defaultConfig)
+            return
+        }
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
-        panel.message = "Select the Tauri export JSON file"
+        panel.directoryURL = defaultConfig.deletingLastPathComponent()
+        panel.showsHiddenFiles = true
+        panel.message = "Choose an OpenSSH config file"
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                _ = connectionStore.importFromTauriJSON(url: url)
+                runSSHConfigImport(from: url)
             }
+        }
+    }
+
+    private func runSSHConfigImport(from url: URL) {
+        do {
+            let result = try connectionStore.importFromSSHConfig(url: url)
+            sshConfigImportSummary = result.summary
+        } catch {
+            importExportError = error.localizedDescription
         }
     }
 

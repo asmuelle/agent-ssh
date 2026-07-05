@@ -15,9 +15,9 @@
 //    dropped every frame; locking the contract in tests prevents
 //    regressing it.
 //
-// 2. Codable round-trips on the persisted models — `WorkspaceLayout` and
-//    `TauriConnectionImport` are written to disk; their public initialisers
-//    and the synthesised Codable conformance must match.
+// 2. Codable round-trips on the persisted models — `WorkspaceLayout` is
+//    written to disk; its public initialisers and the synthesised Codable
+//    conformance must match.
 //
 // 3. Cross-module construction — proves the public initialisers on
 //    `WorkspaceLayout` and `TransferItem` (added when the app moved out

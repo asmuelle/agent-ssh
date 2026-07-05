@@ -352,24 +352,49 @@ class ConnectionStoreManager: ObservableObject {
 
     // MARK: - Import
 
-    func importFromTauriJSON(url: URL) -> Int {
-        do {
-            let data = try ImportManager.shared.importFromJSON(url: url)
-            var count = 0
-            for profile in data.connections where !connections.contains(where: { $0.id == profile.id }) {
-                connections.append(profile)
-                count += 1
+    struct SSHConfigImportResult {
+        let imported: Int
+        let skipped: Int
+
+        var summary: String {
+            var text = "Imported \(imported) connection\(imported == 1 ? "" : "s")"
+            if skipped > 0 {
+                text += ", skipped \(skipped) already present"
             }
-            for folder in data.folders where !folders.contains(where: { $0.id == folder.id }) {
-                folders.append(folder)
-            }
-            save()
-            logger.info("Imported \(count) connections from Tauri export")
-            return count
-        } catch {
-            logger.error("Import failed: \(error.localizedDescription)")
-            return 0
+            return text + "."
         }
+    }
+
+    func importFromSSHConfig(url: URL) throws -> SSHConfigImportResult {
+        let data = try ImportManager.shared.importFromSSHConfig(url: url)
+        var imported = 0
+        var skipped = 0
+        for profile in data.connections {
+            // Skip only true duplicates: same endpoint AND same identity.
+            // Two aliases for one endpoint with different keys (the classic
+            // github-work / github-personal setup) are distinct profiles.
+            let duplicate = connections.contains { existing in
+                existing.host == profile.host
+                    && existing.port == profile.port
+                    && existing.username == profile.username
+                    && existing.sshKeyReference == profile.sshKeyReference
+            }
+            if duplicate {
+                skipped += 1
+                continue
+            }
+            var newProfile = profile
+            // A colliding id with a different endpoint means another config
+            // reused the alias — keep both, remint the id.
+            if connections.contains(where: { $0.id == newProfile.id }) {
+                newProfile.id = UUID().uuidString
+            }
+            connections.append(newProfile)
+            imported += 1
+        }
+        if imported > 0 { save() }
+        logger.info("SSH config import: \(imported) imported, \(skipped) skipped from \(url.path)")
+        return SSHConfigImportResult(imported: imported, skipped: skipped)
     }
 
     // MARK: - CSV import/export

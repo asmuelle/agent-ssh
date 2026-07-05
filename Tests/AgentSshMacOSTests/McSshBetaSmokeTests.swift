@@ -135,14 +135,16 @@ final class AgentSshBetaSmokeTests: XCTestCase {
         XCTAssertEqual(stats.memoryUsagePercent, 50, accuracy: 0.1)
     }
 
-    // MARK: - Tauri import
+    // MARK: - SSH config import
 
-    func testTauriImportParsesObject() {
-        let json = """
-        {"connections": [{"host": "s1.com"}], "folders": [{"name": "Work", "path": "Work"}]}
+    func testSSHConfigImportParsesHostBlock() {
+        let config = """
+        Host web1
+            HostName web1.example.com
+            User deploy
         """
-        let data = try! JSONDecoder().decode(TauriConnectionImport.self, from: json.data(using: .utf8)!)
-        XCTAssertEqual(data.connections.count, 1)
-        XCTAssertEqual(data.folders?.count, 1)
+        let entries = SSHConfigParser.parse(config)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.hostName, "web1.example.com")
     }
 }

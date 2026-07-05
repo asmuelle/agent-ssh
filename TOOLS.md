@@ -38,7 +38,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 ### Import
 
-- `ImportManager.swift` — imports connection profiles from the legacy Tauri app's localStorage export (JSON file or direct storage read).
+- `ImportManager.swift` + `Sources/AgentSshMacOS/SSHConfigParser.swift` — imports connection profiles from an OpenSSH client config (`~/.ssh/config` one-click, or any file via the picker). Resolves `Include` directives, `Host *` defaults, and pattern stanzas with ssh's own first-obtained-wins semantics (validated against `ssh -G`). `IdentityFile` comes across as a key-path reference — private keys are never read; hosts without one default to SSH-agent auth. CSV import/export lives in `ConnectionCSVCodec.swift`.
 
 ---
 

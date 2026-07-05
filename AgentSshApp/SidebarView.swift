@@ -18,6 +18,7 @@ struct SidebarView: View {
     @State private var showNewConnection = false
     @State private var newConnectionKind: ConnectionKind = .ssh
     @State private var showImport = false
+    @State private var importResultMessage: String?
     @State private var search = ""
     /// When non-nil, presents the edit sheet for the wrapped profile.
     /// Driving via `.sheet(item:)` rather than a Bool + separate state
@@ -121,12 +122,43 @@ struct SidebarView: View {
         }
         .fileImporter(
             isPresented: $showImport,
-            allowedContentTypes: [.json],
+            allowedContentTypes: [.item],
             allowsMultipleSelection: false
         ) { result in
             if case .success(let urls) = result, let url = urls.first {
-                _ = storeManager.importFromTauriJSON(url: url)
+                runSSHConfigImport(from: url)
             }
+        }
+        .alert(
+            "SSH Config Import",
+            isPresented: Binding(
+                get: { importResultMessage != nil },
+                set: { if !$0 { importResultMessage = nil } }
+            )
+        ) {
+            Button("OK") { importResultMessage = nil }
+        } message: {
+            Text(importResultMessage ?? "")
+        }
+    }
+
+    /// One-click when `~/.ssh/config` exists; otherwise fall back to the
+    /// file picker so users can import a config from anywhere.
+    private func importSSHConfig() {
+        let defaultConfig = ImportManager.defaultSSHConfigURL
+        if FileManager.default.fileExists(atPath: defaultConfig.path) {
+            runSSHConfigImport(from: defaultConfig)
+        } else {
+            showImport = true
+        }
+    }
+
+    private func runSSHConfigImport(from url: URL) {
+        do {
+            let result = try storeManager.importFromSSHConfig(url: url)
+            importResultMessage = result.summary
+        } catch {
+            importResultMessage = error.localizedDescription
         }
     }
 
@@ -154,7 +186,7 @@ struct SidebarView: View {
                         folderPrompt = FolderPrompt(kind: .createTopLevel)
                     }
                     Divider()
-                    Button("Import from Tauri…") { showImport = true }
+                    Button("Import from ~/.ssh/config") { importSSHConfig() }
                 } label: {
                     Image(systemName: "plus")
                         .font(MidnightMacDesign.FontToken.label)
@@ -417,9 +449,9 @@ struct SidebarView: View {
 
 
                 Button {
-                    showImport = true
+                    importSSHConfig()
                 } label: {
-                    Label("Import…", systemImage: "square.and.arrow.down")
+                    Label("Import ~/.ssh/config", systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
