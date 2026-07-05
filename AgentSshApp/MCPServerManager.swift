@@ -25,7 +25,7 @@ struct MCPAuditEvent: Identifiable, Codable {
 class MCPServerManager: ObservableObject {
     static let shared = MCPServerManager()
     
-    @Published var isServerEnabled: Bool = true {
+    @Published var isServerEnabled: Bool = false {
         didSet {
             UserDefaults.standard.set(isServerEnabled, forKey: "agent_ssh_mcp_enabled")
             if isServerEnabled {
@@ -51,7 +51,9 @@ class MCPServerManager: ObservableObject {
     }
     
     private init() {
-        self.isServerEnabled = UserDefaults.standard.object(forKey: "agent_ssh_mcp_enabled") as? Bool ?? true
+        // Off by default: an AI command socket must be an explicit opt-in,
+        // not something running before the user has seen the settings pane.
+        self.isServerEnabled = UserDefaults.standard.object(forKey: "agent_ssh_mcp_enabled") as? Bool ?? false
         if isServerEnabled {
             startServer()
         }

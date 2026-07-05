@@ -114,14 +114,15 @@ struct MCPSettingsView: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     LabeledContent("Type", value: "command")
                                     LabeledContent("Name", value: "agent-ssh")
-                                    LabeledContent("Command", value: "agent-ssh-mcp")
+                                    LabeledContent("Command", value: bridgeExecutablePath)
+                                    LabeledContent("Args", value: mcpManager.socketPath)
                                 }
                                 .font(.caption)
                                 .padding(8)
                                 .background(Color(NSColor.controlBackgroundColor))
                                 .cornerRadius(6)
-                                
-                                Text("Make sure the 'agent-ssh-mcp' helper tool is installed in your local shell PATH.")
+
+                                Text("The bridge helper ships inside the app bundle — no PATH setup needed. Keep agent-ssh running while the editor is connected.")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -243,12 +244,22 @@ struct MCPSettingsView: View {
         )
     }
     
+    /// The stdio↔socket bridge helper embedded in the app bundle. Referencing
+    /// it by absolute path keeps the snippet copy-paste correct without asking
+    /// users to edit their shell PATH.
+    private var bridgeExecutablePath: String {
+        Bundle.main.bundleURL
+            .appendingPathComponent("Contents/MacOS/agent-ssh-mcp")
+            .path
+    }
+
     private var claudeConfigBlock: String {
         return """
         {
           "mcpServers": {
             "agent-ssh": {
-              "command": "agent-ssh-mcp"
+              "command": "\(bridgeExecutablePath)",
+              "args": ["\(mcpManager.socketPath)"]
             }
           }
         }

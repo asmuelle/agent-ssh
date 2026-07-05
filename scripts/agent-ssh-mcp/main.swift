@@ -1,12 +1,21 @@
 import Foundation
 
-// Define socket path matching MCPServerManager
+// Socket path resolution order: explicit CLI argument, environment override,
+// app-group container (matches MCPServerManager), temp-dir fallback. The CLI
+// argument matters because this helper may run unsandboxed/unsigned where the
+// app-group container is not resolvable — the in-app setup snippet passes the
+// app's actual socket path explicitly.
 var socketPath: String {
-    // Check if running on macOS and try to get App Group container path
+    let arguments = CommandLine.arguments
+    if arguments.count > 1, !arguments[1].isEmpty {
+        return arguments[1]
+    }
+    if let override = ProcessInfo.processInfo.environment["AGENT_SSH_MCP_SOCKET"], !override.isEmpty {
+        return override
+    }
     if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.agent-ssh") {
         return groupURL.appendingPathComponent("agent-ssh-mcp.sock").path
     }
-    // Fallback for development/non-signed environments
     return NSTemporaryDirectory() + "agent-ssh-mcp.sock"
 }
 

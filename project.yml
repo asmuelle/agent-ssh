@@ -52,6 +52,14 @@ targets:
     dependencies:
       - target: AgentSshWidgets
       - target: AgentSshMacOS
+      # stdio↔socket MCP bridge helper. Build-order dependency only — the
+      # binary is copied into Contents/MacOS and signed by the
+      # "Embed agent-ssh-mcp helper" script phase below (xcodegen's embed
+      # puts tool products into Resources, where executables violate
+      # Apple's nested-code rules).
+      - target: agent-ssh-mcp
+        link: false
+        embed: false
       - package: SwiftTerm
         product: SwiftTerm
       - package: Sparkle
@@ -136,6 +144,24 @@ targets:
         basedOnDependencyAnalysis: false
         inputFiles: []
         outputFiles: []
+    postBuildScripts:
+      # Ship the MCP stdio bridge inside the bundle at Contents/MacOS so the
+      # in-app setup snippets can reference it by absolute path. Signed here
+      # because the final app signature only seals nested code that is
+      # already signed.
+      - name: "Embed agent-ssh-mcp helper"
+        script: |
+          set -euo pipefail
+          src="$BUILT_PRODUCTS_DIR/agent-ssh-mcp"
+          dst="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/agent-ssh-mcp"
+          cp -f "$src" "$dst"
+          if [ "${CODE_SIGNING_ALLOWED:-YES}" = "YES" ]; then
+            codesign --force --options runtime --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" "$dst"
+          fi
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/agent-ssh-mcp
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/agent-ssh-mcp
     scheme:
       testTargets:
         - AgentSshAppTests
@@ -391,6 +417,19 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: true
         SKIP_INSTALL: YES
     scheme: {}
+
+  # Command-line stdio↔Unix-socket bridge for external MCP clients
+  # (Claude Desktop, Cursor). Embedded into AgentSshApp's Contents/MacOS
+  # by the copyPhase dependency above; not installed standalone.
+  agent-ssh-mcp:
+    type: tool
+    platform: macOS
+    sources:
+      - path: scripts/agent-ssh-mcp/main.swift
+    settings:
+      base:
+        PRODUCT_NAME: agent-ssh-mcp
+        SKIP_INSTALL: YES
 
   AgentSshMacOS:
     type: framework
