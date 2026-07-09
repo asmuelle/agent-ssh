@@ -20,6 +20,7 @@ ios_sim_dd  := "/private/tmp/agent-ssh-ios-dd"
 ios_sim_app := ios_sim_dd + "/Build/Products/Debug-iphonesimulator/agent-ssh.app"
 ios_dev_dd  := "/private/tmp/agent-ssh-ios-device-dd"
 ios_dev_app := ios_dev_dd + "/Build/Products/Debug-iphoneos/agent-ssh.app"
+ios_archive := ios_dev_dd + "/agent-ssh.xcarchive"
 mac_build   := env_var_or_default("ASSH_MAC_DERIVED_DATA", ".derivedData/macos")
 mac_app     := mac_build + "/Build/Products/Release/agent-ssh.app"
 mac_debug_app := mac_build + "/Build/Products/Debug/agent-ssh.app"
@@ -43,7 +44,16 @@ check:
     cargo check --all-targets
 
 # Run Rust + Swift tests.
-test: test-rust mac-test
+test: test-rust mac-test ios-test-or-skip
+
+# Gracefully degrade for the aggregate `test` target only: run ios-test when
+# an iPhone simulator runtime exists, otherwise skip with a clear message.
+ios-test-or-skip:
+    @if xcrun simctl list devices available 2>/dev/null | grep -q 'iPhone'; then \
+        just ios-test; \
+    else \
+        echo "SKIPPED: no iPhone simulator runtime installed — skipping ios-test"; \
+    fi
 
 test-rust:
     cargo test --all-targets
@@ -323,31 +333,54 @@ ios-sim-build:
         CODE_SIGN_IDENTITY="-" \
         build
 
-# Build, install, and launch on an iPad simulator. Pass a simulator name
-# fragment if you want a specific iPad, e.g. `just run-on-ipad "iPad Pro"`.
-run-on-ipad name="":
+# Run the iOS logic tests (AgentSshMobileLogicTests — no Rust link needed) on
+# an iPhone simulator. Resolves a booted sim if there is one, else the first
+# available iPhone, and boots it.
+ios-test:
+    @just _ensure-xcodeproj
+    @udid="$(bash scripts/sim_select.sh iPhone)"; \
+    xcodebuild test \
+        -project {{xcode_proj}} \
+        -scheme AgentSshMobileLogicTests \
+        -destination "platform=iOS Simulator,id=$udid" \
+        -derivedDataPath {{ios_sim_dd}} \
+        CODE_SIGNING_ALLOWED=NO
+
+# Build, install, and launch on an iPad *simulator*. Pass a simulator name
+# fragment if you want a specific iPad, e.g. `just run-on-ipad-sim "iPad Pro"`.
+# For a physical iPad, use `run-on-ipad`.
+run-on-ipad-sim name="":
     @just ios-sim-build
     @app="{{ios_sim_app}}"; \
     bundle="{{ios_bundle}}"; \
     name="{{name}}"; \
     test -d "$app" || (echo "iOS simulator app not found: $app"; exit 1); \
-    if [ -n "$name" ]; then \
-        udid="$(xcrun simctl list devices available | grep 'iPad' | grep -F "$name" | sed -nE 's/.*\(([0-9A-F-]{36})\).*/\1/p' | head -n1 || true)"; \
-    else \
-        udid="$(xcrun simctl list devices available | grep 'iPad' | grep 'Booted' | sed -nE 's/.*\(([0-9A-F-]{36})\).*/\1/p' | head -n1 || true)"; \
-        if [ -z "$udid" ]; then \
-            udid="$(xcrun simctl list devices available | grep 'iPad' | sed -nE 's/.*\(([0-9A-F-]{36})\).*/\1/p' | head -n1 || true)"; \
-        fi; \
-    fi; \
-    test -n "$udid" || (echo "No available iPad simulator found"; xcrun simctl list devices available; exit 1); \
-    if ! xcrun simctl list devices | grep "$udid" | grep -q 'Booted'; then \
-        xcrun simctl boot "$udid" || true; \
-        xcrun simctl bootstatus "$udid" -b; \
-    fi; \
+    udid="$(bash scripts/sim_select.sh iPad "$name")"; \
     open -a Simulator; \
     xcrun simctl install "$udid" "$app"; \
     xcrun simctl launch "$udid" "$bundle"; \
     echo "Launched agent-ssh on iPad simulator $udid"
+
+# Build, install, and launch on an iPhone *simulator*. Pass a simulator name
+# fragment if you want a specific iPhone, e.g. `just run-on-iphone-sim "iPhone 16 Pro"`.
+# For a physical iPhone, use `run-on-iphone`.
+run-on-iphone-sim name="":
+    @just ios-sim-build
+    @app="{{ios_sim_app}}"; \
+    bundle="{{ios_bundle}}"; \
+    name="{{name}}"; \
+    test -d "$app" || (echo "iOS simulator app not found: $app"; exit 1); \
+    udid="$(bash scripts/sim_select.sh iPhone "$name")"; \
+    open -a Simulator; \
+    xcrun simctl install "$udid" "$app"; \
+    xcrun simctl launch "$udid" "$bundle"; \
+    echo "Launched agent-ssh on iPhone simulator $udid"
+
+# Build, install, and launch on a *physical* iPad connected over USB or Wi-Fi.
+# For the iPad simulator, use `run-on-ipad-sim`. Pass a device-name fragment to
+# disambiguate, e.g. `just run-on-ipad Dashboard`.
+run-on-ipad name="":
+    @just run-on-device "{{name}}" iPad
 
 # Build the iOS app for a connected device or archive workflow.
 ios-build config="Debug":
@@ -362,41 +395,107 @@ ios-build config="Debug":
         ARCHS=arm64 \
         build
 
-# Build, install, and launch on a connected iPhone. Requires development
-# signing — set DEVELOPMENT_TEAM (or APPLE_DEVELOPMENT_TEAM) to your Apple
-# Developer Team ID, and the device must be paired & trusted in Xcode. Pass a
-# device name fragment to target a specific iPhone, e.g.
-# `just run-on-iphone "Andreas"`.
+# Build, install, and launch on a *physical* iPhone connected over USB or
+# Wi-Fi. For the iPhone simulator, use `run-on-iphone-sim`. Pass a device-name
+# fragment to disambiguate, e.g. `just run-on-iphone Excalibur`.
 run-on-iphone name="":
+    @just run-on-device "{{name}}" iPhone
+
+# Build, install, and launch on a *physical* iPhone/iPad connected over USB or
+# Wi-Fi. `run-on-ipad` / `run-on-iphone` wrap this; the *-sim recipes target
+# the simulator. Pass a device-name fragment to pick one, e.g.
+# `just run-on-device Excalibur`, and optionally a device-kind filter used when
+# no name is given (defaults to any iPhone or iPad). Requires a paired device
+# (see `xcrun devicectl list devices`) and a signing team (DEVELOPMENT_TEAM in
+# project.yml). It resolves the connected device *first* and builds against
+# that specific device (not `generic/platform=iOS`) so
+# `-allowProvisioningUpdates` can auto-register brand-new hardware — a generic
+# build cannot, and fails with "provisioning profile cannot be installed on
+# this device" on a new device.
+run-on-device name="" kind="iPhone|iPad":
     @just _ensure-xcodeproj
     @just _ios-device-rust Debug
-    @team="${DEVELOPMENT_TEAM:-${APPLE_DEVELOPMENT_TEAM:-}}"; \
-      test -n "$team" || (echo "❌ Set DEVELOPMENT_TEAM=<Apple Team ID> or APPLE_DEVELOPMENT_TEAM=<Apple Team ID>"; exit 1); \
-      xcodebuild \
-        -allowProvisioningUpdates \
-        -project {{xcode_proj}} \
-        -scheme {{ios_scheme}} \
-        -configuration Debug \
-        -destination 'generic/platform=iOS' \
-        -derivedDataPath {{ios_dev_dd}} \
-        ARCHS=arm64 \
-        CODE_SIGN_STYLE=Automatic \
-        DEVELOPMENT_TEAM="$team" \
-        build
     @app="{{ios_dev_app}}"; \
     bundle="{{ios_bundle}}"; \
     name="{{name}}"; \
-    test -d "$app" || (echo "iPhone app not found: $app"; exit 1); \
+    uuid='[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'; \
+    devices="$(xcrun devicectl list devices)"; \
     if [ -n "$name" ]; then \
-        line="$(xcrun devicectl list devices 2>/dev/null | grep -F "$name" | grep -iE '(^|[[:space:]])(connected|available)' | head -n1 || true)"; \
+        rows="$(printf '%s\n' "$devices" | grep -F "$name" || true)"; \
     else \
-        line="$(xcrun devicectl list devices 2>/dev/null | grep -i 'iPhone' | grep -iE '(^|[[:space:]])(connected|available)' | head -n1 || true)"; \
+        rows="$(printf '%s\n' "$devices" | grep -iE '{{kind}}' || true)"; \
     fi; \
-    udid="$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' | head -n1 || true)"; \
-    test -n "$udid" || (echo "No connected iPhone found. Connect & trust the device, then:"; xcrun devicectl list devices; exit 1); \
-    xcrun devicectl device install app --device "$udid" "$app"; \
-    xcrun devicectl device process launch --device "$udid" "$bundle"; \
-    echo "Launched agent-ssh on iPhone $udid"
+    row="$(printf '%s\n' "$rows" | grep -v 'unavailable' | head -n1)"; \
+    device="$(printf '%s\n' "$row" | grep -oE "$uuid" | head -n1 || true)"; \
+    if [ -z "$device" ]; then \
+        if printf '%s\n' "$rows" | grep -q 'unavailable'; then \
+            echo "Device is paired but unavailable. Unlock it, keep it plugged in (or on the same Wi-Fi), trust this Mac, then retry."; \
+        else \
+            echo "No paired iPhone/iPad found. Connect a device and check 'xcrun devicectl list devices'."; \
+        fi; \
+        printf '%s\n' "$devices"; exit 1; \
+    fi; \
+    devname="$(printf '%s\n' "$row" | awk -F'  +' '{print $1}')"; \
+    echo "Building for \"$devname\" ($device) …"; \
+    xcodebuild \
+        -project {{xcode_proj}} \
+        -scheme {{ios_scheme}} \
+        -configuration Debug \
+        -destination "platform=iOS,name=$devname" \
+        -derivedDataPath {{ios_dev_dd}} \
+        -allowProvisioningUpdates \
+        -allowProvisioningDeviceRegistration \
+        ARCHS=arm64 \
+        build; \
+    test -d "$app" || (echo "iOS device app not found: $app"; exit 1); \
+    echo "Installing on device $device …"; \
+    xcrun devicectl device install app --device "$device" "$app"; \
+    if ! xcrun devicectl device process launch --device "$device" "$bundle"; then \
+        echo "App installed, but launch failed — unlock \"$devname\" and keep it awake, then rerun (iOS refuses to launch apps on a locked device)."; \
+        exit 1; \
+    fi; \
+    echo "Launched agent-ssh on \"$devname\" ($device)"
+
+# Archive the iOS app for TestFlight / App Store (Release, device arm64).
+# Requires a signing team (DEVELOPMENT_TEAM in project.yml); auto-provisions.
+ios-archive:
+    @just _ensure-xcodeproj
+    @just _ios-device-rust Release
+    xcodebuild archive \
+        -project {{xcode_proj}} \
+        -scheme {{ios_scheme}} \
+        -configuration Release \
+        -destination 'generic/platform=iOS' \
+        -derivedDataPath {{ios_dev_dd}} \
+        -archivePath {{ios_archive}} \
+        -allowProvisioningUpdates \
+        ARCHS=arm64
+    @echo "Archive ready: {{ios_archive}}"
+
+# Upload the archive from `just ios-archive` to App Store Connect (TestFlight).
+# One-time manual prerequisite: an app record for {{ios_bundle}} must exist in
+# App Store Connect. Auth is either your Xcode-signed-in Apple ID (default) or,
+# for CI/headless, an App Store Connect API key:
+#   ASC_KEY_ID=<key id> ASC_KEY_ISSUER_ID=<issuer uuid> just ios-upload
+# with the .p8 at ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8
+# (or point ASC_KEY_PATH at it explicitly).
+ios-upload:
+    @archive="{{ios_archive}}"; \
+    test -d "$archive" || (echo "No archive at $archive — run 'just ios-archive' first"; exit 1); \
+    auth=(); \
+    if [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_KEY_ISSUER_ID:-}" ]; then \
+        auth+=(-authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_KEY_ISSUER_ID"); \
+        if [ -n "${ASC_KEY_PATH:-}" ]; then auth+=(-authenticationKeyPath "$ASC_KEY_PATH"); fi; \
+    fi; \
+    xcodebuild -exportArchive \
+        -archivePath "$archive" \
+        -exportOptionsPlist scripts/export_options_appstore.plist \
+        -exportPath "{{ios_dev_dd}}/export" \
+        -allowProvisioningUpdates \
+        ${auth[@]+"${auth[@]}"}
+
+# Archive + upload in one go.
+ios-testflight: ios-archive ios-upload
 
 # Clean only iOS build outputs.
 ios-clean:

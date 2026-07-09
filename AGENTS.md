@@ -17,7 +17,8 @@ A code-tour for AI agents (Claude Code, Cursor, etc.) joining this repo cold. Pa
 | Regenerate FFI bindings | `just mac-bindings` |
 | Regenerate Xcode project | `just mac-gen` |
 | Build iPadOS simulator | `just ios-sim-build` |
-| Run on iPad simulator | `just run-on-ipad` |
+| Run on physical iPad / iPhone | `just run-on-ipad` / `just run-on-iphone` |
+| Run on iPad / iPhone simulator | `just run-on-ipad-sim` / `just run-on-iphone-sim` |
 | Format Rust | `just fmt` |
 | Clean all artifacts | `just clean` |
 | Bootstrap prereqs | `just bootstrap` |
@@ -110,7 +111,7 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 |-------------|----------------|----------|
 | Add a Rust FFI function | `src/ffi.rs` | `just mac-bindings` |
 | Add a Swift feature (macOS) | `AgentSshApp/<Name>.swift` | `just mac-build` |
-| Add a Swift feature (iPadOS) | `AgentSshMobile/Mobile<Name>.swift` | `just run-on-ipad` |
+| Add a Swift feature (iPadOS) | `AgentSshMobile/Mobile<Name>.swift` | `just run-on-ipad-sim` |
 | Add shared model/logic | `Sources/AgentSshMacOS/<Name>.swift` | `just mac-test` |
 | Add Xcode target or dependency | `project.yml` | `just mac-gen` |
 | Add a new just command | `justfile` | `just --list` |
@@ -136,7 +137,7 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 2. **Stale Xcode SourcePackages.** Xcode caches absolute paths to SPM artifacts (Sparkle, SwiftTerm). Renaming or moving the repo root breaks them. Symptom: `error: There is no XCFramework found at .../Sparkle.xcframework`. Fix: `rm -rf build .build Mc-Ssh.xcodeproj && just mac-gen && just mac-build`.
 3. **Bundle ids and Xcode schemes still say `mc-ssh` / `AgentSsh*`.** Intentional — repo was extracted from the upstream mc-ssh project; renaming the bundle id changes app-data paths and signing identities, so it's deferred. The build artifacts (`agent-ssh.app`, `libagent_ssh.a`) carry the new brand.
 4. **TOFU host-key store.** SSH known-hosts live at `$XDG_CONFIG_HOME/agent-ssh/known_hosts` via `ssh-commander-core`. Unreadable / unwritable trust state fails closed — do not loosen.
-5. **iPad simulator selection.** `just run-on-ipad` defaults to any booted iPad sim, falls back to the first available. Pass a name fragment to pin: `just run-on-ipad "iPad Pro"`.
+5. **Device vs simulator recipes.** `just run-on-ipad` / `run-on-iphone` target *physical* devices via `run-on-device` (signing team comes from `project.yml`; the device is resolved first so provisioning can auto-register new hardware). The simulator variants are `run-on-ipad-sim` / `run-on-iphone-sim`, defaulting to any booted sim of that family, else the first available; pass a name fragment to pin: `just run-on-ipad-sim "iPad Pro"`.
 6. **`build_cargo.sh` runs every build.** The Xcode build phase is intentionally not gated by dependency analysis (cargo's incremental layer handles that). The "will be run during every build" note in xcodebuild output is expected, not a misconfiguration.
 7. **Universal lib lipo step.** `mac-rust` builds `aarch64-apple-darwin` + `x86_64-apple-darwin` separately and `lipo`s them — the resulting fat archive is what Xcode actually links. CI runners that build only one slice (`mac-ci-build`) skip the lipo and link single-arch.
 

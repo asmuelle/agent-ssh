@@ -487,7 +487,7 @@ struct MobileConnectionEditorView: View {
             )
             guard savedCredential else { return false }
             guard keychainManager.hasSecret(kind: credentialKind, account: updated.keychainAccount) else {
-                keychainManager.lastError = "Credential was not available after saving. Build and launch the simulator app with `just run-on-ipad` so iOS Keychain entitlements are present."
+                keychainManager.lastError = "Credential was not available after saving. Build and launch the simulator app with `just run-on-ipad-sim` so iOS Keychain entitlements are present."
                 return false
             }
         }

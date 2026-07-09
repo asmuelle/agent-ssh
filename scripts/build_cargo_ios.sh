@@ -87,6 +87,40 @@ rust_inputs_are_newer_than_universal_lib() {
          -newer "$UNIVERSAL_LIB" | grep -q .
 }
 
+# The universal-ios lib lives at one stable path shared by device and simulator
+# builds. `lipo -verify_arch arm64` cannot tell an iOS-device arm64 slice from an
+# iOS-simulator arm64 slice — both report as `arm64`; the platform is encoded in
+# the Mach-O LC_BUILD_VERSION load command, not the fat arch. Without this check,
+# toggling between a device build (`run-on-iphone` / `run-on-ipad`) and a
+# simulator build (`run-on-*-sim` / `ios-sim-build` / `ios-ci-build`) silently
+# reuses the wrong slice and the linker fails with "building for
+# 'iOS-simulator', but linking in object file built for 'iOS'".
+# LC_BUILD_VERSION platform codes: 2 = iOS device, 7 = iOS simulator.
+lib_build_platform() {
+    otool -l "$1" 2>/dev/null \
+        | awk '/LC_BUILD_VERSION/{f=1;next} f&&/platform/{print $2; exit}'
+}
+
+expected_lib_platform() {
+    case "$platform" in
+        iphoneos) echo "device" ;;
+        iphonesimulator) echo "simulator" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+universal_lib_matches_platform() {
+    [ -f "$UNIVERSAL_LIB" ] || return 1
+    command -v otool >/dev/null 2>&1 || return 0  # cannot introspect; assume OK
+    local got
+    case "$(lib_build_platform "$UNIVERSAL_LIB")" in
+        2|IOS) got="device" ;;
+        7|IOSSIMULATOR) got="simulator" ;;
+        *) return 0 ;;  # unknown platform → preserve prior behavior, don't churn
+    esac
+    [ "$got" = "$(expected_lib_platform)" ]
+}
+
 verify_prebuilt_static_lib() {
     if [ ! -f "$UNIVERSAL_LIB" ]; then
         echo "Missing prebuilt iOS static library: $UNIVERSAL_LIB"
@@ -118,11 +152,16 @@ cd "$RUST_PROJECT_DIR"
 
 if is_truthy "${AGENT_SSH_XCODE_PHASE:-}" || is_truthy "${AGENT_SSH_SKIP_RUST_BUILD:-${SKIP_RUST_BUILD:-}}"; then
     verify_prebuilt_static_lib
+    if ! universal_lib_matches_platform; then
+        echo "Prebuilt iOS static library was built for $(lib_build_platform "$UNIVERSAL_LIB" | sed 's/2/iOS device/;s/7/iOS simulator/'), but this build targets $platform: $UNIVERSAL_LIB"
+        echo "Rebuild it with: PLATFORM_NAME=$platform ARCHS=\"$archs\" CONFIGURATION=${CONFIGURATION:-Debug} bash scripts/build_cargo_ios.sh"
+        exit 1
+    fi
     echo "Reusing prebuilt iOS static library: $UNIVERSAL_LIB"
     exit 0
 fi
 
-if [ -f "$UNIVERSAL_LIB" ] && ! rust_inputs_are_newer_than_universal_lib; then
+if [ -f "$UNIVERSAL_LIB" ] && ! rust_inputs_are_newer_than_universal_lib && universal_lib_matches_platform; then
     verify_prebuilt_static_lib
     echo "iOS static library up to date: $UNIVERSAL_LIB"
     exit 0

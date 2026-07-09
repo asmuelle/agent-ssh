@@ -34,8 +34,12 @@ just bootstrap          # one-time: xcodegen + macOS + iOS Rust targets
 just mac-build
 just mac-run
 
+# Physical iPad / iPhone over USB or Wi-Fi (signing team from project.yml)
+just run-on-ipad
+just run-on-iphone
+
 # iPad simulator (boots a sim, installs, launches)
-just run-on-ipad "iPad Pro"
+just run-on-ipad-sim "iPad Pro"
 
 # Full local CI pass
 just ci-local
