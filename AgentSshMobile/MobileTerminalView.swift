@@ -17,13 +17,11 @@ struct MobileTerminalView: UIViewRepresentable {
     @Binding var commandRequest: MobileTerminalViewCommand?
 
     func makeUIView(context: Context) -> SwiftTerm.TerminalView {
-        let term = SwiftTerm.TerminalView(frame: .zero)
+        let term = MobileFocusTerminalView(frame: .zero)
         applyAppearance(to: term)
 
         term.terminalDelegate = context.coordinator
         context.coordinator.term = term
-
-        term.addPointerInteraction()
 
         MobileTerminalSessionManager.shared.registerSession(
             connectionId: connectionId,
@@ -39,28 +37,25 @@ struct MobileTerminalView: UIViewRepresentable {
             }
         }
 
-        DispatchQueue.main.async { [weak term] in
-            _ = term?.becomeFirstResponder()
-        }
-
         return term
     }
 
     func updateUIView(_ uiView: SwiftTerm.TerminalView, context: Context) {
         applyAppearance(to: uiView)
         context.coordinator.handle(commandRequest, in: uiView)
-        DispatchQueue.main.async { [weak uiView] in
-            _ = uiView?.becomeFirstResponder()
-        }
     }
 
     static func dismantleUIView(_ uiView: SwiftTerm.TerminalView, coordinator: Coordinator) {
-        MobileTerminalSessionManager.shared.unregisterSession(connectionId: coordinator.connectionId)
+        MobileTerminalSessionManager.shared.unregisterSession(
+            connectionId: coordinator.connectionId,
+            generation: coordinator.ptyGeneration
+        )
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             connectionId: connectionId,
+            ptyGeneration: ptyGeneration,
             onCurrentDirectoryChange: onCurrentDirectoryChange
         )
     }
@@ -79,11 +74,16 @@ struct MobileTerminalView: UIViewRepresentable {
         term.getTerminal().setCursorStyle(CursorStyle.from(string: cursorStyleId) ?? .blinkBlock)
         term.allowMouseReporting = mouseReporting
         term.optionAsMetaKey = optionAsMeta
-        term.keyboardDismissMode = .interactive
+        // Never set keyboardDismissMode on the terminal: TerminalView IS a
+        // UIScrollView, so `.interactive` turns every pan inside the outer
+        // SwiftUI ScrollView into an interactive dismissal of the input
+        // session — which resigns first responder and silently kills
+        // hardware-keyboard input (no on-screen keyboard, no visual cue).
     }
 
     final class Coordinator: NSObject, TerminalViewDelegate {
         let connectionId: String
+        let ptyGeneration: UInt64
         let onCurrentDirectoryChange: ((String?) -> Void)?
         weak var term: SwiftTerm.TerminalView?
 
@@ -94,9 +94,11 @@ struct MobileTerminalView: UIViewRepresentable {
 
         init(
             connectionId: String,
+            ptyGeneration: UInt64,
             onCurrentDirectoryChange: ((String?) -> Void)?
         ) {
             self.connectionId = connectionId
+            self.ptyGeneration = ptyGeneration
             self.onCurrentDirectoryChange = onCurrentDirectoryChange
         }
 
@@ -188,9 +190,18 @@ struct MobileTerminalView: UIViewRepresentable {
     }
 }
 
-extension SwiftTerm.TerminalView {
-    func addPointerInteraction() {
-        let interaction = UIPointerInteraction(delegate: nil)
-        addInteraction(interaction)
+/// Grabs keyboard focus exactly when the view lands in a window — the only
+/// moment `becomeFirstResponder` is guaranteed to be answerable. The previous
+/// fire-and-forget calls from makeUIView/updateUIView could run before window
+/// attachment, silently return false, and leave the terminal deaf to the
+/// hardware keyboard.
+private final class MobileFocusTerminalView: SwiftTerm.TerminalView {
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isFirstResponder else { return }
+            _ = self.becomeFirstResponder()
+        }
     }
 }

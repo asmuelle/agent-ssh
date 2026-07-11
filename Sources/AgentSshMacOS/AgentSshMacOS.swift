@@ -81,3 +81,61 @@ public enum PtyPayloadDecoder {
         return PtyOutputFrame(generation: wire.generation, data: Data(wire.bytes))
     }
 }
+
+// MARK: - Remote config recovery
+
+/// Result of attempting to restore a remote config after its validator failed.
+/// Keeping this state explicit prevents the UI from claiming that a rollback
+/// succeeded when the SSH command failed or the connection disappeared.
+public enum ConfigRollbackStatus: Equatable, Sendable {
+    case restored
+    case failed(detail: String)
+    case unknown(detail: String)
+
+    public static func commandResult(exitCode: Int, output: String) -> ConfigRollbackStatus {
+        guard exitCode == 0 else {
+            let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failed(
+                detail: detail.isEmpty
+                    ? "Rollback command exited with status \(exitCode)."
+                    : detail
+            )
+        }
+        return .restored
+    }
+}
+
+/// User-facing validation failure that includes the independently verified
+/// rollback outcome. The backup path is always retained for manual recovery.
+public struct ConfigValidationRecoveryFailure: LocalizedError, Equatable, Sendable {
+    public let validator: String
+    public let validationOutput: String
+    public let backupPath: String
+    public let rollbackStatus: ConfigRollbackStatus
+
+    public init(
+        validator: String,
+        validationOutput: String,
+        backupPath: String,
+        rollbackStatus: ConfigRollbackStatus
+    ) {
+        self.validator = validator
+        self.validationOutput = validationOutput
+        self.backupPath = backupPath
+        self.rollbackStatus = rollbackStatus
+    }
+
+    public var errorDescription: String? {
+        let validationDetail = validationOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let validationSuffix = validationDetail.isEmpty ? "" : "\n\nValidation output:\n\(validationDetail)"
+
+        switch rollbackStatus {
+        case .restored:
+            return "\(validator) failed. The original file was restored from \(backupPath).\(validationSuffix)"
+        case .failed(let detail):
+            return "\(validator) failed. ROLLBACK FAILED; the remote config may still be invalid. Backup: \(backupPath)\n\nRollback error:\n\(detail)\(validationSuffix)"
+        case .unknown(let detail):
+            return "\(validator) failed. ROLLBACK STATUS UNKNOWN; verify the remote config before reloading the service. Backup: \(backupPath)\n\nRollback status:\n\(detail)\(validationSuffix)"
+        }
+    }
+}

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MobileActivityEvent: Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let date: Date
     let profileId: String?
     let connectionId: String?
@@ -18,8 +18,22 @@ final class MobileActivityLogStore: ObservableObject {
     @Published private(set) var events: [MobileActivityEvent] = []
 
     private let maxEvents = 200
+    private let auditStore = OperationalAuditStore()
 
-    private init() {}
+    private init() {
+        events = auditStore.load().prefix(maxEvents).map { record in
+            MobileActivityEvent(
+                id: record.id,
+                date: record.date,
+                profileId: record.profileId,
+                connectionId: record.connectionId,
+                title: record.title,
+                detail: record.detail,
+                systemImage: record.systemImage,
+                severity: MobileFindingSeverity(rawValue: record.severity) ?? .info
+            )
+        }
+    }
 
     func record(
         title: String,
@@ -27,17 +41,37 @@ final class MobileActivityLogStore: ObservableObject {
         profileId: String? = nil,
         connectionId: String? = nil,
         systemImage: String = "circle",
-        severity: MobileFindingSeverity = .info
+        severity: MobileFindingSeverity = .info,
+        actor: OperationalAuditActor = .app,
+        action: String = "activity",
+        command: String? = nil,
+        outcome: OperationalAuditOutcome = .observed,
+        exitCode: Int? = nil
     ) {
+        let record = OperationalAuditRecord(
+            profileId: profileId,
+            connectionId: connectionId,
+            actor: actor,
+            action: action,
+            title: title,
+            detail: detail,
+            command: command,
+            outcome: outcome,
+            exitCode: exitCode,
+            systemImage: systemImage,
+            severity: severity.rawValue
+        )
+        let sanitized = (try? auditStore.append(record)) ?? record.redacted()
         events.insert(
             MobileActivityEvent(
-                date: Date(),
-                profileId: profileId,
-                connectionId: connectionId,
-                title: title,
-                detail: detail,
-                systemImage: systemImage,
-                severity: severity
+                id: sanitized.id,
+                date: sanitized.date,
+                profileId: sanitized.profileId,
+                connectionId: sanitized.connectionId,
+                title: sanitized.title,
+                detail: sanitized.detail,
+                systemImage: sanitized.systemImage,
+                severity: MobileFindingSeverity(rawValue: sanitized.severity) ?? severity
             ),
             at: 0
         )

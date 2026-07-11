@@ -305,6 +305,12 @@ struct MobileRawOutputSheet: View {
                         UIPasteboard.general.string = output
                     }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    ExplainButton(
+                        context: title,
+                        text: (command.map { "$ \($0)\n" } ?? "") + output
+                    )
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }

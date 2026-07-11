@@ -95,7 +95,8 @@ case "$HOST_ARCH" in
 esac
 HOST_DYLIB="$RUST_TARGET_DIR/$HOST_TARGET/$CARGO_PROFILE/libagent_ssh.dylib"
 
-# Skip regen if the bindings file is already newer than every FFI source —
+# Skip regen if the bindings file is already newer than every FFI source and
+# UniFFI/dependency input —
 # protects incremental builds from a needless rebuild of the bindgen tool.
 #
 # The FFI surface is the whole `src/ffi/` directory (connection.rs, sftp.rs,
@@ -108,10 +109,16 @@ needs_regen=0
 if [ ! -f "$BINDINGS_SWIFT" ]; then
     needs_regen=1
 else
-    # Any FFI source newer than the committed bindings means they're stale.
-    if [ -n "$(find "$RUST_PROJECT_DIR/src/ffi" "$RUST_PROJECT_DIR/src/bridge.rs" \
-                    "$RUST_PROJECT_DIR/src/lib.rs" \
-                    -name '*.rs' -newer "$BINDINGS_SWIFT" -print -quit 2>/dev/null)" ]; then
+    # Any FFI source or dependency metadata newer than the committed bindings
+    # means they're stale. A UniFFI version change can alter the contract
+    # checksum even when no Rust source changed.
+    if { find "$RUST_PROJECT_DIR/src/ffi" "$RUST_PROJECT_DIR/src/bridge.rs" \
+                    "$RUST_PROJECT_DIR/src/lib.rs" -name '*.rs' \
+                    -newer "$BINDINGS_SWIFT" -print -quit 2>/dev/null; \
+         find "$RUST_PROJECT_DIR/Cargo.toml" "$RUST_PROJECT_DIR/Cargo.lock" \
+                    "$RUST_PROJECT_DIR/uniffi-bindgen.rs" -type f \
+                    -newer "$BINDINGS_SWIFT" -print -quit 2>/dev/null; \
+       } | grep -q .; then
         needs_regen=1
     fi
 fi

@@ -36,14 +36,24 @@ enum MacSafeConfigSave {
             script: validator.command(backup.originalPath)
         )
         guard result.succeeded else {
-            _ = try? await RemoteCommandRunner.runShell(
-                connectionId: connectionId,
-                script: "cp -p \(RemoteCommandRunner.shellQuote(backup.backupPath)) \(RemoteCommandRunner.shellQuote(backup.originalPath))"
-            )
-            throw MacSafeConfigSaveError.validationFailed(
+            let rollbackStatus: ConfigRollbackStatus
+            do {
+                let rollback = try await RemoteCommandRunner.runShell(
+                    connectionId: connectionId,
+                    script: "cp -p \(RemoteCommandRunner.shellQuote(backup.backupPath)) \(RemoteCommandRunner.shellQuote(backup.originalPath))"
+                )
+                rollbackStatus = .commandResult(
+                    exitCode: rollback.exitCode,
+                    output: rollback.output
+                )
+            } catch {
+                rollbackStatus = .unknown(detail: error.localizedDescription)
+            }
+            throw ConfigValidationRecoveryFailure(
                 validator: validator.label,
-                output: result.output,
-                backupPath: backup.backupPath
+                validationOutput: result.output,
+                backupPath: backup.backupPath,
+                rollbackStatus: rollbackStatus
             )
         }
         return result
@@ -116,14 +126,11 @@ enum MacSafeConfigSave {
 
 enum MacSafeConfigSaveError: LocalizedError {
     case backupFailed(output: String, backupPath: String)
-    case validationFailed(validator: String, output: String, backupPath: String)
 
     var errorDescription: String? {
         switch self {
         case .backupFailed(let output, let backupPath):
             return "Could not create a backup at \(backupPath).\n\n\(output)"
-        case .validationFailed(let validator, let output, let backupPath):
-            return "\(validator) failed. The original file was restored from \(backupPath).\n\n\(output)"
         }
     }
 }

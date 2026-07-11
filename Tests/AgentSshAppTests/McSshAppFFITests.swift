@@ -14,6 +14,14 @@ import XCTest
 
 final class AgentSshAppFFITests: XCTestCase {
 
+    // `BridgeManager.initialize()` is the application lifecycle barrier. It
+    // must not return until every later FFI call can safely reach the Rust
+    // runtime, otherwise an early connect can trip MacOsBridge::global().
+    func testBridgeInitializationCompletesBeforeReturning() {
+        BridgeManager.shared.initialize()
+        XCTAssertTrue(BridgeManager.shared.isInitialized)
+    }
+
     // MARK: - Init
 
     /// `rshellInit` should return true and be safe to call repeatedly.

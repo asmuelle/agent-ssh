@@ -413,6 +413,11 @@ struct RemoteOperationOutputSheet: View {
 
             HStack {
                 Spacer()
+                ExplainButton(
+                    context: "\(operation.title) — \(operation.detail)",
+                    text: operation.outputText
+                )
+                .disabled(operation.outputText.isEmpty)
                 Button("Copy Output") {
                     RemoteCommandRunner.copy(operation.outputText)
                 }

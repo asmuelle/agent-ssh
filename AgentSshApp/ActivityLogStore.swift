@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AgentSshMacOS
 
 enum ActivitySeverity: String, Codable, CaseIterable {
     case info
@@ -27,7 +28,7 @@ enum ActivitySeverity: String, Codable, CaseIterable {
 }
 
 struct ActivityLogEvent: Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let date: Date
     let profileId: String?
     let connectionId: String?
@@ -44,8 +45,22 @@ final class ActivityLogStore: ObservableObject {
     @Published private(set) var events: [ActivityLogEvent] = []
 
     private let maxEvents = 240
+    private let auditStore = OperationalAuditStore()
 
-    private init() {}
+    private init() {
+        events = auditStore.load().prefix(maxEvents).map { record in
+            ActivityLogEvent(
+                id: record.id,
+                date: record.date,
+                profileId: record.profileId,
+                connectionId: record.connectionId,
+                title: record.title,
+                detail: record.detail,
+                icon: record.systemImage,
+                severity: ActivitySeverity(rawValue: record.severity) ?? .info
+            )
+        }
+    }
 
     func record(
         title: String,
@@ -53,16 +68,36 @@ final class ActivityLogStore: ObservableObject {
         profileId: String? = nil,
         connectionId: String? = nil,
         icon: String = "circle",
-        severity: ActivitySeverity = .info
+        severity: ActivitySeverity = .info,
+        actor: OperationalAuditActor = .app,
+        action: String = "activity",
+        command: String? = nil,
+        outcome: OperationalAuditOutcome = .observed,
+        exitCode: Int? = nil
     ) {
-        let event = ActivityLogEvent(
-            date: Date(),
+        let record = OperationalAuditRecord(
             profileId: profileId,
             connectionId: connectionId,
+            actor: actor,
+            action: action,
             title: title,
             detail: detail,
-            icon: icon,
-            severity: severity
+            command: command,
+            outcome: outcome,
+            exitCode: exitCode,
+            systemImage: icon,
+            severity: severity.rawValue
+        )
+        let sanitized = (try? auditStore.append(record)) ?? record.redacted()
+        let event = ActivityLogEvent(
+            id: sanitized.id,
+            date: sanitized.date,
+            profileId: sanitized.profileId,
+            connectionId: sanitized.connectionId,
+            title: sanitized.title,
+            detail: sanitized.detail,
+            icon: sanitized.systemImage,
+            severity: ActivitySeverity(rawValue: sanitized.severity) ?? severity
         )
         events.insert(event, at: 0)
         if events.count > maxEvents {

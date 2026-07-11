@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // Socket path resolution order: explicit CLI argument, environment override,
 // app-group container (matches MCPServerManager), temp-dir fallback. The CLI
@@ -13,10 +14,14 @@ var socketPath: String {
     if let override = ProcessInfo.processInfo.environment["AGENT_SSH_MCP_SOCKET"], !override.isEmpty {
         return override
     }
-    if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.agent-ssh") {
+    if let groupURL = FileManager.default.containerURL(
+        forSecurityApplicationGroupIdentifier: "group.com.agent-ssh.agent-ssh"
+    ) {
         return groupURL.appendingPathComponent("agent-ssh-mcp.sock").path
     }
-    return NSTemporaryDirectory() + "agent-ssh-mcp.sock"
+    return FileManager.default.temporaryDirectory
+        .appendingPathComponent("agent-ssh-mcp-\(getuid()).sock")
+        .path
 }
 
 func connectToSocket(path: String) -> Int32 {

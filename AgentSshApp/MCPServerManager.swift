@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 import AgentSshMacOS
+import Darwin
 
 struct MCPAuditEvent: Identifiable, Codable {
     let id: UUID
@@ -43,23 +44,31 @@ class MCPServerManager: ObservableObject {
     
     var socketPath: String {
         // App group container secure directory
-        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.agent-ssh") {
-            return groupURL.appendingPathComponent("agent-ssh-mcp.sock").path
+        if let groupURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: MCPConfiguration.appGroupIdentifier
+        ) {
+            return groupURL.appendingPathComponent(MCPConfiguration.socketFileName).path
         }
-        // Fallback for development/non-signed environments
-        return NSTemporaryDirectory() + "agent-ssh-mcp.sock"
+        // Unsigned development builds have no App Group container. Keep the
+        // fallback per-user and apply the same 0600 socket permissions below.
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-ssh-mcp-\(getuid()).sock")
+            .path
     }
     
     private init() {
         // Off by default: an AI command socket must be an explicit opt-in,
         // not something running before the user has seen the settings pane.
-        self.isServerEnabled = UserDefaults.standard.object(forKey: "agent_ssh_mcp_enabled") as? Bool ?? false
+        self.isServerEnabled = MCPConfiguration.enabled(
+            from: UserDefaults.standard.object(forKey: "agent_ssh_mcp_enabled") as? Bool
+        )
         if isServerEnabled {
             startServer()
         }
     }
     
     func startServer() {
+        guard isServerEnabled else { return }
         guard socketServer == nil else { return }
         
         let path = socketPath
@@ -366,6 +375,7 @@ fileprivate class UnixSocketServer {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else {
             print("Failed to create Unix socket")
+            isRunning = false
             return
         }
         self.serverFd = fd
@@ -377,6 +387,7 @@ fileprivate class UnixSocketServer {
         let pathBytes = socketPath.utf8CString
         guard pathBytes.count <= 104 else {
             print("Socket path too long")
+            isRunning = false
             close(fd)
             return
         }
@@ -397,13 +408,31 @@ fileprivate class UnixSocketServer {
         
         guard bindResult >= 0 else {
             print("Failed to bind Unix socket at \(socketPath)")
+            isRunning = false
             close(fd)
+            return
+        }
+
+        do {
+            // The socket is a local control plane. Restrict it to the owning
+            // user even when the process umask is permissive.
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: socketPath
+            )
+        } catch {
+            print("Failed to secure Unix socket at \(socketPath): \(error)")
+            isRunning = false
+            close(fd)
+            unlink(socketPath)
             return
         }
         
         guard listen(fd, 5) >= 0 else {
             print("Failed to listen on Unix socket")
+            isRunning = false
             close(fd)
+            unlink(socketPath)
             return
         }
         

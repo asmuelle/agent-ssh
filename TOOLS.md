@@ -54,7 +54,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 ### Workspace layout (macOS)
 
 - `ContentView.swift`, `PanelViews.swift`, `WorkspaceTabStripView.swift`, `WorkspaceSplitController.swift`, `LayoutManager.swift`
-- Per-tab main panel (terminal + Files / Security sub-tabs), inspector panel (host monitor), plus workspace-wide panels toggled from the tab strip: Dashboard (multi-host monitor grid), Agent (triage), Files (multi-host file grid).
+- Per-tab main panel (terminal + Files / Security sub-tabs), inspector panel (host monitor), plus workspace-wide panels toggled from the tab strip: Dashboard (saved-host inventory and multi-host monitor grid), Agent (triage), Files (multi-host file grid).
 
 ### Command palettes
 
@@ -89,7 +89,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 - **macOS**: `FileEditView.swift`, `FileEditView+WritingTools.swift`, `FileDiffReviewSheet.swift`, `SafeConfigSave.swift`
 - **iPadOS**: `MobileRemoteFileEditorView.swift`, `MobileSafeConfigSave.swift`
-- Diff review before overwriting remote files. Safe config save takes a timestamped `.bak` copy on the host before writing known config paths, with optional validator commands (e.g. `nginx -t`) so a typo doesn't take the host down.
+- Diff review before overwriting remote files. Safe config save takes a timestamped `.bak` copy on the host before writing known config paths, with optional validator commands (e.g. `nginx -t`) so a typo doesn't take the host down. A failed validation verifies the rollback command and reports restored, failed, and unknown outcomes distinctly instead of claiming recovery without evidence.
 
 ### Transfer queue
 
@@ -110,6 +110,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 - `SystemMonitorView.swift` (+ `+Content` / `+Header` / `+Health` / `+Polling`), `MonitorPollingManager.swift`, `MonitorSharedViews.swift`
 - CPU, memory, load, per-mount disk, UFW status badge; per-host poller. Lives in the inspector panel per tab and tiled in the Dashboard panel (`PanelViews.swift`).
+- The Dashboard starts from all saved profiles, including disconnected hosts. `FleetHealthStore` persists the latest observation per profile and labels fresh, stale, and never-observed state so a disconnected server does not disappear from fleet awareness.
 - FFI: `rshell_get_system_stats`.
 - `SystemMonitorView+Health.swift` + `HostHealthNarrator.swift` — one-line plain-language host verdict, on-device FoundationModels when available, deterministic fallback otherwise.
 - `ConnectionWorldMapView.swift` — map of the host's outbound peers by geolocated IP.
@@ -177,6 +178,8 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 ## Runbooks (both platforms)
 
 - **macOS**: `RunbooksPanelView.swift` — saved command sequences with per-runbook risk labels (read-only / changes server / dangerous).
+- **macOS fleet execution**: `FleetRunbookView.swift` + `Sources/AgentSshMacOS/FleetRunbookExecutor.swift` — explicit host selection, literal command disclosure, mandatory confirmation, sequential canaries, bounded rollout concurrency, optional verification, and per-host rollback after failed verification. A failed canary aborts the remaining rollout.
+- **macOS stack audit**: `FleetStackAuditView.swift` + `Sources/AgentSshMacOS/StackDiagnostics.swift` — a read-only, bounded-concurrency probe for Docker Compose, Spring Boot/JVM, Next.js/PM2, nginx/Caddy/Traefik, UFW/firewalld/nftables, and PostgreSQL readiness. Raw command evidence remains visible beside the structured result.
 - **iPadOS**: `MobileRunbooksView.swift` — built-in runbooks with a single templated variable (e.g. service name) plus user-saved ones; `MobileRunbookStores.swift` persists saved runbooks and an execution history with exit codes and output previews.
 
 ---
@@ -241,7 +244,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 | Service inspector | `MobileServiceInspectorView.swift` | Per-service severity-ranked inspection results |
 | Package updates | `MobilePackageUpdatesView.swift` | Pending updates with security-update count and OS release |
 | Disk analyzer | `MobileDiskAnalyzerView.swift` | Navigable `du`-style directory size breakdown |
-| Activity log | `MobileActivityLogStore.swift` | Per-session timeline of commands + results |
+| Activity log | `MobileActivityLogStore.swift` | Redacted command/result timeline backed by the shared durable operational audit ledger |
 | Connection map | `MobileConnectionMapView.swift` | Reachability overview of the fleet |
 | Privacy gate | `MobilePrivacyGateView.swift` | Face ID gates on destructive surfaces (kill process, delete file) |
 | Security vault | `MobileSecurityVaultView.swift` | Master view of stored keys and trust state |
@@ -260,7 +263,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 | Diagnostics bundle | `DiagnosticsBundle.swift` (macOS), `MobileDiagnosticsBundle.swift` (iPadOS) | One-shot state dump for support |
 | Settings | `SettingsView.swift` | Terminal, Appearance, Credentials, License, and Privacy tabs; MCP settings via `MCPSettingsView.swift` |
 | Workspace notifications | `WorkspaceNotifications.swift` | Hub for transfer progress, monitor alerts, completions |
-| Activity log | `ActivityLogStore.swift` (macOS) | Timeline of app-initiated actions and shell-integration events |
+| Activity log | `ActivityLogStore.swift` (macOS), `MobileActivityLogStore.swift` (iPadOS), `Sources/AgentSshMacOS/SharedJSONFileStore.swift` | Redacted, bounded, durable operational ledger with actor, action, host, command, outcome, exit code, and timestamp |
 | Connection confidence | `ConnectionConfidenceView.swift` (macOS), `MobileConnectionConfidenceView.swift` (iPadOS) | Per-host reliability signal |
 
 ---

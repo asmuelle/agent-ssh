@@ -257,9 +257,13 @@ struct MobileServerDetailView: View {
 
     private var splitWorkPane: some View {
         VStack(spacing: 0) {
-            terminalSection
+            // The pane sizes itself to this container (fitsContainer) instead
+            // of demanding a fixed minimum that overflows the split and gets
+            // chopped by .clipped(). The floor keeps header + terminal +
+            // accessory bar usable at small split fractions.
+            terminalSection(fitsContainer: true)
                 .id(MobileServerDetailSection.terminal)
-                .frame(height: UIScreen.main.bounds.height * splitFraction * 0.75)
+                .frame(height: max(340, UIScreen.main.bounds.height * splitFraction * 0.75))
                 .clipped()
 
             Rectangle()
@@ -627,12 +631,18 @@ struct MobileServerDetailView: View {
 
     @ViewBuilder
     private var terminalSection: some View {
+        terminalSection(fitsContainer: false)
+    }
+
+    @ViewBuilder
+    private func terminalSection(fitsContainer: Bool) -> some View {
         if profile.kind.supportsTerminal,
            case .connected(let connectionId) = status {
             MobileTerminalPane(
                 connectionId: connectionId,
                 profileName: profile.name,
-                remoteUsername: profile.username
+                remoteUsername: profile.username,
+                fitsContainer: fitsContainer
             )
         }
     }

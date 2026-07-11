@@ -617,7 +617,12 @@ struct RunbooksPanelView: View {
                 detail: item.title,
                 connectionId: connectionId,
                 icon: item.systemImage,
-                severity: commandResult.succeeded ? .success : item.risk.severity
+                severity: commandResult.succeeded ? .success : item.risk.severity,
+                actor: .user,
+                action: "runbook",
+                command: item.command,
+                outcome: commandResult.succeeded ? .succeeded : .failed,
+                exitCode: commandResult.exitCode
             )
             result = MacRunbookRunResult(
                 title: item.title,
@@ -632,7 +637,11 @@ struct RunbooksPanelView: View {
                 detail: "\(item.title): \(error.localizedDescription)",
                 connectionId: connectionId,
                 icon: "exclamationmark.triangle.fill",
-                severity: .critical
+                severity: .critical,
+                actor: .user,
+                action: "runbook",
+                command: item.command,
+                outcome: .unknown
             )
             errorMessage = error.localizedDescription
         }

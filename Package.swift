@@ -36,7 +36,7 @@ import PackageDescription
 let package = Package(
     name: "agent-ssh",
     platforms: [
-        .macOS(.v11),
+        .macOS(.v13),
         .iOS(.v17),
     ],
     products: [

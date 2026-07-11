@@ -6,6 +6,11 @@ struct MobileTerminalPane: View {
     let connectionId: String
     let profileName: String
     let remoteUsername: String
+    /// When hosted in a fixed-height container (the split work pane), size to
+    /// fill it instead of demanding a fixed minimum that overflows and gets
+    /// clipped. In scrolling contexts the fixed minimum keeps the terminal
+    /// usable.
+    var fitsContainer = false
 
     @State private var generation: UInt64?
     @State private var terminalError: String?
@@ -69,6 +74,10 @@ struct MobileTerminalPane: View {
                             onCurrentDirectoryChange: { currentDirectory = $0 },
                             commandRequest: $terminalViewCommand
                         )
+                        // Breathing room between the glyphs and the pane's
+                        // rounded-corner clip — SwiftTerm draws edge to edge.
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
                     } else if let terminalError {
                         ContentUnavailableView(
                             "Terminal Unavailable",
@@ -83,7 +92,11 @@ struct MobileTerminalPane: View {
                         )
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 420)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: fitsContainer ? 200 : 420,
+                    maxHeight: fitsContainer ? .infinity : nil
+                )
 
                 if generation != nil {
                     MobileTerminalAccessoryBar(connectionId: connectionId)
@@ -227,6 +240,12 @@ struct MobileTerminalPane: View {
         }
     }
 
+    // ⌘V/⌘C/⌘A deliberately have no hidden shortcut buttons: SwiftUI would
+    // install them as UIKeyCommands that outrank the focused first responder,
+    // hijacking paste/copy/select-all from the terminal (SwiftTerm handles
+    // them natively when focused) and from every other focused text field in
+    // the pane. ⌘R stays with the server-detail "Reconnect" shortcut —
+    // restart-PTY lives in the actions menu and command palette.
     private var keyboardShortcuts: some View {
         ZStack {
             shortcutButton("Focus Terminal", key: "`", modifiers: .command) {
@@ -235,23 +254,11 @@ struct MobileTerminalPane: View {
             shortcutButton("Terminal Commands", key: "p", modifiers: [.command, .shift]) {
                 showingCommandPalette = true
             }
-            shortcutButton("Paste", key: "v", modifiers: .command) {
-                performCommand(.pasteClipboard)
-            }
-            shortcutButton("Copy Selection", key: "c", modifiers: .command) {
-                performCommand(.copySelection)
-            }
-            shortcutButton("Select All", key: "a", modifiers: .command) {
-                performCommand(.selectAll)
-            }
             shortcutButton("Clear Screen", key: "k", modifiers: .command) {
                 performCommand(.clearScreen)
             }
             shortcutButton("Interrupt Command", key: ".", modifiers: .command) {
                 performCommand(.interrupt)
-            }
-            shortcutButton("Restart Terminal", key: "r", modifiers: .command) {
-                performCommand(.restartPty)
             }
             shortcutButton("Terminal Settings", key: ",", modifiers: .command) {
                 performCommand(.settings)

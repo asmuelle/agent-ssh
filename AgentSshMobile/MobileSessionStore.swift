@@ -56,6 +56,13 @@ final class MobileSessionStore: ObservableObject {
     ) {
         guard !status(for: profile).isBusy else { return }
 
+        guard MobileBridgeManager.shared.initialized else {
+            let message = "The Rust bridge is still initializing. Try connecting again in a moment."
+            statuses[profile.id] = .failed(message)
+            onFailure?(message)
+            return
+        }
+
         statuses[profile.id] = .connecting
         MobileWidgetSnapshotCenter.shared.publish(profile: profile, status: .connecting)
         let sessionId = UUID().uuidString

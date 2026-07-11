@@ -15,10 +15,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         BridgeManager.shared.initialize()
         logger.info("Rust bridge initialized — app ready")
         
-        // Boot secure embedded MCP server
-        MCPServerManager.shared.startServer()
-        logger.info("Secure embedded MCP server started")
-        
         WidgetSnapshotBootstrapper.seedPlaceholderSnapshotIfNeeded()
         MonitoringAlertNotificationCenter.shared.start()
 

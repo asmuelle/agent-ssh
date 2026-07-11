@@ -42,16 +42,26 @@ enum MobileSafeConfigSave {
             risk: .readOnly
         )
         guard result.succeeded else {
-            _ = try? await MobileRemoteTaskRunner.shared.run(
-                connectionId: connectionId,
-                title: "Rollback Config",
-                command: "cp -p \(shellQuote(backup.backupPath)) \(shellQuote(backup.originalPath))",
-                risk: .mutating
-            )
-            throw MobileSafeConfigSaveError.validationFailed(
+            let rollbackStatus: ConfigRollbackStatus
+            do {
+                let rollback = try await MobileRemoteTaskRunner.shared.run(
+                    connectionId: connectionId,
+                    title: "Rollback Config",
+                    command: "cp -p \(shellQuote(backup.backupPath)) \(shellQuote(backup.originalPath))",
+                    risk: .mutating
+                )
+                rollbackStatus = .commandResult(
+                    exitCode: Int(rollback.exitCode),
+                    output: rollback.output
+                )
+            } catch {
+                rollbackStatus = .unknown(detail: error.localizedDescription)
+            }
+            throw ConfigValidationRecoveryFailure(
                 validator: validator.label,
-                output: result.output,
-                backupPath: backup.backupPath
+                validationOutput: result.output,
+                backupPath: backup.backupPath,
+                rollbackStatus: rollbackStatus
             )
         }
         return result
@@ -120,14 +130,11 @@ enum MobileSafeConfigSave {
 
 enum MobileSafeConfigSaveError: LocalizedError {
     case backupFailed(output: String, backupPath: String)
-    case validationFailed(validator: String, output: String, backupPath: String)
 
     var errorDescription: String? {
         switch self {
         case .backupFailed(let output, let backupPath):
             return "Could not create a backup at \(backupPath).\n\n\(output)"
-        case .validationFailed(let validator, let output, let backupPath):
-            return "\(validator) failed. The original file was restored from \(backupPath).\n\n\(output)"
         }
     }
 }

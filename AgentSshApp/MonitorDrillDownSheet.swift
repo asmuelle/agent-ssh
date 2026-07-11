@@ -123,6 +123,10 @@ struct MonitorDrillDownSheet: View {
             .disabled(copyOutput.isEmpty)
             .help("Copy output")
 
+            ExplainButton(context: drillDown.title, text: copyOutput)
+                .labelStyle(.iconOnly)
+                .disabled(copyOutput.isEmpty)
+
             Button {
                 dismiss()
             } label: {

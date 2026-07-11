@@ -68,7 +68,7 @@ lint:
     cargo clippy --all-targets -- -D warnings
 
 # Local equivalent of CI checks that don't need signing certs.
-ci-local: check test-rust mac-ci-build ios-ci-build
+ci-local: lint check test-rust bindings-check mac-ci-build ios-ci-build
     @echo "✅ Local CI checks completed"
 
 # Wipe Cargo + macOS + iOS build artifacts.
@@ -126,7 +126,7 @@ mac-build-dev config="Debug":
         -configuration {{config}} \
         -destination 'platform=macOS,arch=arm64' \
         -derivedDataPath {{mac_build}} \
-        CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M%S)" \
+        CURRENT_PROJECT_VERSION="${CURRENT_PROJECT_VERSION:-$(date -u +%Y%m%d%H%M%S)}" \
         CODE_SIGN_STYLE=Automatic \
         DEVELOPMENT_TEAM="$team" \
         CODE_SIGNING_REQUIRED=YES \
@@ -155,6 +155,7 @@ mac-build-signed:
         -scheme {{mac_scheme}} \
         -configuration Release \
         -derivedDataPath {{mac_build}} \
+        CURRENT_PROJECT_VERSION="${CURRENT_PROJECT_VERSION:-$(date -u +%Y%m%d%H%M%S)}" \
         CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
         CODE_SIGNING_REQUIRED=YES \
         CODE_SIGNING_ALLOWED=YES \
@@ -209,7 +210,7 @@ mac-verify:
     @echo "---"
     codesign --verify --deep --strict --verbose=2 {{mac_app}}
     @echo "---"
-    spctl -a -t exec -vv {{mac_app}} || true
+    spctl -a -t exec -vv {{mac_app}}
 
 # Regenerate Swift FFI bindings (run after changing src/).
 # Uses the crate-local uniffi-bindgen bin so the version is pinned to the
@@ -226,6 +227,11 @@ mac-bindings:
     mv -f bindings/agent_sshFFI.modulemap \
           bindings/module.modulemap
     @echo "✅ Swift bindings written to bindings/"
+
+# Regenerate bindings and fail if the committed copy was stale.
+bindings-check:
+    @just mac-bindings
+    git diff --exit-code -- bindings/
 
 # Package the built .app as a DMG.
 mac-dmg:

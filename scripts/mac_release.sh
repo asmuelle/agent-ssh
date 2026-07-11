@@ -20,7 +20,7 @@ if [[ -z "$sparkle_key" ]]; then
 fi
 
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
-build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
+build="${CURRENT_PROJECT_VERSION:-$(date -u +%Y%m%d%H%M%S)}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 release_name="${app_name}-${version}-${build}-${stamp}"
 release_dir="${macos_dir}/build/release/${release_name}"
@@ -34,10 +34,14 @@ rm -rf "$release_dir"
 mkdir -p "$release_dir"
 
 if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
-    just mac-build-signed
+    CURRENT_PROJECT_VERSION="$build" just mac-build-signed
 else
-    echo "APPLE_SIGNING_IDENTITY is not set; building an ad-hoc signed release artifact."
-    just mac-build
+    if [[ "$notarize" == "true" ]]; then
+        echo "APPLE_SIGNING_IDENTITY is required before notarizing a release." >&2
+        exit 1
+    fi
+    echo "APPLE_SIGNING_IDENTITY is not set; building a development-signed local artifact."
+    CURRENT_PROJECT_VERSION="$build" just mac-build
 fi
 
 just mac-dmg

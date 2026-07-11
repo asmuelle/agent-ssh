@@ -141,14 +141,14 @@ struct ContentView: View {
                 activity.userInfo = ["url": "agent-ssh://server"]
             }
         }
-        .alert("Connection error", isPresented: Binding(
-            get: { tabsStore.lastError != nil },
-            set: { if !$0 { tabsStore.lastError = nil } }
-        )) {
-            Button("OK") { tabsStore.lastError = nil }
-        } message: {
-            Text(tabsStore.lastError ?? "")
-        }
+        .explainableErrorAlert(
+            "Connection error",
+            context: "an SSH connection error message",
+            message: Binding(
+                get: { tabsStore.lastError },
+                set: { tabsStore.lastError = $0 }
+            )
+        )
         // SSH→SFTP fallback prompt. Distinct from the error alert
         // because the connect *did* succeed, just in a different
         // shape than asked for. Offers a one-click commit to make

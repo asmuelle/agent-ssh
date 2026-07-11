@@ -368,9 +368,14 @@ struct InspectorPanel: View {
 struct DashboardPanel: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @ObservedObject private var activityLog = ActivityLogStore.shared
+    @ObservedObject private var connectionStore = ConnectionStoreManager.shared
     @State private var sort = DashboardSort.order
     @State private var resolvedIPAddresses: [String: [String]] = [:]
     @State private var healthSnapshots: [String: DashboardHealthSnapshot] = [:]
+    @State private var fleetHealthRecords: [String: FleetHostHealthRecord] = [:]
+    @State private var showingFleetRunbook = false
+    @State private var showingStackAudit = false
+    private let fleetHealthStore = FleetHostHealthStore()
     private static let problemVisibilityDuration: TimeInterval = 10
 
     private var tabs: [TerminalTab] {
@@ -391,13 +396,31 @@ struct DashboardPanel: View {
         }
     }
 
+    private var savedProfiles: [ConnectionProfile] {
+        let profiles = connectionStore.connections
+        switch sort {
+        case .order:
+            return profiles
+        case .name:
+            return profiles.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        case .host:
+            return profiles.sorted {
+                let lhs = "\($0.host):\($0.port)"
+                let rhs = "\($1.host):\($1.port)"
+                return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+        }
+    }
+
     var body: some View {
-        if tabs.isEmpty {
+        if savedProfiles.isEmpty && tabs.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 28, weight: .light))
                     .foregroundStyle(.tertiary)
-                Text("Connect to two or more SSH hosts to open the dashboard.")
+                Text("Save an SSH host to build the fleet inventory.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -410,8 +433,46 @@ struct DashboardPanel: View {
                     problemStrip(now: context.date)
                 }
                 Divider()
+                savedHostInventory
+                Divider()
 
-                GeometryReader { proxy in
+                connectedMonitorArea
+            }
+            .materialBackground(.contentBackground, blendingMode: .withinWindow)
+            .task(id: dashboardIPResolutionKey) {
+                await refreshDashboardIPAddresses()
+            }
+            .task(id: savedProfiles.map(\.id).joined(separator: "|")) {
+                fleetHealthRecords = fleetHealthStore.load()
+                try? fleetHealthStore.prune(keepingProfileIds: savedProfiles.map(\.id))
+                fleetHealthRecords = fleetHealthStore.load()
+            }
+            .onChange(of: tabs.map(\.id)) { _ in
+                pruneDashboardHealthSnapshots()
+            }
+            .sheet(isPresented: $showingFleetRunbook) {
+                FleetRunbookSheet(tabs: tabs)
+            }
+            .sheet(isPresented: $showingStackAudit) {
+                FleetStackAuditSheet(tabs: tabs)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var connectedMonitorArea: some View {
+        if tabs.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "bolt.horizontal.circle")
+                    .font(.system(size: 26, weight: .light))
+                    .foregroundStyle(.tertiary)
+                Text("Connect a saved host to start live monitoring.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            GeometryReader { proxy in
                     let spacing: CGFloat = 12
                     let horizontalPadding: CGFloat = 24
                     let totalSpacing = spacing * CGFloat(max(tabs.count - 1, 0))
@@ -435,7 +496,7 @@ struct DashboardPanel: View {
                                     dashboardIdentity: dashboardSnapshotKey(for: tab),
                                     resolvedIPAddresses: dashboardIPAddresses(for: tab.profile) ?? [],
                                     onDashboardHealthChange: { snapshot in
-                                        recordDashboardHealthSnapshot(snapshot)
+                                        recordDashboardHealthSnapshot(snapshot, profile: tab.profile)
                                         // The Agent view's hidden pollers are
                                         // suspended while the dashboard is open;
                                         // keep its triage store fed from here.
@@ -461,14 +522,6 @@ struct DashboardPanel: View {
                     }
                     .background(MidnightMacDesign.ColorToken.controlBackground.opacity(0.35))
                 }
-            }
-            .materialBackground(.contentBackground, blendingMode: .withinWindow)
-            .task(id: dashboardIPResolutionKey) {
-                await refreshDashboardIPAddresses()
-            }
-            .onChange(of: tabs.map(\.id)) { _ in
-                pruneDashboardHealthSnapshots()
-            }
         }
     }
 
@@ -484,9 +537,30 @@ struct DashboardPanel: View {
         Set(tabs.map { dashboardSnapshotKey(for: $0) })
     }
 
-    private func recordDashboardHealthSnapshot(_ snapshot: DashboardHealthSnapshot) {
+    private func recordDashboardHealthSnapshot(
+        _ snapshot: DashboardHealthSnapshot,
+        profile: ConnectionProfile
+    ) {
         healthSnapshots[snapshot.id] = snapshot
         pruneDashboardHealthSnapshots()
+
+        let state: FleetHostHealthState
+        if snapshot.issues.contains(where: { $0.severity == .critical }) {
+            state = .critical
+        } else if !snapshot.issues.isEmpty {
+            state = .warning
+        } else {
+            state = .healthy
+        }
+        let summary = snapshot.issues.first.map { "\($0.title): \($0.detail)" } ?? "Healthy"
+        let record = FleetHostHealthRecord(
+            profileId: profile.id,
+            hostName: profile.name,
+            state: state,
+            summary: summary
+        )
+        fleetHealthRecords[profile.id] = record
+        try? fleetHealthStore.record(record)
     }
 
     private func pruneDashboardHealthSnapshots() {
@@ -652,6 +726,97 @@ struct DashboardPanel: View {
         .background(MidnightMacDesign.ColorToken.windowBackground)
     }
 
+    private var savedHostInventory: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(savedProfiles) { profile in
+                    savedHostCard(profile)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+        .background(MidnightMacDesign.ColorToken.controlBackground.opacity(0.22))
+    }
+
+    private func savedHostCard(_ profile: ConnectionProfile) -> some View {
+        let tab = tabs.first { $0.profile.id == profile.id }
+        let record = fleetHealthRecords[profile.id]
+        let freshness = record?.freshness()
+        let color = fleetHealthColor(record: record, freshness: freshness, isConnected: tab != nil)
+        let status = fleetHealthStatus(record: record, freshness: freshness, isConnected: tab != nil)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 7, height: 7)
+                Text(profile.name)
+                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if tab == nil {
+                    Button("Connect") {
+                        Task { await tabsStore.openConnection(profile) }
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.mini)
+                } else {
+                    Button("Open") { tabsStore.setActive(tab!.id) }
+                        .buttonStyle(.borderless)
+                        .controlSize(.mini)
+                }
+            }
+            Text("\(profile.username)@\(profile.host):\(profile.port)")
+                .font(MidnightMacDesign.FontToken.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(status)
+                .font(MidnightMacDesign.FontToken.caption)
+                .foregroundStyle(color)
+                .lineLimit(1)
+            if !profile.tags.isEmpty {
+                Text(profile.tags.prefix(3).joined(separator: " · "))
+                    .font(MidnightMacDesign.FontToken.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(10)
+        .frame(width: 238, alignment: .leading)
+        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium))
+        .overlay {
+            RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium)
+                .stroke(color.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private func fleetHealthColor(
+        record: FleetHostHealthRecord?,
+        freshness: FleetObservationFreshness?,
+        isConnected: Bool
+    ) -> Color {
+        if freshness == .stale || record == nil { return .secondary }
+        switch record?.state {
+        case .healthy: return isConnected ? .green : .secondary
+        case .warning: return .orange
+        case .critical: return .red
+        case .unknown, .none: return .secondary
+        }
+    }
+
+    private func fleetHealthStatus(
+        record: FleetHostHealthRecord?,
+        freshness: FleetObservationFreshness?,
+        isConnected: Bool
+    ) -> String {
+        guard let record else { return isConnected ? "Collecting first observation" : "Never observed" }
+        if freshness == .stale {
+            return "Stale · last observed \(record.observedAt.formatted(date: .omitted, time: .shortened))"
+        }
+        return isConnected ? record.summary : "Offline · \(record.summary)"
+    }
+
     private func dashboardStatusCard(
         connectedCount: Int,
         totalCount: Int,
@@ -734,12 +899,28 @@ struct DashboardPanel: View {
                 Text("Workspace Dashboard")
                     .font(MidnightMacDesign.FontToken.title)
                     .lineLimit(1)
-                Label("\(tabs.count) SSH host\(tabs.count == 1 ? "" : "s")", systemImage: "server.rack")
+                Label("\(tabs.count)/\(savedProfiles.count) connected", systemImage: "server.rack")
                     .font(MidnightMacDesign.FontToken.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
+
+            Button {
+                showingFleetRunbook = true
+            } label: {
+                Label("Fleet Runbook", systemImage: "play.rectangle.on.rectangle")
+            }
+            .disabled(tabs.isEmpty)
+            .controlSize(.small)
+
+            Button {
+                showingStackAudit = true
+            } label: {
+                Label("Stack Audit", systemImage: "square.stack.3d.up")
+            }
+            .disabled(tabs.isEmpty)
+            .controlSize(.small)
 
             Picker("Sort", selection: $sort) {
                 ForEach(DashboardSort.allCases) { option in

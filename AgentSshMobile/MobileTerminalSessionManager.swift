@@ -66,6 +66,14 @@ final class MobileTerminalSessionManager {
         shellIntegrationParsers.removeValue(forKey: connectionId)
     }
 
+    /// Generation-aware variant for view teardown: when SwiftUI creates a
+    /// replacement terminal view before dismantling the old one, the stale
+    /// dismantle must not tear down the successor's registration.
+    func unregisterSession(connectionId: String, generation: UInt64) {
+        guard sessions[connectionId]?.ptyGeneration == generation else { return }
+        unregisterSession(connectionId: connectionId)
+    }
+
     func pauseSession(connectionId: String) {
         sessions[connectionId]?.isPaused = true
     }

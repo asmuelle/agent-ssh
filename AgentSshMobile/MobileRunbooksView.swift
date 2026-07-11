@@ -628,7 +628,12 @@ struct MobileRunbooksView: View {
                 detail: runbook.title,
                 connectionId: connectionId,
                 systemImage: runbook.systemImage,
-                severity: result?.succeeded == true ? .ok : .warning
+                severity: result?.succeeded == true ? .ok : .warning,
+                actor: .user,
+                action: "runbook",
+                command: runbook.command,
+                outcome: result?.succeeded == true ? .succeeded : .failed,
+                exitCode: result.map { Int($0.exitCode) }
             )
         } catch {
             MobileActivityLogStore.shared.record(
@@ -636,7 +641,11 @@ struct MobileRunbooksView: View {
                 detail: "\(runbook.title): \(error.localizedDescription)",
                 connectionId: connectionId,
                 systemImage: "exclamationmark.triangle.fill",
-                severity: .critical
+                severity: .critical,
+                actor: .user,
+                action: "runbook",
+                command: runbook.command,
+                outcome: .unknown
             )
             errorMessage = error.localizedDescription
         }

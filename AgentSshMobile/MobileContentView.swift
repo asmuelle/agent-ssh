@@ -131,50 +131,32 @@ struct MobileContentView: View {
                 editorTarget = nil
             }
         }
-        .alert(
+        .explainableErrorAlert(
             "Storage Error",
-            isPresented: Binding(
-                get: { connectionStore.lastError != nil },
-                set: { if !$0 { connectionStore.lastError = nil } }
+            context: "a connection-storage error from an SSH app",
+            message: Binding(
+                get: { connectionStore.lastError },
+                set: { connectionStore.lastError = $0 }
             )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(connectionStore.lastError ?? "")
-        }
-        .alert(
+        )
+        .explainableErrorAlert(
             "Credential Error",
-            isPresented: Binding(
-                get: { keychainManager.lastError != nil },
-                set: { if !$0 { keychainManager.lastError = nil } }
+            context: "an iOS Keychain error message",
+            message: Binding(
+                get: { keychainManager.lastError },
+                set: { keychainManager.lastError = $0 }
             )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(keychainManager.lastError ?? "")
-        }
-        .alert(
+        )
+        .explainableErrorAlert(
             "Diagnostics Export Failed",
-            isPresented: Binding(
-                get: { diagnosticsError != nil },
-                set: { if !$0 { diagnosticsError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(diagnosticsError ?? "")
-        }
-        .alert(
+            context: "a diagnostics-export error message",
+            message: $diagnosticsError
+        )
+        .explainableErrorAlert(
             "Import or Sync Failed",
-            isPresented: Binding(
-                get: { connectionImportExportError != nil },
-                set: { if !$0 { connectionImportExportError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(connectionImportExportError ?? "")
-        }
+            context: "a connection import/sync error message",
+            message: $connectionImportExportError
+        )
         .confirmationDialog(
             "Import Connections CSV",
             isPresented: Binding(
@@ -362,6 +344,10 @@ struct MobileContentView: View {
     private func runStartup() async {
         guard !didRunStartup else { return }
         didRunStartup = true
+
+        // The app-level task and this view task are independently scheduled;
+        // make startup ordering explicit before auto-connect touches FFI.
+        bridgeManager.initialize()
 
         // The app entry also loads connections; reload only if that hasn't
         // landed yet so the landing decision sees the saved profiles.

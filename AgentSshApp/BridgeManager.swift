@@ -26,6 +26,7 @@ final class BridgeManager {
     /// Kept separate from `dispatchQueue` so a slow command cannot delay
     /// terminal input writes.
     private let utilityQueue: DispatchQueue
+    private let controlQueueKey = DispatchSpecificKey<Void>()
 
     private(set) var isInitialized = false
 
@@ -47,6 +48,7 @@ final class BridgeManager {
             attributes: .concurrent,
             autoreleaseFrequency: .workItem
         )
+        self.dispatchQueue.setSpecific(key: controlQueueKey, value: ())
     }
 
     private func runOnControlQueue<T>(_ work: @escaping () throws -> T) async throws -> T {
@@ -55,6 +57,14 @@ final class BridgeManager {
 
     private func runOnUtilityQueue<T>(_ work: @escaping () throws -> T) async throws -> T {
         try await run(on: utilityQueue, work)
+    }
+
+    private func runSynchronouslyOnControlQueue(_ work: () -> Void) {
+        if DispatchQueue.getSpecific(key: controlQueueKey) != nil {
+            work()
+        } else {
+            dispatchQueue.sync(execute: work)
+        }
     }
 
     private func run<T>(
@@ -74,12 +84,11 @@ final class BridgeManager {
 
     // MARK: - Lifecycle
 
-    /// Initialize the Rust bridge. Call once from `AppDelegate`. Idempotent
-    /// on the Rust side, but we guard against double-init in Swift.
+    /// Initialize the Rust bridge. Call once from `AppDelegate`. This is a
+    /// synchronous lifecycle barrier: when it returns, every FFI operation
+    /// can safely reach the Rust runtime.
     func initialize() {
-        dispatchQueue.async { [weak self] in
-            guard let self else { return }
-
+        runSynchronouslyOnControlQueue { [self] in
             if self.isInitialized {
                 self.logger.warning("BridgeManager.initialize() called twice; ignoring")
                 return

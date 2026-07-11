@@ -44,17 +44,17 @@ jobs:
   # Separate job: cargo-deny-action is a container action (Linux-only),
   # and advisory checking only parses Cargo.lock — no macOS deps needed.
   advisories:
-    name: Dependency advisories
+    name: Dependency advisories, licenses, and sources
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          command: check advisories
+          command: check
 
   mac:
-    name: macOS — build + Swift unit tests
+    name: macOS — build + Swift tests
     # macos-26 image: the widgets target uses ControlWidget, which needs
     # the macOS 26 SDK (Xcode 26); macos-15's Xcode 16.4 can't compile it.
     runs-on: macos-26
@@ -88,3 +88,37 @@ jobs:
             DEVELOPMENT_TEAM= \
             CODE_SIGNING_REQUIRED=YES \
             CODE_SIGNING_ALLOWED=YES
+
+      - name: Swift FFI integration tests
+        run: |
+          xcodebuild test \
+            -project Agent-Ssh.xcodeproj \
+            -scheme AgentSshApp \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_ENTITLEMENTS=
+
+  ios:
+    name: iOS/iPadOS — build + logic tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: extractions/setup-just@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build iOS simulator app
+        run: just ios-ci-build
+
+      - name: iOS logic tests
+        run: just ios-test
