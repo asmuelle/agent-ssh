@@ -93,6 +93,24 @@ public struct ActuatorServiceConfiguration: Codable, Identifiable, Equatable, Se
     }
 }
 
+public struct ActuatorTunnelSpecification: Equatable, Sendable {
+    public var forwardId: String
+    public var profileId: String
+    public var bindHost: String
+    public var bindPort: UInt16
+    public var destinationHost: String
+    public var destinationPort: UInt16
+
+    public init(service: ActuatorServiceConfiguration) {
+        self.forwardId = "actuator-\(service.id)"
+        self.profileId = service.profileId
+        self.bindHost = "127.0.0.1"
+        self.bindPort = 0
+        self.destinationHost = service.managementHost
+        self.destinationPort = service.managementPort
+    }
+}
+
 public struct ActuatorFleetConfiguration: Codable, Equatable, Sendable {
     public var schemaVersion: Int
     public var authentication: ActuatorAuthenticationConfiguration
@@ -263,6 +281,61 @@ public struct ActuatorHealthSnapshot: Codable, Identifiable, Equatable, Sendable
         self.message = message
         self.healthGroupsAvailable = healthGroupsAvailable
     }
+
+    public func effectiveState(
+        now: Date = Date(),
+        staleAfter: TimeInterval = 60
+    ) -> ActuatorServiceState {
+        now.timeIntervalSince(observedAt) > staleAfter ? .stale : state
+    }
+}
+
+public struct ActuatorFleetSummary: Equatable, Sendable {
+    public var profileId: String
+    public var state: ActuatorServiceState
+    public var serviceCount: Int
+    public var problemServiceNames: [String]
+
+    public static func make(
+        profileId: String,
+        services: [ActuatorServiceConfiguration],
+        snapshots: [String: ActuatorHealthSnapshot],
+        now: Date = Date(),
+        staleAfter: TimeInterval = 60
+    ) -> ActuatorFleetSummary? {
+        let matching = services.filter { $0.profileId == profileId }
+        guard !matching.isEmpty else { return nil }
+
+        let ranked: [(ActuatorServiceConfiguration, ActuatorServiceState)] = matching.map { service in
+            let state = snapshots[service.id]?.effectiveState(now: now, staleAfter: staleAfter) ?? .discovering
+            return (service, state)
+        }
+        let state = ranked.map(\.1).max(by: { severity($0) < severity($1) }) ?? .discovering
+        let problems = ranked
+            .filter { severity($0.1) >= severity(.degraded) }
+            .map { $0.0.name }
+            .sorted()
+
+        return ActuatorFleetSummary(
+            profileId: profileId,
+            state: state,
+            serviceCount: matching.count,
+            problemServiceNames: problems
+        )
+    }
+
+    private static func severity(_ state: ActuatorServiceState) -> Int {
+        switch state {
+        case .healthy: return 0
+        case .discovering: return 1
+        case .stale: return 2
+        case .degraded: return 3
+        case .unsupported: return 4
+        case .unauthorized: return 5
+        case .unreachable: return 6
+        case .unhealthy: return 7
+        }
+    }
 }
 
 public struct ActuatorEndpointResponse: Equatable, Sendable {
@@ -339,7 +412,7 @@ public final class ActuatorSessionHistoryStore: @unchecked Sendable {
     }
 
     public func remove(serviceId: String) {
-        lock.withLock { observations.removeValue(forKey: serviceId) }
+        lock.withLock { _ = observations.removeValue(forKey: serviceId) }
     }
 
     public func clear() {
