@@ -73,6 +73,33 @@ final class FleetRunbookExecutorTests: XCTestCase {
         XCTAssertEqual(result.results.first?.rollbackExitCode, 0)
     }
 
+    func testExternalVerificationFailureRunsRollback() async {
+        let calls = FleetRunnerProbe()
+        let plan = FleetRunbookPlan(
+            title: "Deploy",
+            command: "deploy",
+            rollbackCommand: "rollback",
+            externalVerificationLabel: "Actuator readiness",
+            targets: targets(1)
+        )
+
+        let result = await FleetRunbookExecutor.execute(
+            plan: plan,
+            runner: { target, command in
+                await calls.record(target: target, command: command)
+                return FleetCommandExecution(exitCode: 0, output: command)
+            },
+            externalVerifier: { _ in
+                FleetCommandExecution(exitCode: 1, output: "Actuator readiness is DOWN")
+            }
+        )
+
+        XCTAssertEqual(result.results.first?.state, .rolledBack)
+        XCTAssertEqual(result.results.first?.verificationExitCode, 1)
+        let commands = await calls.commands()
+        XCTAssertEqual(commands, ["deploy", "rollback"])
+    }
+
     private func targets(_ count: Int) -> [FleetRunTarget] {
         (1...count).map {
             FleetRunTarget(
