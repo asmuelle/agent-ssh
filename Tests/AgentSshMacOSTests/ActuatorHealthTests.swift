@@ -207,6 +207,66 @@ final class ActuatorHealthTests: XCTestCase {
         XCTAssertEqual(policy.verificationInterval, 5)
     }
 
+    func testTunnelSpecificationUsesEphemeralLoopbackBinding() {
+        let service = ActuatorServiceConfiguration(
+            id: "orders",
+            profileId: "host-1",
+            name: "Orders",
+            managementHost: "127.0.0.1",
+            managementPort: 8_081
+        )
+
+        let tunnel = ActuatorTunnelSpecification(service: service)
+
+        XCTAssertEqual(tunnel.forwardId, "actuator-orders")
+        XCTAssertEqual(tunnel.bindHost, "127.0.0.1")
+        XCTAssertEqual(tunnel.bindPort, 0)
+        XCTAssertEqual(tunnel.destinationHost, "127.0.0.1")
+        XCTAssertEqual(tunnel.destinationPort, 8_081)
+    }
+
+    func testSnapshotProjectionBecomesStaleWithoutChangingRecordedState() {
+        let observation = snapshot(serviceId: "orders", state: .healthy, time: 10)
+
+        XCTAssertEqual(
+            observation.effectiveState(now: Date(timeIntervalSince1970: 80), staleAfter: 60),
+            .stale
+        )
+        XCTAssertEqual(observation.state, .healthy)
+    }
+
+    func testFleetSummaryUsesWorstConfiguredServiceState() {
+        let services = [
+            ActuatorServiceConfiguration(
+                id: "orders",
+                profileId: "host-1",
+                name: "Orders",
+                managementPort: 8_081
+            ),
+            ActuatorServiceConfiguration(
+                id: "billing",
+                profileId: "host-1",
+                name: "Billing",
+                managementPort: 8_082
+            ),
+        ]
+        let snapshots = [
+            "orders": snapshot(serviceId: "orders", state: .healthy, time: 100),
+            "billing": snapshot(serviceId: "billing", state: .unhealthy, time: 100),
+        ]
+
+        let summary = ActuatorFleetSummary.make(
+            profileId: "host-1",
+            services: services,
+            snapshots: snapshots,
+            now: Date(timeIntervalSince1970: 110)
+        )
+
+        XCTAssertEqual(summary?.state, .unhealthy)
+        XCTAssertEqual(summary?.serviceCount, 2)
+        XCTAssertEqual(summary?.problemServiceNames, ["Billing"])
+    }
+
     func testVerifierRequiresConsecutiveHealthyObservations() async {
         let sequence = LockedQueue([
             snapshot(serviceId: "orders", state: .unhealthy, time: 1),
