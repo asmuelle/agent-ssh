@@ -369,12 +369,14 @@ struct DashboardPanel: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @ObservedObject private var activityLog = ActivityLogStore.shared
     @ObservedObject private var connectionStore = ConnectionStoreManager.shared
+    @ObservedObject private var actuatorMonitor = ActuatorFleetMonitor.shared
     @State private var sort = DashboardSort.order
     @State private var resolvedIPAddresses: [String: [String]] = [:]
     @State private var healthSnapshots: [String: DashboardHealthSnapshot] = [:]
     @State private var fleetHealthRecords: [String: FleetHostHealthRecord] = [:]
     @State private var showingFleetRunbook = false
     @State private var showingStackAudit = false
+    @State private var showingActuatorFleet = false
     private let fleetHealthStore = FleetHostHealthStore()
     private static let problemVisibilityDuration: TimeInterval = 10
 
@@ -455,6 +457,9 @@ struct DashboardPanel: View {
             }
             .sheet(isPresented: $showingStackAudit) {
                 FleetStackAuditSheet(tabs: tabs)
+            }
+            .sheet(isPresented: $showingActuatorFleet) {
+                ActuatorFleetSheet(tabs: tabs)
             }
         }
     }
@@ -775,6 +780,15 @@ struct DashboardPanel: View {
                 .font(MidnightMacDesign.FontToken.caption)
                 .foregroundStyle(color)
                 .lineLimit(1)
+            if let actuatorSummary = actuatorMonitor.summary(profileId: profile.id) {
+                Label(
+                    actuatorSummaryText(actuatorSummary),
+                    systemImage: actuatorSummary.state == .healthy ? "heart.fill" : "heart.slash.fill"
+                )
+                .font(MidnightMacDesign.FontToken.caption)
+                .foregroundStyle(actuatorSummaryColor(actuatorSummary.state))
+                .lineLimit(1)
+            }
             if !profile.tags.isEmpty {
                 Text(profile.tags.prefix(3).joined(separator: " · "))
                     .font(MidnightMacDesign.FontToken.caption)
@@ -815,6 +829,22 @@ struct DashboardPanel: View {
             return "Stale · last observed \(record.observedAt.formatted(date: .omitted, time: .shortened))"
         }
         return isConnected ? record.summary : "Offline · \(record.summary)"
+    }
+
+    private func actuatorSummaryText(_ summary: ActuatorFleetSummary) -> String {
+        if summary.problemServiceNames.isEmpty {
+            return "Apps: \(summary.serviceCount) \(summary.state.rawValue)"
+        }
+        return "Apps: \(summary.problemServiceNames.joined(separator: ", "))"
+    }
+
+    private func actuatorSummaryColor(_ state: ActuatorServiceState) -> Color {
+        switch state {
+        case .healthy: return .green
+        case .discovering, .degraded, .stale: return .orange
+        case .unhealthy, .unreachable, .unauthorized: return .red
+        case .unsupported: return .secondary
+        }
     }
 
     private func dashboardStatusCard(
@@ -920,6 +950,13 @@ struct DashboardPanel: View {
                 Label("Stack Audit", systemImage: "square.stack.3d.up")
             }
             .disabled(tabs.isEmpty)
+            .controlSize(.small)
+
+            Button {
+                showingActuatorFleet = true
+            } label: {
+                Label("Actuator", systemImage: "heart.text.square")
+            }
             .controlSize(.small)
 
             Picker("Sort", selection: $sort) {

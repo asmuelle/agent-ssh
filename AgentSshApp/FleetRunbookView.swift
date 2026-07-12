@@ -17,6 +17,8 @@ struct FleetRunbookSheet: View {
     @State private var showingConfirmation = false
     @State private var isRunning = false
     @State private var result: FleetRunbookResult?
+    @State private var useActuatorVerification = false
+    @ObservedObject private var actuatorMonitor = ActuatorFleetMonitor.shared
 
     private var selectedTabs: [TerminalTab] {
         tabs.filter { selectedProfileIds.contains($0.profile.id) }
@@ -27,6 +29,14 @@ struct FleetRunbookSheet: View {
             && !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !selectedTabs.isEmpty
             && !isRunning
+            && (!useActuatorVerification || actuatorMissingProfileNames.isEmpty)
+    }
+
+    private var actuatorMissingProfileNames: [String] {
+        let configured = Set(actuatorMonitor.configuration.services.map(\.profileId))
+        return selectedTabs
+            .filter { !configured.contains($0.profile.id) }
+            .map(\.profile.name)
     }
 
     var body: some View {
@@ -104,6 +114,18 @@ struct FleetRunbookSheet: View {
                     .textFieldStyle(.roundedBorder)
                 commandEditor("Command", text: $command, required: true)
                 commandEditor("Verification command", text: $verificationCommand, required: false)
+                    .disabled(useActuatorVerification)
+                Toggle("Verify with Actuator readiness", isOn: $useActuatorVerification)
+                if useActuatorVerification {
+                    Text("Each target must remain healthy for three consecutive checks before rollout continues.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if !actuatorMissingProfileNames.isEmpty {
+                        Text("Missing Actuator configuration: \(actuatorMissingProfileNames.joined(separator: ", "))")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
                 commandEditor("Rollback command", text: $rollbackCommand, required: false)
                 Text("Rollback runs only when the main command succeeded and verification failed.")
                     .font(.caption)
@@ -271,7 +293,12 @@ struct FleetRunbookSheet: View {
             "$ \(command.trimmingCharacters(in: .whitespacesAndNewlines))",
         ]
         if !verificationCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("VERIFY: \(verificationCommand.trimmingCharacters(in: .whitespacesAndNewlines))")
+            if !useActuatorVerification {
+                lines.append("VERIFY: \(verificationCommand.trimmingCharacters(in: .whitespacesAndNewlines))")
+            }
+        }
+        if useActuatorVerification {
+            lines.append("VERIFY: Actuator readiness · 3 consecutive healthy checks")
         }
         if !rollbackCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lines.append("ROLLBACK: \(rollbackCommand.trimmingCharacters(in: .whitespacesAndNewlines))")
@@ -308,8 +335,9 @@ struct FleetRunbookSheet: View {
         let plan = FleetRunbookPlan(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             command: command.trimmingCharacters(in: .whitespacesAndNewlines),
-            verificationCommand: verificationCommand,
+            verificationCommand: useActuatorVerification ? nil : verificationCommand,
             rollbackCommand: rollbackCommand,
+            externalVerificationLabel: useActuatorVerification ? "Actuator readiness" : nil,
             targets: selectedTabs.map {
                 FleetRunTarget(
                     profileId: $0.profile.id,
@@ -321,7 +349,7 @@ struct FleetRunbookSheet: View {
             maxConcurrency: maxConcurrency
         )
 
-        let completed = await FleetRunbookExecutor.execute(plan: plan) { target, remoteCommand in
+        let runner: FleetRunbookExecutor.CommandRunner = { target, remoteCommand in
             do {
                 let remote = try await RemoteCommandRunner.runShell(
                     connectionId: target.connectionId,
@@ -331,6 +359,18 @@ struct FleetRunbookSheet: View {
             } catch {
                 return FleetCommandExecution(exitCode: 255, output: error.localizedDescription)
             }
+        }
+        let completed: FleetRunbookResult
+        if useActuatorVerification {
+            completed = await FleetRunbookExecutor.execute(
+                plan: plan,
+                runner: runner,
+                externalVerifier: { target in
+                    await ActuatorFleetMonitor.shared.verify(profileId: target.profileId)
+                }
+            )
+        } else {
+            completed = await FleetRunbookExecutor.execute(plan: plan, runner: runner)
         }
         result = completed
 

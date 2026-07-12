@@ -38,6 +38,11 @@ public struct StackDiagnosticComponent: Codable, Identifiable, Equatable, Sendab
 public struct StackDiagnosticSnapshot: Equatable, Sendable {
     public var components: [StackDiagnosticComponent]
     public var rawOutput: String
+
+    public init(components: [StackDiagnosticComponent], rawOutput: String) {
+        self.components = components
+        self.rawOutput = rawOutput
+    }
 }
 
 public enum StackDiagnosticParser {

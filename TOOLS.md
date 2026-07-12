@@ -116,6 +116,14 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 - `ConnectionWorldMapView.swift` — map of the host's outbound peers by geolocated IP.
 - Alerts: `MonitoringAlertNotificationCenter.swift`, `WorkspaceNotifications.swift`, `MonitorDiagnostics.swift`.
 
+### Spring Boot Actuator fleet health
+
+- `ActuatorFleetView.swift`, `ActuatorFleetMonitor.swift`, `ActuatorCredentialStore.swift`; shared discovery, parsing, state confirmation, polling policy, and session history live in `Sources/AgentSshMacOS/ActuatorHealth*.swift` and `ActuatorConfigurationStore.swift`.
+- Configure one or more host-published management ports per saved SSH profile. Health requests are GET-only and travel through ephemeral loopback SSH local forwards; shared Basic or Bearer credentials stay in the macOS Keychain.
+- The fleet dashboard separates healthy, degraded, unreachable, unauthorized, unsupported, and stale services, then drills into readiness, liveness, nested components, response time, recent observations, and state transitions. Readiness/liveness groups are discovered automatically, with `/actuator/health` as the compatibility fallback.
+- Polling runs only while agent-ssh is open: 30 seconds for the fleet, 10 seconds for the selected service, with bounded failure backoff and four concurrent checks. Health history is memory-only and is cleared, along with all Actuator tunnels, when the app exits.
+- Fleet runbooks can require Actuator readiness after command verification. Each selected host must have a configured service; readiness is sampled three consecutive times before rollout continues, and a failed verification invokes the runbook's rollback path.
+
 ### Drill-downs
 
 - `MonitorDrillDownSheet.swift` (+ `+ContentSections` / `+DetailPanes` / `+ProcessViews` / `+Scripts`)

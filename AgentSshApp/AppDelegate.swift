@@ -45,6 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         logger.info("agent-ssh shutting down")
+        ActuatorFleetMonitor.shared.cancelPolling()
         MCPServerManager.shared.stopServer()
         BridgeManager.shared.shutdown()
     }

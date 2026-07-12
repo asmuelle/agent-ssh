@@ -29,6 +29,7 @@ struct ContentView: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @StateObject private var connectionStore = ConnectionStoreManager.shared
     @StateObject private var transfersStore = TransferQueueStore()
+    @StateObject private var actuatorMonitor = ActuatorFleetMonitor.shared
     @State private var selectedConnection: ConnectionProfile?
     @State private var dashboardVisible = false
     @State private var agentVisible = false
@@ -66,6 +67,12 @@ struct ContentView: View {
         }
         .environmentObject(transfersStore)
         .frame(minWidth: 900, minHeight: 600)
+        .task {
+            actuatorMonitor.start(tabsStore: tabsStore)
+        }
+        .onDisappear {
+            Task { await actuatorMonitor.stop() }
+        }
         .sheet(isPresented: $showingCommandPalette) {
             CommandPaletteView(
                 connections: connectionStore.connections,
