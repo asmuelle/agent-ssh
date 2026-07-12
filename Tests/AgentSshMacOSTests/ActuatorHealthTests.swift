@@ -267,6 +267,17 @@ final class ActuatorHealthTests: XCTestCase {
         XCTAssertEqual(summary?.problemServiceNames, ["Billing"])
     }
 
+    func testStateConfirmationPublishesDownImmediatelyAndOtherTransitionsTwice() {
+        let tracker = ActuatorStateConfirmationTracker(requiredMatches: 2)
+
+        XCTAssertTrue(tracker.shouldPublish(serviceId: "orders", state: .healthy))
+        XCTAssertFalse(tracker.shouldPublish(serviceId: "orders", state: .degraded))
+        XCTAssertTrue(tracker.shouldPublish(serviceId: "orders", state: .degraded))
+        XCTAssertTrue(tracker.shouldPublish(serviceId: "orders", state: .unhealthy))
+        XCTAssertFalse(tracker.shouldPublish(serviceId: "orders", state: .healthy))
+        XCTAssertTrue(tracker.shouldPublish(serviceId: "orders", state: .healthy))
+    }
+
     func testVerifierRequiresConsecutiveHealthyObservations() async {
         let sequence = LockedQueue([
             snapshot(serviceId: "orders", state: .unhealthy, time: 1),
