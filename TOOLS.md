@@ -263,7 +263,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 | Diagnostics bundle | `DiagnosticsBundle.swift` (macOS), `MobileDiagnosticsBundle.swift` (iPadOS) | One-shot state dump for support |
 | Settings | `SettingsView.swift` | Terminal, Appearance, Credentials, License, and Privacy tabs; MCP settings via `MCPSettingsView.swift` |
 | Workspace notifications | `WorkspaceNotifications.swift` | Hub for transfer progress, monitor alerts, completions |
-| Activity log | `ActivityLogStore.swift` (macOS), `MobileActivityLogStore.swift` (iPadOS), `Sources/AgentSshMacOS/SharedJSONFileStore.swift` | Redacted, bounded, durable operational ledger with actor, action, host, command, outcome, exit code, and timestamp |
+| Activity log | `ActivityLogStore.swift` (macOS), `MobileActivityLogStore.swift` (iPadOS), `Sources/AgentSshMacOS/OperationalAuditStore.swift` | Redacted, bounded, durable operational ledger with actor, action, host, command, outcome, exit code, and timestamp |
 | Connection confidence | `ConnectionConfidenceView.swift` (macOS), `MobileConnectionConfidenceView.swift` (iPadOS) | Per-host reliability signal |
 
 ---
