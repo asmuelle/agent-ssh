@@ -377,6 +377,69 @@ public struct ActuatorPollingPolicy: Equatable, Sendable {
     }
 }
 
+public final class ActuatorStateConfirmationTracker: @unchecked Sendable {
+    private struct Candidate {
+        var state: ActuatorServiceState
+        var matches: Int
+    }
+
+    private let requiredMatches: Int
+    private let lock = NSLock()
+    private var publishedStates: [String: ActuatorServiceState] = [:]
+    private var candidates: [String: Candidate] = [:]
+
+    public init(requiredMatches: Int = 2) {
+        self.requiredMatches = max(1, requiredMatches)
+    }
+
+    public func shouldPublish(serviceId: String, state: ActuatorServiceState) -> Bool {
+        lock.withLock {
+            guard let published = publishedStates[serviceId] else {
+                publishedStates[serviceId] = state
+                return true
+            }
+            if state == published {
+                candidates.removeValue(forKey: serviceId)
+                return true
+            }
+            if state == .unhealthy {
+                publishedStates[serviceId] = state
+                candidates.removeValue(forKey: serviceId)
+                return true
+            }
+
+            var candidate = candidates[serviceId]
+            if candidate?.state == state {
+                candidate?.matches += 1
+            } else {
+                candidate = Candidate(state: state, matches: 1)
+            }
+            guard let candidate else { return false }
+            if candidate.matches >= requiredMatches {
+                publishedStates[serviceId] = state
+                candidates.removeValue(forKey: serviceId)
+                return true
+            }
+            candidates[serviceId] = candidate
+            return false
+        }
+    }
+
+    public func remove(serviceId: String) {
+        lock.withLock {
+            publishedStates.removeValue(forKey: serviceId)
+            candidates.removeValue(forKey: serviceId)
+        }
+    }
+
+    public func reset() {
+        lock.withLock {
+            publishedStates.removeAll()
+            candidates.removeAll()
+        }
+    }
+}
+
 public final class ActuatorSessionHistoryStore: @unchecked Sendable {
     private let maxObservationsPerService: Int
     private let lock = NSLock()
