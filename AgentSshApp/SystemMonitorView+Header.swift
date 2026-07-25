@@ -23,7 +23,11 @@ extension SystemMonitorView {
                     dashboardIssueBadges
                 }
                 Spacer()
-                if stats != nil {
+                // In dashboard mode the toolbar carries one fleet-wide "Updated"
+                // timestamp, so per-card timestamps (identical across cards that
+                // refresh together) are redundant. Keep it for the single-host
+                // inspector, which has no global timestamp of its own.
+                if stats != nil, !dashboardMode {
                     Text("Updated \(Date().formatted(.dateTime.hour().minute().second()))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)

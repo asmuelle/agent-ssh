@@ -184,7 +184,7 @@ struct TerminalView: NSViewRepresentable {
                 // fires when the user drags the window or resizes the
                 // sidebar. The Rust side then issues SIGWINCH to the
                 // remote PTY.
-                logger.debug("resize \(connectionId, privacy: .public) → \(cols)x\(rows)")
+                logger.debug("resize \(connectionId, privacy: .private(mask: .hash)) → \(cols)x\(rows)")
                 BridgeManager.shared.resize(connectionId: connectionId, cols: cols, rows: rows)
             }
             resizeWorkItem = item

@@ -13,6 +13,8 @@ struct MobileSecurityVaultView: View {
     @State private var secureEnclaveName = ""
     @State private var importingAdvancedIdentity: AdvancedIdentityImportMode?
     @State private var advancedAuthMessage: String?
+    @State private var showingIdentities = false
+    @State private var identityCount = 0
 
     private enum AdvancedIdentityImportMode: Identifiable {
         case certificate
@@ -34,6 +36,22 @@ struct MobileSecurityVaultView: View {
                     statusRow("Public-key profiles", "\(profiles.filter { $0.authMethod == .publicKey }.count)", "key")
                     statusRow("Generated keys", "\(profiles.filter { $0.sshKeyReference?.isGenerated == true }.count)", "key.viewfinder")
                     statusRow("Vault unlocked", keychainManager.vaultUnlocked ? "Yes" : "No", "lock")
+                }
+
+                Section("SSH Identities") {
+                    Button {
+                        showingIdentities = true
+                    } label: {
+                        HStack {
+                            Label("Manage SSH identities", systemImage: "key.horizontal.fill")
+                            Spacer()
+                            Text("\(identityCount)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Text("Named keypairs shared across connections, so one key can serve several servers.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Advanced Authentication") {
@@ -111,6 +129,12 @@ struct MobileSecurityVaultView: View {
             }
             .navigationTitle("Security Vault")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { identityCount = MobileSSHKeyVault.shared.listIdentities().count }
+            .sheet(isPresented: $showingIdentities) {
+                identityCount = MobileSSHKeyVault.shared.listIdentities().count
+            } content: {
+                MobileSSHIdentityListView()
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

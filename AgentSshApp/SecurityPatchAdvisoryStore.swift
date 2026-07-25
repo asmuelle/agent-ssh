@@ -51,7 +51,7 @@ final class SecurityPatchAdvisoryStore: ObservableObject {
         do {
             var request = URLRequest(url: catalogURL, timeoutInterval: 20)
             request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("MidnightSSH SecurityPatchMonitor", forHTTPHeaderField: "User-Agent")
+            request.setValue("agent-ssh SecurityPatchMonitor", forHTTPHeaderField: "User-Agent")
 
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {

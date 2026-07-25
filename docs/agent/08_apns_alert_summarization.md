@@ -71,7 +71,7 @@ class NotificationService: UNNotificationServiceExtension {
         // 3. Format the body to assist Apple Intelligence's local summarization engine
         // Placing structural headers (like 'Host:', 'Severity:') guides the OS summarizer.
         bestAttemptContent.body = """
-        [Midnight SSH Alert]
+        [agent-ssh Alert]
         Host: \(metadata["host_id"] ?? "Unknown")
         Severity: \(severity.uppercased())
         Details: \(redactedBody)
@@ -104,7 +104,7 @@ graph TD
 ## Native User Experience
 
 1. **Glanceable Lock Screen Summaries**: Instead of showing a long, messy stack of individual alerts, the lock screen displays a single card with Apple Intelligence’s glowing outline. The card reads:
-   * 🔔 *Midnight SSH (3 Notifications)*:
+   * 🔔 *agent-ssh (3 Notifications)*:
    * *"Your web server `web-prod-01` is experiencing 94% CPU load, while database replica `db-replica-02` reports an active replication lag. Tap to inspect details."*
 2. **Visual Hierarchy and Icons**: Small visual icons represent severity levels (e.g., red warning symbols), keeping the lock screen clean while conveying critical states.
 
@@ -125,8 +125,8 @@ graph TD
 ### Feature Showcase Scenario (App Store Video Storyboard)
 * **Visual**: An iPhone resting on a desk. Multiple alert sounds play in rapid succession as a staging deployment encounters errors.
 * **Action**: Instead of filling the screen with 25 separate warning logs, the OS automatically nests them.
-* **Animation**: A single notification container appears. The outline glows as Apple Intelligence compiles the summary: `Midnight SSH: Standard deployment failed on staging-web; 3 pods are crashlooping due to a config error.`
-* **Voiceover**: *"Never drown in alert fatigue. Midnight SSH structures notification logs so Apple Intelligence can summarize complex system failures into a single glance on your lock screen."*
+* **Animation**: A single notification container appears. The outline glows as Apple Intelligence compiles the summary: `agent-ssh: Standard deployment failed on staging-web; 3 pods are crashlooping due to a config error.`
+* **Voiceover**: *"Never drown in alert fatigue. agent-ssh structures notification logs so Apple Intelligence can summarize complex system failures into a single glance on your lock screen."*
 
 ### Developer Buzzwords & Messaging
 * **Smart Stack Notifications**: Unified lock screen grouping.

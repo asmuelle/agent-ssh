@@ -370,9 +370,10 @@ struct DashboardPanel: View {
     @ObservedObject private var activityLog = ActivityLogStore.shared
     @ObservedObject private var connectionStore = ConnectionStoreManager.shared
     @ObservedObject private var actuatorMonitor = ActuatorFleetMonitor.shared
-    @State private var sort = DashboardSort.order
+    @State private var sort = DashboardSort.attention
     @State private var resolvedIPAddresses: [String: [String]] = [:]
     @State private var healthSnapshots: [String: DashboardHealthSnapshot] = [:]
+    @State private var lastSnapshotAt: Date?
     @State private var fleetHealthRecords: [String: FleetHostHealthRecord] = [:]
     @State private var showingFleetRunbook = false
     @State private var showingStackAudit = false
@@ -380,9 +381,32 @@ struct DashboardPanel: View {
     private let fleetHealthStore = FleetHostHealthStore()
     private static let problemVisibilityDuration: TimeInterval = 10
 
+    /// 0 = critical, 1 = warning, 2 = healthy/unknown — lower floats to the front
+    /// under the Attention sort so the host that needs you isn't third.
+    private func attentionRank(for tab: TerminalTab) -> Int {
+        guard let snapshot = healthSnapshots[dashboardSnapshotKey(for: tab)] else { return 2 }
+        if snapshot.issues.contains(where: { $0.severity == .critical }) { return 0 }
+        return snapshot.issues.isEmpty ? 2 : 1
+    }
+
+    private func attentionRank(for profile: ConnectionProfile) -> Int {
+        switch fleetHealthRecords[profile.id]?.state {
+        case .critical: return 0
+        case .warning: return 1
+        default: return 2
+        }
+    }
+
     private var tabs: [TerminalTab] {
         let tabs = tabsStore.connectedSSHTabs
         switch sort {
+        case .attention:
+            return tabs.sorted {
+                let lhs = attentionRank(for: $0)
+                let rhs = attentionRank(for: $1)
+                if lhs != rhs { return lhs < rhs }
+                return $0.profile.name.localizedCaseInsensitiveCompare($1.profile.name) == .orderedAscending
+            }
         case .order:
             return tabs
         case .name:
@@ -401,6 +425,13 @@ struct DashboardPanel: View {
     private var savedProfiles: [ConnectionProfile] {
         let profiles = connectionStore.connections
         switch sort {
+        case .attention:
+            return profiles.sorted {
+                let lhs = attentionRank(for: $0)
+                let rhs = attentionRank(for: $1)
+                if lhs != rhs { return lhs < rhs }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
         case .order:
             return profiles
         case .name:
@@ -414,6 +445,15 @@ struct DashboardPanel: View {
                 return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
             }
         }
+    }
+
+    /// Saved hosts that aren't currently connected. Connected hosts already have
+    /// a full metric card below, so the inventory row only needs to surface the
+    /// ones you can't see there (with a Connect button). When everything is
+    /// connected this is empty and the whole band disappears.
+    private var disconnectedProfiles: [ConnectionProfile] {
+        let connectedProfileIds = Set(tabs.map(\.profile.id))
+        return savedProfiles.filter { !connectedProfileIds.contains($0.id) }
     }
 
     var body: some View {
@@ -435,8 +475,10 @@ struct DashboardPanel: View {
                     problemStrip(now: context.date)
                 }
                 Divider()
-                savedHostInventory
-                Divider()
+                if !disconnectedProfiles.isEmpty {
+                    savedHostInventory
+                    Divider()
+                }
 
                 connectedMonitorArea
             }
@@ -547,6 +589,7 @@ struct DashboardPanel: View {
         profile: ConnectionProfile
     ) {
         healthSnapshots[snapshot.id] = snapshot
+        lastSnapshotAt = Date()
         pruneDashboardHealthSnapshots()
 
         let state: FleetHostHealthState
@@ -584,24 +627,28 @@ struct DashboardPanel: View {
         tabs.filter { $0.status != .connected }
     }
 
-    private func dashboardHealthIssues() -> [DashboardHealthIssue] {
+    private func dashboardHealthIssues() -> [(issue: DashboardHealthIssue, tabId: TerminalTab.ID?)] {
         healthSnapshots.values
-            .flatMap { snapshot in
-                snapshot.issues.map { issue in
-                    DashboardHealthIssue(
-                        id: "\(snapshot.id):\(issue.id)",
-                        title: issue.title,
-                        detail: issue.detail,
-                        icon: issue.icon,
-                        severity: issue.severity
+            .flatMap { snapshot -> [(DashboardHealthIssue, TerminalTab.ID?)] in
+                let tabId = tabs.first { dashboardSnapshotKey(for: $0) == snapshot.id }?.id
+                return snapshot.issues.map { issue in
+                    (
+                        DashboardHealthIssue(
+                            id: "\(snapshot.id):\(issue.id)",
+                            title: issue.title,
+                            detail: issue.detail,
+                            icon: issue.icon,
+                            severity: issue.severity
+                        ),
+                        tabId
                     )
                 }
             }
             .sorted {
-                if $0.severity.rawValue != $1.severity.rawValue {
-                    return $0.severity.rawValue > $1.severity.rawValue
+                if $0.0.severity.rawValue != $1.0.severity.rawValue {
+                    return $0.0.severity.rawValue > $1.0.severity.rawValue
                 }
-                return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                return $0.0.title.localizedCaseInsensitiveCompare($1.0.title) == .orderedAscending
             }
     }
 
@@ -702,17 +749,20 @@ struct DashboardPanel: View {
                             detail: tab.status.rawValue.capitalized,
                             icon: "wifi.slash",
                             color: .orange,
+                            actionHint: isReconnectable(tab.status) ? "Reconnect \(tab.profile.name)" : nil,
                             action: isReconnectable(tab.status) ? {
                                 Task { await tabsStore.reconnect(tabId: tab.id) }
                             } : nil
                         )
                     }
-                    ForEach(Array(healthIssues.prefix(8)), id: \.id) { issue in
+                    ForEach(Array(healthIssues.prefix(8)), id: \.issue.id) { entry in
                         dashboardProblemCard(
-                            title: issue.title,
-                            detail: issue.detail,
-                            icon: issue.icon,
-                            color: issue.severity.color
+                            title: entry.issue.title,
+                            detail: entry.issue.detail,
+                            icon: entry.issue.icon,
+                            color: entry.issue.severity.color,
+                            actionHint: entry.tabId == nil ? nil : "Show \(entry.issue.title)",
+                            action: entry.tabId.map { id in { tabsStore.setActive(id) } }
                         )
                     }
                     ForEach(problemEvents, id: \.id) { event in
@@ -734,7 +784,11 @@ struct DashboardPanel: View {
     private var savedHostInventory: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(savedProfiles) { profile in
+                Text("Not connected")
+                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                ForEach(disconnectedProfiles) { profile in
                     savedHostCard(profile)
                 }
             }
@@ -880,6 +934,7 @@ struct DashboardPanel: View {
         detail: String,
         icon: String,
         color: Color,
+        actionHint: String? = nil,
         action: (() -> Void)? = nil
     ) -> some View {
         Group {
@@ -888,7 +943,7 @@ struct DashboardPanel: View {
                     dashboardProblemCardContent(title: title, detail: detail, icon: icon, color: color)
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("Reconnect \(title)")
+                .accessibilityHint(actionHint ?? "Activate \(title)")
             } else {
                 dashboardProblemCardContent(title: title, detail: detail, icon: icon, color: color)
             }
@@ -929,9 +984,15 @@ struct DashboardPanel: View {
                 Text("Workspace Dashboard")
                     .font(MidnightMacDesign.FontToken.title)
                     .lineLimit(1)
-                Label("\(tabs.count)/\(savedProfiles.count) connected", systemImage: "server.rack")
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Label("\(tabs.count)/\(savedProfiles.count) connected", systemImage: "server.rack")
+                    if let lastSnapshotAt {
+                        Text("·")
+                        Text("Updated \(lastSnapshotAt.formatted(.dateTime.hour().minute().second()))")
+                    }
+                }
+                .font(MidnightMacDesign.FontToken.caption)
+                .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
@@ -966,7 +1027,7 @@ struct DashboardPanel: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 220)
+            .frame(width: 300)
             .controlSize(.small)
         }
         .padding(.horizontal, 12)
@@ -975,6 +1036,7 @@ struct DashboardPanel: View {
 }
 
 private enum DashboardSort: String, CaseIterable, Identifiable {
+    case attention
     case order
     case name
     case host
@@ -985,6 +1047,7 @@ private enum DashboardSort: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
+        case .attention: return "Attention"
         case .order: return "Opened"
         case .name: return "Name"
         case .host: return "Host"

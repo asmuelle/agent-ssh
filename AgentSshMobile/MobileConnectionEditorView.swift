@@ -29,6 +29,10 @@ struct MobileConnectionEditorView: View {
     @State private var publicKeyCopied = false
     @State private var pendingKeyReferences: Set<MobileSSHKeyReference> = []
     @State private var keySetupRunning = false
+    // Shared identities: named keypairs reusable across connections.
+    @State private var availableIdentities: [MobileSSHIdentity] = []
+    @State private var showingIdentityManager = false
+    @State private var showingCreateIdentity = false
     @State private var favorite: Bool
     @State private var folder: String
     @State private var tagsText: String
@@ -169,6 +173,19 @@ struct MobileConnectionEditorView: View {
         }
         .onAppear {
             refreshStoredCredentialState()
+            reloadIdentities()
+        }
+        .sheet(isPresented: $showingCreateIdentity) {
+            MobileCreateSSHIdentityView { identity in
+                reloadIdentities()
+                selectIdentity(identity)
+            }
+        }
+        .sheet(isPresented: $showingIdentityManager, onDismiss: reloadIdentities) {
+            MobileSSHIdentityListView { identity in
+                reloadIdentities()
+                selectIdentity(identity)
+            }
         }
         .onChange(of: authMethod) { _, _ in
             refreshStoredCredentialState()
@@ -231,8 +248,67 @@ struct MobileConnectionEditorView: View {
         }
     }
 
+    /// Shared identities come first: reusing one key across connections is the
+    /// path we want people on, with the per-connection import/generate buttons
+    /// below as the escape hatch.
+    private var identityControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let identity = selectedIdentity {
+                Label("Using identity \"\(identity.name)\".", systemImage: "key.horizontal.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+
+            HStack {
+                if availableIdentities.isEmpty {
+                    Button {
+                        showingCreateIdentity = true
+                    } label: {
+                        Label("Create Identity", systemImage: "plus.circle")
+                    }
+                } else {
+                    Menu {
+                        ForEach(availableIdentities) { identity in
+                            Button {
+                                selectIdentity(identity)
+                            } label: {
+                                if identity.id == selectedIdentity?.id {
+                                    Label(identity.name, systemImage: "checkmark")
+                                } else {
+                                    Text(identity.name)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(
+                            selectedIdentity == nil ? "Use Identity" : "Change Identity",
+                            systemImage: "key.horizontal"
+                        )
+                    }
+                }
+
+                Button {
+                    showingIdentityManager = true
+                } label: {
+                    Label("Manage", systemImage: "list.bullet")
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            Text("An identity is one keypair shared by several connections. Its public key must be in ~/.ssh/authorized_keys on the server.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+        }
+    }
+
     private var privateKeyControls: some View {
         VStack(alignment: .leading, spacing: 10) {
+            identityControls
+
             if let metadata = keyMetadata {
                 Label("SSH key ready.", systemImage: "key.fill")
                     .font(.caption)
@@ -596,6 +672,31 @@ struct MobileConnectionEditorView: View {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             publicKeyCopied = false
         }
+    }
+
+    /// The shared identity backing the current key selection, if any.
+    private var selectedIdentity: MobileSSHIdentity? {
+        guard let vaultId = sshKeyReference?.vaultId else { return nil }
+        return availableIdentities.first { $0.id == vaultId }
+    }
+
+    private func reloadIdentities() {
+        availableIdentities = MobileSSHKeyVault.shared.listIdentities()
+    }
+
+    /// Point this connection at a shared identity. Unlike `replaceSelectedKey`,
+    /// the identity is never added to `pendingKeyReferences` — it isn't this
+    /// editor's to discard, and it must survive cancelling the sheet.
+    private func selectIdentity(_ identity: MobileSSHIdentity) {
+        if let current = sshKeyReference, pendingKeyReferences.contains(current) {
+            MobileSSHKeyVault.shared.deleteKey(for: current)
+            pendingKeyReferences.remove(current)
+        }
+        sshKeyReference = identity.reference
+        generatedPublicKey = identity.publicKey ?? ""
+        publicKeyCopied = false
+        keyError = nil
+        keyMessage = "Using identity \"\(identity.name)\"."
     }
 
     private func replaceSelectedKey(with reference: MobileSSHKeyReference, publicKey: String?) {

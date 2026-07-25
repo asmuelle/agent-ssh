@@ -28,8 +28,24 @@ final class SecurityPatchMonitorStore: ObservableObject {
     }
 
     var selectedFinding: SecurityPatchFinding? {
-        guard let selectedFindingId else { return result?.findings.first }
+        guard let selectedFindingId else { return orderedFindings.first }
         return result?.findings.first { $0.id == selectedFindingId }
+    }
+
+    /// Findings ordered most-actionable-first: CISA KEV (actively
+    /// exploited) leads, then by severity, then by title for stability.
+    /// The raw scan order is whatever the collector emitted — presenting
+    /// that verbatim buries the one finding that actually needs patching
+    /// today under a pile of informational noise.
+    var orderedFindings: [SecurityPatchFinding] {
+        guard let result else { return [] }
+        return result.findings.sorted { a, b in
+            let aKev = a.kind == .knownExploitedVulnerability || !advisoryMatches(for: a).isEmpty
+            let bKev = b.kind == .knownExploitedVulnerability || !advisoryMatches(for: b).isEmpty
+            if aKev != bKev { return aKev }
+            if a.severity != b.severity { return a.severity < b.severity }  // Comparable: critical first
+            return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+        }
     }
 
     var selectedEvidence: SecurityPatchEvidence? {
@@ -127,8 +143,11 @@ final class SecurityPatchMonitorStore: ObservableObject {
 
     private func apply(_ result: SecurityPatchScanResult, cached: Bool) {
         self.result = result
-        selectedFindingId = result.findings.first?.id
-        selectedEvidenceId = result.findings.first?.evidenceIds.first
+        // Default to the most actionable finding (KEV / highest severity),
+        // not whatever the collector happened to emit first.
+        let top = orderedFindings.first
+        selectedFindingId = top?.id
+        selectedEvidenceId = top?.evidenceIds.first
         isShowingCachedResult = cached
     }
 }

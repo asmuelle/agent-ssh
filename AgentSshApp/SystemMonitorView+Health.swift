@@ -63,16 +63,14 @@ extension SystemMonitorView {
                 severity: .warning
             ))
         case .open:
-            let detail = ufwSummary.extraOpenRules.isEmpty
-                ? "Public exposure detected"
-                : "Open: \(ufwSummary.extraOpenRules.prefix(3).joined(separator: ", "))"
-            issues.append(DashboardHealthIssue(
-                id: "ufw-open",
-                title: "\(connectionLabel): UFW",
-                detail: detail,
-                icon: "shield.lefthalf.filled",
-                severity: .warning
-            ))
+            // A firewall having open ports is normal, not a warning — flagging
+            // it inverted the attention model (firewall config drowned out real
+            // load/disk pressure) and duplicated the same open-ports string
+            // across the problem strip, the inventory row, and the header issue
+            // badges. The header's `ufwStatusBadge` is the single home for
+            // firewall state (orange "UFW open"), and its drill-down + the Ports
+            // section carry the actual port list.
+            break
         case .unknown:
             issues.append(DashboardHealthIssue(
                 id: "ufw-unknown",
@@ -91,7 +89,7 @@ extension SystemMonitorView {
                 issues.append(DashboardHealthIssue(
                     id: "cpu",
                     title: "\(connectionLabel): CPU",
-                    detail: String(format: "%.1f%%", stats.cpuPercent),
+                    detail: formatPercent(stats.cpuPercent),
                     icon: "cpu",
                     severity: cpuFraction >= 0.95 ? .critical : .warning
                 ))

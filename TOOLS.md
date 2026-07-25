@@ -18,7 +18,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 ### SSH key vault
 
 - `SSHKeyVault.swift`, `SSHKeyAccessCoordinator.swift` (macOS) / `MobileSSHKeyVault.swift`, `MobileSSHKeyImportStore.swift`, `MobileSSHKeyBootstrapInstaller.swift` (iPadOS)
-- Generated and imported private keys live in the Keychain. Access coordinators batch per-key auth prompts so one session doesn't re-prompt repeatedly.
+- Generated and imported private keys are encrypted in app storage; their encryption key lives in Keychain. Access coordinators batch per-key auth prompts so one session doesn't re-prompt repeatedly.
 
 ### Advanced authentication (macOS, feature-flagged)
 

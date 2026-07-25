@@ -68,8 +68,16 @@ lint:
     cargo clippy --all-targets -- -D warnings
 
 # Local equivalent of CI checks that don't need signing certs.
-ci-local: lint check test-rust bindings-check mac-ci-build ios-ci-build
+ci-local: cargo-deny-check advisory-ignore-check lint check test-rust bindings-check mac-ci-build mac-test ios-ci-build ios-test
     @echo "✅ Local CI checks completed"
+
+# Match the hosted cargo-deny advisory, license, and source policy locally.
+cargo-deny-check:
+    cargo deny check
+
+# Fail when a cargo-deny advisory exception reaches its mandatory review date.
+advisory-ignore-check:
+    python3 scripts/check_advisory_ignores.py
 
 # Wipe Cargo + macOS + iOS build artifacts.
 clean: mac-clean ios-clean
@@ -238,8 +246,8 @@ mac-dmg:
     @test -d {{mac_app}} || (echo "❌ {{mac_app}} not found — run 'just mac-build' first"; exit 1)
     bash AgentSshApp/build_dmg.sh {{mac_app}}
 
-# Build a local release bundle: clean build, DMG, checksum, release notes,
-# and an optional notarization pass when Apple credentials are available.
+# Build a release bundle. The default is a local-only, non-notarized artifact;
+# pass true for public distribution. Local mode cannot generate an appcast.
 mac-release notarize="false":
     scripts/mac_release.sh "{{notarize}}"
 

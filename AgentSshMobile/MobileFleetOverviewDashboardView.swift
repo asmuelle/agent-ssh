@@ -1,18 +1,23 @@
 import SwiftUI
 
 /// Landing dashboard shown after auto-connect when at least one server is
-/// connected. Surfaces a fleet summary, a "needs attention" section, and a grid
-/// of live server tiles. Tiles are `NavigationLink`s; the parent supplies the
-/// `NavigationStack` and `.navigationDestination(for: String.self)`.
+/// connected. Presents the fleet as a single transposed table — one row per
+/// server (worst-first), columns for the key signals — instead of a separate
+/// "needs attention" list plus a servers grid, which rendered every host twice.
+/// Rows are `NavigationLink`s; the parent supplies the `NavigationStack` and
+/// `.navigationDestination(for: String.self)`.
 struct MobileFleetOverviewDashboardView: View {
     let profiles: [MobileConnectionProfile]
     let onAddConnection: () -> Void
 
     @EnvironmentObject private var sessionStore: MobileSessionStore
     @EnvironmentObject private var healthStore: MobileServerHealthStore
+    @State private var expandedRows: Set<String> = []
 
     private let refreshInterval: Duration = .seconds(30)
-    private let columns = [GridItem(.adaptive(minimum: 260), spacing: 12)]
+
+    /// Server + CPU + Mem + Disk + Svc + Ports.
+    private let columnCount = 6
 
     var body: some View {
         ScrollView {
@@ -22,8 +27,10 @@ struct MobileFleetOverviewDashboardView: View {
                 if items.isEmpty {
                     emptyState
                 } else {
-                    attentionSection
-                    serversSection
+                    if let failure = crossFleetFailure {
+                        crossFleetBanner(failure)
+                    }
+                    fleetTable
                 }
             }
             .padding()
@@ -96,152 +103,236 @@ struct MobileFleetOverviewDashboardView: View {
         return "\(attention) server\(attention == 1 ? "" : "s") need attention"
     }
 
-    // MARK: - Needs attention
+    // MARK: - Cross-fleet banner
 
-    @ViewBuilder
-    private var attentionSection: some View {
-        let flagged = items.filter { $0.severity.needsAttention }
-
-        VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.large) {
-            sectionTitle("Needs Attention", systemImage: "exclamationmark.triangle.fill")
-
-            if flagged.isEmpty {
-                Label("Every connected server is healthy.", systemImage: "checkmark.circle.fill")
-                    .font(MidnightMobileDesign.FontToken.subheadline)
-                    .foregroundStyle(.green)
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium))
-            } else {
-                ForEach(flagged) { item in
-                    NavigationLink(value: item.profile.id) {
-                        attentionCard(item)
-                    }
-                    .buttonStyle(.plain)
-                }
+    /// The service failing on the most hosts (≥2). For a fleet run by AI agents,
+    /// "certbot is broken everywhere" is the headline that per-host cards bury.
+    private var crossFleetFailure: (service: String, hosts: Int)? {
+        var counts: [String: Int] = [:]
+        for item in items {
+            for service in Set(item.failedServices) {
+                counts[service, default: 0] += 1
             }
         }
+        guard let top = counts.filter({ $0.value >= 2 }).max(by: { $0.value < $1.value }) else {
+            return nil
+        }
+        return (top.key, top.value)
     }
 
-    private func attentionCard(_ item: FleetItem) -> some View {
-        VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.medium) {
-            HStack(spacing: MidnightMobileDesign.Spacing.medium) {
-                Circle().fill(item.severity.color).frame(width: 10, height: 10)
-                Text(item.profile.name)
-                    .font(MidnightMobileDesign.FontToken.headline)
-                    .lineLimit(1)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(MidnightMobileDesign.FontToken.caption)
-                    .foregroundStyle(.tertiary)
-            }
-
-            ForEach(item.issues) { issue in
-                HStack(alignment: .top, spacing: MidnightMobileDesign.Spacing.medium) {
-                    Image(systemName: issue.systemImage)
-                        .font(MidnightMobileDesign.FontToken.caption)
-                        .foregroundStyle(issue.severity.color)
-                        .frame(width: 18)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(issue.title)
-                            .font(MidnightMobileDesign.FontToken.captionStrong)
-                        Text(issue.detail)
-                            .font(MidnightMobileDesign.FontToken.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-            }
+    private func crossFleetBanner(_ failure: (service: String, hosts: Int)) -> some View {
+        HStack(spacing: MidnightMobileDesign.Spacing.medium) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("\(failure.service) failing on \(failure.hosts) hosts")
+                .font(MidnightMobileDesign.FontToken.subheadline.weight(.semibold))
+            Spacer(minLength: 0)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(MidnightMobileDesign.ColorToken.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium))
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium))
         .overlay(
             RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium)
-                .strokeBorder(item.severity.color.opacity(0.5), lineWidth: 1)
+                .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
         )
     }
 
-    // MARK: - Servers grid
+    // MARK: - Fleet table
 
-    private var serversSection: some View {
+    private var fleetTable: some View {
         VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.large) {
-            sectionTitle("Servers", systemImage: "server.rack")
-            LazyVGrid(columns: columns, spacing: 12) {
+            sectionTitle("Fleet", systemImage: "server.rack")
+
+            Grid(alignment: .center, horizontalSpacing: 6, verticalSpacing: 0) {
+                headerRow
                 ForEach(items) { item in
-                    NavigationLink(value: item.profile.id) {
-                        serverTile(item)
+                    Divider()
+                    serverRow(item)
+                    if expandedRows.contains(item.id), item.hasExpandableDetail {
+                        detailBand(item)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+            .background(MidnightMobileDesign.ColorToken.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.large))
         }
     }
 
-    private func serverTile(_ item: FleetItem) -> some View {
-        VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.medium) {
-            HStack(spacing: MidnightMobileDesign.Spacing.medium) {
-                Circle().fill(item.statusColor).frame(width: 10, height: 10)
-                Text(item.profile.name)
-                    .font(MidnightMobileDesign.FontToken.headline)
+    private var headerRow: some View {
+        GridRow {
+            // The server column is the only greedy one — it takes the width left
+            // over after the content-sized metric columns.
+            headerLabel("Server", expands: true)
+                .gridColumnAlignment(.leading)
+            headerLabel("CPU")
+            headerLabel("Mem")
+            headerLabel("Disk")
+            headerLabel("Svc")
+            headerLabel("Ports")
+        }
+    }
+
+    private func headerLabel(_ text: String, expands: Bool = false) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .tracking(0.4)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: expands ? .infinity : nil, alignment: expands ? .leading : .center)
+            .padding(.vertical, 8)
+    }
+
+    private func serverRow(_ item: FleetItem) -> some View {
+        GridRow {
+            NavigationLink(value: item.profile.id) {
+                HStack(spacing: 8) {
+                    Circle().fill(item.tableDotColor).frame(width: 9, height: 9)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.profile.name)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        if !item.isConnected {
+                            Text(item.statusLabel)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 2)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .gridColumnAlignment(.leading)
+
+            cpuCell(item)
+            percentCell(item.sample?.memoryPercent)
+            percentCell(item.sample?.primaryDisk?.usedPercent)
+            countCell(count: item.failedServices.count, probed: item.sample != nil, tint: item.failedServices.count >= 5 ? .red : .orange, item: item, label: "failed services")
+            countCell(count: item.openPorts.count, probed: item.sample != nil, tint: .orange, item: item, label: "open ports")
+        }
+    }
+
+    private func cpuCell(_ item: FleetItem) -> some View {
+        VStack(spacing: 1) {
+            if let sample = item.sample {
+                Text(percentString(sample.cpuPercent))
+                    .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(metricColor(sample.cpuPercent))
+                Text("load \(loadString(sample.loadAverage1m))")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
                     .lineLimit(1)
-                Spacer()
-                if item.profile.favorite {
-                    Image(systemName: "star.fill")
-                        .font(MidnightMobileDesign.FontToken.caption)
-                        .foregroundStyle(.yellow)
-                }
-            }
-
-            Text("\(item.profile.username)@\(item.profile.host):\(item.profile.port)")
-                .font(MidnightMobileDesign.FontToken.metadataMono)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            if let sample = item.snapshot?.sample {
-                metricsRow(sample)
             } else {
-                Text(item.statusLabel)
-                    .font(MidnightMobileDesign.FontToken.caption)
-                    .foregroundStyle(item.statusColor)
-                    .lineLimit(2)
+                Text("–").foregroundStyle(.tertiary)
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-        .background(MidnightMobileDesign.ColorToken.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium))
-        .overlay(
-            RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium)
-                .strokeBorder(item.severity.needsAttention ? item.severity.color.opacity(0.5) : .clear, lineWidth: 1)
-        )
+        .padding(.vertical, 9)
     }
 
-    private func metricsRow(_ sample: MobileServerResourceSample) -> some View {
-        HStack(spacing: MidnightMobileDesign.Spacing.large) {
-            miniMetric("CPU", percent: sample.cpuPercent)
-            miniMetric("MEM", percent: sample.memoryPercent)
-            if let disk = sample.primaryDisk {
-                miniMetric("DISK", percent: disk.usedPercent)
+    private func percentCell(_ percent: Double?) -> some View {
+        Group {
+            if let percent {
+                Text(percentString(percent))
+                    .foregroundStyle(metricColor(percent))
+            } else {
+                Text("–").foregroundStyle(.tertiary)
             }
         }
+        .font(.system(size: 14, weight: .semibold).monospacedDigit())
+        .padding(.vertical, 9)
     }
 
-    private func miniMetric(_ label: String, percent: Double) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-            Text(String(format: "%.0f%%", percent))
-                .font(MidnightMobileDesign.FontToken.captionStrong.monospacedDigit())
-                .foregroundStyle(metricColor(percent))
+    /// A count cell for failed services / open ports. Non-zero renders a tappable
+    /// pill that expands the detail band; zero renders a muted dash (or a fainter
+    /// dash when the host hasn't been probed yet, so "0" and "unknown" differ).
+    private func countCell(count: Int, probed: Bool, tint: Color, item: FleetItem, label: String) -> some View {
+        Group {
+            if count > 0 {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { toggleExpanded(item.id) }
+                } label: {
+                    Text("\(count)")
+                        .font(.system(size: 13, weight: .bold).monospacedDigit())
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(tint.opacity(0.15), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(count) \(label) on \(item.profile.name), expand")
+            } else {
+                Text("–")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(probed ? .tertiary : .quaternary)
+            }
+        }
+        .padding(.vertical, 9)
+    }
+
+    private func detailBand(_ item: FleetItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !item.failedServices.isEmpty {
+                detailLine(
+                    label: "Failed",
+                    value: item.failedServices.joined(separator: ", "),
+                    tint: item.failedServices.count >= 5 ? .red : .orange
+                )
+            }
+            if !item.openPorts.isEmpty {
+                detailLine(
+                    label: "Open ports",
+                    value: "\(item.openPorts.joined(separator: ", ")) · to anywhere",
+                    tint: .orange
+                )
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 10)
+    }
+
+    private func detailLine(label: String, value: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 74, alignment: .leading)
+            Text(value)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Formatting
+
+    private func percentString(_ percent: Double) -> String {
+        "\(Int(percent.rounded()))%"
+    }
+
+    private func loadString(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(2)))
     }
 
     private func metricColor(_ percent: Double) -> Color {
         if percent >= MobileServerHealthThresholds.criticalPercent { return .red }
         if percent >= MobileServerHealthThresholds.warningPercent { return .orange }
         return .primary
+    }
+
+    private func toggleExpanded(_ id: String) {
+        if expandedRows.contains(id) {
+            expandedRows.remove(id)
+        } else {
+            expandedRows.insert(id)
+        }
     }
 
     private func sectionTitle(_ title: String, systemImage: String) -> some View {
@@ -317,26 +408,26 @@ private struct FleetItem: Identifiable {
         return snapshot?.severity ?? .ok
     }
 
-    /// Issues for the attention card: connection failure (if any) plus health issues.
-    var issues: [MobileServerHealthIssue] {
-        var result: [MobileServerHealthIssue] = []
-        if case .failed(let message) = sessionStatus {
-            result.append(
-                MobileServerHealthIssue(
-                    id: "connection",
-                    title: "Connection failed",
-                    detail: message,
-                    severity: .critical,
-                    systemImage: "wifi.slash"
-                )
-            )
-        }
-        result.append(contentsOf: snapshot?.issues ?? [])
-        return result
+    var sample: MobileServerResourceSample? { snapshot?.sample }
+
+    var failedServices: [String] { snapshot?.failedServices ?? [] }
+
+    var openPorts: [String] {
+        if case .open(let ports)? = snapshot?.firewall { return ports }
+        return []
     }
 
-    var statusColor: Color {
-        MidnightMobileDesign.statusColor(sessionStatus)
+    var hasExpandableDetail: Bool { !failedServices.isEmpty || !openPorts.isEmpty }
+
+    /// Dot color for the table: real health when connected, otherwise the
+    /// session state — so a disconnected host never shows a healthy green dot.
+    var tableDotColor: Color {
+        switch sessionStatus {
+        case .connected: return severity.color
+        case .connecting: return .orange
+        case .disconnected: return .secondary
+        case .failed: return .red
+        }
     }
 
     var statusLabel: String {

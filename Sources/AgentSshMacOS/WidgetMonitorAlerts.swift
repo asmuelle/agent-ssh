@@ -163,7 +163,7 @@ public enum WidgetMonitorAlertEvaluator {
             title: "\(snapshot.displayName) is down",
             body: alertBody(for: snapshot),
             openURL: snapshot.openURL ?? WidgetSnapshotPresenter.monitoringOverviewURL,
-            notificationIdentifier: notificationIdentifier(ruleId: rule.id, snapshotId: snapshot.id, now: now)
+            notificationIdentifier: notificationIdentifier(ruleId: rule.id, snapshotId: snapshot.id)
         )
     }
 
@@ -181,9 +181,12 @@ public enum WidgetMonitorAlertEvaluator {
         return "A monitoring check confirmed a failure."
     }
 
-    private static func notificationIdentifier(ruleId: String, snapshotId: String, now: Date) -> String {
-        let timestamp = Int(now.timeIntervalSince1970)
-        return "monitoring-alert.\(ruleId).\(snapshotId).\(timestamp)"
+    /// Stable per (rule, snapshot) so a re-alert for the same host+rule
+    /// *replaces* the previous notification instead of stacking a new one.
+    /// The repeat interval already gates how often this fires; when it does,
+    /// the user wants the latest state, not a growing stack of stale banners.
+    private static func notificationIdentifier(ruleId: String, snapshotId: String) -> String {
+        "monitoring-alert.\(ruleId).\(snapshotId)"
             .replacingOccurrences(of: " ", with: "-")
     }
 }

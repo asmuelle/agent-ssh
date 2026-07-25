@@ -143,8 +143,11 @@ enum ServerDoctorLocalLLMConfig {
         guard !trimmed.isEmpty else { return deleteToken() }
         guard let data = trimmed.data(using: .utf8) else { return false }
 
-        let update = [kSecValueData as String: data]
-        let updateStatus = SecItemUpdate(tokenQuery as CFDictionary, update as CFDictionary)
+        let updates: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
+        let updateStatus = SecItemUpdate(tokenQuery as CFDictionary, updates as CFDictionary)
         if updateStatus == errSecSuccess {
             return true
         }
@@ -154,7 +157,7 @@ enum ServerDoctorLocalLLMConfig {
 
         var attributes = tokenQuery
         attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
     }
 

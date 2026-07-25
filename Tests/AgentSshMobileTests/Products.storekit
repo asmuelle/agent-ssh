@@ -1,14 +1,14 @@
 {
-  "identifier" : "AGENTSSH-0000-0000-0000-000000000001",
+  "identifier" : "A65D337A-D893-4D35-85B4-6297D07BCE01",
   "nonRenewingSubscriptions" : [],
   "products" : [
     {
       "displayPrice" : "39.99",
       "familyShareable" : false,
-      "internalID" : "AGENTSSH-0000-0000-0000-000000000010",
+      "internalID" : "6E117E39-4AA0-4EF6-9134-9A343DA2041A",
       "localizations" : [
         {
-          "description" : "Unlock the full server operations toolkit: Server Doctor history, the runbook library, incident export, the fleet dashboard, widgets and alerts, and unlimited hosts.",
+          "description" : "Unlock unlimited saved runbooks, redacted incident report exports, and unlimited saved SSH and SFTP hosts.",
           "displayName" : "agent-ssh Pro",
           "locale" : "en_US"
         }

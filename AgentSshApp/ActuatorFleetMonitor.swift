@@ -510,8 +510,12 @@ final class ActuatorFleetMonitor: ObservableObject {
             content.body = snapshot.message ?? "Actuator health changed."
             content.sound = snapshot.state == .healthy ? nil : .default
             content.threadIdentifier = "actuator-health"
+            // Stable per-service identifier: a new transition *replaces* the
+            // service's previous banner instead of stacking. A flapping
+            // service would otherwise fill Notification Center with one
+            // banner per poll cycle; the user only ever needs the latest.
             let request = UNNotificationRequest(
-                identifier: "actuator-\(service.id)-\(UUID().uuidString)",
+                identifier: "actuator-health-\(service.id)",
                 content: content,
                 trigger: nil
             )

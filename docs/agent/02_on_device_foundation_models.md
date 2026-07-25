@@ -60,7 +60,7 @@ class LocalDiagnosticsSynthesizer {
     /// Synthesizes raw, locally-redacted evidence into a structured LocalDoctorReport.
     func synthesizeReport(hostContext: String, redactedEvidenceJson: String) async throws -> LocalDoctorReport {
         let prompt = """
-        You are the Midnight SSH Server Doctor, a safe, read-only system diagnostic assistant.
+        You are the agent-ssh Server Doctor, a safe, read-only system diagnostic assistant.
         Analyze the following collected server evidence:
         
         Host Context: \(hostContext)

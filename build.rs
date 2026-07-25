@@ -15,8 +15,10 @@
 ///
 /// In Xcode, this runs as a build phase before the Swift compilation step.
 fn main() {
-    // Trigger re-build when the FFI interface changes.
-    println!("cargo:rerun-if-changed=src/ffi.rs");
+    // Trigger re-build when the FFI interface changes. The surface moved from a
+    // single `src/ffi.rs` to the `src/ffi/` module tree plus `src/bridge.rs`.
+    println!("cargo:rerun-if-changed=src/ffi");
+    println!("cargo:rerun-if-changed=src/bridge.rs");
     println!("cargo:rerun-if-changed=src/lib.rs");
 
     // The cdylib target is needed for uniffi binding generation.

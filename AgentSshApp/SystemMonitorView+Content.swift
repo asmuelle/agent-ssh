@@ -70,7 +70,7 @@ extension SystemMonitorView {
                         title: "CPU",
                         icon: "cpu",
                         progress: stats.cpuPercent / 100,
-                        rightLabel: String(format: "%.1f%%", stats.cpuPercent),
+                        rightLabel: formatPercent(stats.cpuPercent),
                         series: \.cpuPercent,
                         showsActionIndicator: true
                     )
@@ -90,7 +90,7 @@ extension SystemMonitorView {
                     .onTapGesture { drillDown = .memory }
                     .help("Analyze memory-intensive processes")
 
-                    if stats.swapTotal > 0 {
+                    if showsSwap(stats) {
                         metricRow(
                             title: "Swap",
                             icon: "arrow.up.arrow.down.square",
@@ -112,7 +112,7 @@ extension SystemMonitorView {
                     summaryRow(
                         icon: "speedometer",
                         label: "Load (1 min)",
-                        value: String(format: "%.2f", stats.loadAverage1m)
+                        value: formatLoad(stats.loadAverage1m)
                     )
 
                     MonitoredSystemdServicesPane(
@@ -170,7 +170,7 @@ extension SystemMonitorView {
                             title: "CPU",
                             icon: "cpu",
                             progress: stats.cpuPercent / 100,
-                            rightLabel: String(format: "%.1f%%", stats.cpuPercent),
+                            rightLabel: formatPercent(stats.cpuPercent),
                             series: \.cpuPercent,
                             showsActionIndicator: true
                         )
@@ -193,7 +193,7 @@ extension SystemMonitorView {
                     .buttonStyle(.plain)
                     .help("Analyze memory-intensive processes")
 
-                    if stats.swapTotal > 0 {
+                    if showsSwap(stats) {
                         metricRow(
                             title: "Swap",
                             icon: "arrow.up.arrow.down.square",
@@ -215,7 +215,7 @@ extension SystemMonitorView {
                     summaryRow(
                         icon: "speedometer",
                         label: "Load (1 min)",
-                        value: String(format: "%.2f", stats.loadAverage1m)
+                        value: formatLoad(stats.loadAverage1m)
                     )
 
                     dashboardDiagnostics
@@ -390,6 +390,27 @@ extension SystemMonitorView {
     /// back (e.g. a host where `df` was filtered out by SELinux or
     /// chroot). The mount path is used as the row's identity since
     /// it's unique per host.
+    /// Swap only matters when it's actually being used — a host with 700 KB in
+    /// a 16 GB swap is at rest, and the row is pure noise. Show it once usage
+    /// crosses 1% (memory pressure worth seeing), always in the single-host
+    /// inspector where the user asked for full detail.
+    func showsSwap(_ stats: FfiSystemStats) -> Bool {
+        guard stats.swapTotal > 0 else { return false }
+        if !dashboardMode { return true }
+        return Double(stats.swapUsed) / Double(stats.swapTotal) >= 0.01
+    }
+
+    /// Small system partitions (`/boot`, `/boot/efi`, EFI `vfat`, anything under
+    /// ~2 GB) fill the card with rows nobody watches. Treat them as minor so the
+    /// section leads with the volumes that actually fill up.
+    func isMinorMount(_ disk: FfiDiskMount) -> Bool {
+        let twoGB: UInt64 = 2 * 1024 * 1024 * 1024
+        if disk.total > 0, disk.total < twoGB { return true }
+        if disk.fsType.lowercased() == "vfat" { return true }
+        let mount = disk.mount.lowercased()
+        return mount == "/boot" || mount.hasPrefix("/boot/")
+    }
+
     @ViewBuilder
     func disksSection(_ disks: [FfiDiskMount]) -> some View {
         if disks.isEmpty {
@@ -402,6 +423,11 @@ extension SystemMonitorView {
                     .foregroundStyle(.secondary)
             }
         } else {
+            let major = disks.filter { !isMinorMount($0) }
+            // Never hide everything — if a host reports only small mounts, show
+            // them rather than an empty section.
+            let primary = major.isEmpty ? disks : major
+            let minor = major.isEmpty ? [] : disks.filter { isMinorMount($0) }
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "internaldrive")
@@ -411,8 +437,26 @@ extension SystemMonitorView {
                         .font(.subheadline.weight(.medium))
                     Spacer()
                 }
-                ForEach(disks, id: \.mount) { disk in
+                ForEach(primary, id: \.mount) { disk in
                     diskRow(disk)
+                }
+                if !minor.isEmpty {
+                    if showAllDisks {
+                        ForEach(minor, id: \.mount) { disk in
+                            diskRow(disk)
+                        }
+                    }
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { showAllDisks.toggle() }
+                    } label: {
+                        Text(showAllDisks
+                            ? "Hide system mounts"
+                            : "\(minor.count) system mount\(minor.count == 1 ? "" : "s") hidden")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 22)
                 }
             }
         }

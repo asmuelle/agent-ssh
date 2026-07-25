@@ -1056,24 +1056,19 @@ struct ConnectionRow<Actions: View>: View {
             }
             Spacer(minLength: 0)
 
-            if let securitySummary, securitySummary.shouldShowSidebarSecurityBadge {
-                Image(systemName: securitySummary.sidebarSecuritySymbol)
+            // Single consolidated health dot: the worst of the Security
+            // Patch Monitor and Server Doctor verdicts. Two separate badge
+            // slots competed for the same glance and read as noise; one
+            // worst-severity dot is the actionable signal. Full detail stays
+            // on the tooltip and in the Connection Details panel.
+            if let health = consolidatedHealth {
+                Image(systemName: health.symbol)
                     .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(securitySummary.sidebarSecurityColor)
+                    .foregroundStyle(health.color)
                     .symbolRenderingMode(.hierarchical)
                     .frame(width: 12, height: 12)
-                    .help(securitySummary.sidebarSecurityHelp)
-                    .accessibilityLabel(securitySummary.sidebarSecurityAccessibilityLabel)
-            }
-
-            if let doctorSummary, doctorSummary.showsSidebarBadge {
-                Image(systemName: doctorSummary.sidebarSymbol)
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(doctorSummary.sidebarColor)
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 12, height: 12)
-                    .help(doctorSummary.sidebarHelp)
-                    .accessibilityLabel(doctorSummary.sidebarAccessibilityLabel)
+                    .help(health.help)
+                    .accessibilityLabel(health.accessibilityLabel)
             }
 
             if let connectionStatus {
@@ -1153,6 +1148,65 @@ struct ConnectionRow<Actions: View>: View {
 
     private var showsActionMenu: Bool {
         isHovering || isSelected
+    }
+
+    /// The single health signal for the row: whichever of the Security
+    /// Patch / Server Doctor verdicts is worse, mapped onto one severity
+    /// ramp so the row shows at most one colored dot. Returns nil when
+    /// both sources are quiet (healthy / not stale), so a calm host shows
+    /// no badge at all.
+    private var consolidatedHealth: (symbol: String, color: Color, help: String, accessibilityLabel: String)? {
+        var candidates: [(rank: Int, source: SidebarHealthSource)] = []
+        if let securitySummary, securitySummary.shouldShowSidebarSecurityBadge {
+            candidates.append((securitySummary.severity.rank, .security(securitySummary)))
+        }
+        if let doctorSummary, doctorSummary.showsSidebarBadge {
+            candidates.append((doctorSummary.overallSeverity.rank, .doctor(doctorSummary)))
+        }
+        guard let worst = candidates.max(by: { $0.rank < $1.rank }) else { return nil }
+
+        switch worst.source {
+        case .security(let s):
+            return (s.sidebarSecuritySymbol, s.sidebarSecurityColor, s.sidebarSecurityHelp, s.sidebarSecurityAccessibilityLabel)
+        case .doctor(let d):
+            return (d.sidebarSymbol, d.sidebarColor, d.sidebarHelp, d.sidebarAccessibilityLabel)
+        }
+    }
+}
+
+/// Which health subsystem produced the row's consolidated badge. Hoisted
+/// out of the `consolidatedHealth` getter because Swift can't nest a type
+/// inside a generic-function-getter.
+private enum SidebarHealthSource {
+    case security(SecurityPatchHostSummary)
+    case doctor(ServerDoctorHostSummary)
+}
+
+/// Shared severity ranking so the Security Patch and Server Doctor ramps
+/// compare on one scale. Both enums are already `Comparable`; this exposes
+/// their private `rank` for the cross-type comparison above without
+/// changing their public API.
+private extension SecurityPatchSeverity {
+    var rank: Int {
+        switch self {
+        case .critical: return 4
+        case .high: return 3
+        case .warning: return 2
+        case .info: return 1
+        case .unknown: return 0
+        }
+    }
+}
+
+private extension ServerDoctorSeverity {
+    var rank: Int {
+        switch self {
+        case .critical: return 4
+        case .high: return 3
+        case .warning: return 2
+        case .info: return 1
+        case .unknown: return 0
+        }
     }
 }
 

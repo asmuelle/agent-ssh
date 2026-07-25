@@ -236,13 +236,13 @@ struct MobileServerDetailView: View {
                     .foregroundStyle(.secondary)
                 HStack {
                     Button {
-                        UIPasteboard.general.string = "tmux new -As midnight"
+                        UIPasteboard.general.string = "tmux new -As agent-ssh"
                     } label: {
                         Label("Copy tmux attach", systemImage: "doc.on.doc")
                     }
                     .buttonStyle(.bordered)
                     Button {
-                        UIPasteboard.general.string = "screen -R midnight"
+                        UIPasteboard.general.string = "screen -R agent-ssh"
                     } label: {
                         Label("Copy screen attach", systemImage: "doc.on.doc")
                     }

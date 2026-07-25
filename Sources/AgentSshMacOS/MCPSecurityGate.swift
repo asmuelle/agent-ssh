@@ -24,40 +24,51 @@ public class MCPSecurityGate {
                 // An unparseable/absent command is not provably safe — require approval.
                 return .modifying(reason: "Execute command with no readable command string")
             }
-            return ShellCommandClassifier.classify(command)
+            switch ShellCommandClassifier.classify(command) {
+            case .safe:
+                return .safe
+            case .modifying(let reason):
+                // Show the actual command in the prompt, not just the risk
+                // class, so the user authorizes what will really run.
+                return .modifying(reason: "Run: \(preview(of: command)) — \(reason)")
+            }
 
         case "postgres_query":
             guard let query = arguments["query"] as? String else {
                 return .modifying(reason: "Execute query with no readable query string")
             }
-            return classifyPostgresQuery(query)
+            guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .modifying(reason: "Execute an empty database query")
+            }
+            // PostgreSQL SELECT expressions can invoke user-defined functions,
+            // casts, and operators with side effects. Without a PostgreSQL parser
+            // and catalog resolution, no arbitrary query is provably read-only.
+            // The Rust execution layer additionally validates the query is a
+            // single read-only statement and runs it in a read-only session.
+            //
+            // Surface the actual SQL in the reason so the biometric prompt shows
+            // the user *what* they are authorizing — otherwise "approve a
+            // database query?" is a blind rubber-stamp an injected agent can
+            // abuse. See `preview(of:)`.
+            return .modifying(reason: "Run SQL: \(preview(of: query))")
 
         default:
             return .modifying(reason: "Execute unknown tool '\(tool)'")
         }
     }
 
-    private func classifyPostgresQuery(_ query: String) -> ActionRisk {
-        // Tokenize into upper-cased alphabetic words so keyword matching is
-        // whitespace/newline/case-insensitive and can't be dodged by odd
-        // spacing (e.g. "DELETE\nFROM"). A substring scan for "DELETE " missed
-        // any modifying keyword not followed by a literal space.
-        let words = Set(
-            query.uppercased()
-                .split(whereSeparator: { !$0.isLetter })
-                .map(String.init)
-        )
 
-        let modifyingKeywords: [String] = [
-            "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
-            "TRUNCATE", "GRANT", "REVOKE", "MERGE", "REPLACE", "COMMENT",
-            "REINDEX", "VACUUM", "CLUSTER", "COPY", "CALL", "DO",
-        ]
-
-        for kw in modifyingKeywords where words.contains(kw) {
-            return .modifying(reason: "Execute database modification query (\(kw))")
-        }
-        return .safe
+    /// A compact, single-line preview of a command or query for the biometric
+    /// approval prompt. Collapses runs of whitespace/newlines and truncates, so
+    /// the reason stays legible and can't be padded with leading whitespace to
+    /// push the operative part out of view.
+    func preview(of text: String, limit: Int = 160) -> String {
+        let collapsed = text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard collapsed.count > limit else { return collapsed }
+        return String(collapsed.prefix(limit - 1)) + "…"
     }
 
     /// Requests biometric authentication for the modifying action.
@@ -66,9 +77,12 @@ public class MCPSecurityGate {
         let context = LAContext()
         var error: NSError?
 
-        // Touch ID / Face ID / local passcode evaluates
+        // If no local authentication is available at all — no Touch ID / Face ID
+        // and no passcode enrolled — we cannot obtain informed human approval.
+        // Fail closed and deny the modifying action rather than let it run
+        // unauthenticated.
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            return await evaluatePolicy(context: context, reason: reason)
+            return false
         }
 
         return await evaluatePolicy(context: context, reason: reason)
@@ -93,6 +107,13 @@ public class MCPSecurityGate {
 /// interpreter wrappers (`sh -c '…'`), and substitution (`$(…)`); this evaluates
 /// every sub-command, resolves basenames, and peels wrapper commands.
 public enum ShellCommandClassifier {
+    /// Commands whose process behavior is read-only for all supported argument
+    /// shapes. Anything outside this allowlist requires local approval.
+    static let readOnlyCommands: Set<String> = [
+        "cat", "cut", "date", "df", "du", "echo", "free", "grep", "head",
+        "docker", "git", "hostname", "id", "ls", "lsof", "podman", "printf", "ps", "pwd", "sort",
+        "stat", "tail", "uname", "uniq", "uptime", "wc", "who", "whoami",
+    ]
     /// Commands that create, destroy, move, or mutate state on the host.
     /// Kept close to the original gate's denylist (whole-command granularity,
     /// e.g. `systemctl`/`apt` always require approval) plus unambiguous
@@ -141,6 +162,10 @@ public enum ShellCommandClassifier {
     public static func classify(_ command: String) -> MCPSecurityGate.ActionRisk {
         let scan = Tokenizer.scan(command)
 
+        guard !scan.segments.isEmpty else {
+            return .modifying(reason: "Execute an empty or unparseable command")
+        }
+
         // Command substitution / process substitution can smuggle any command
         // past per-segment inspection — treat its presence as modifying.
         if scan.hasCommandSubstitution {
@@ -162,17 +187,33 @@ public enum ShellCommandClassifier {
     /// Returns a `.modifying` risk if the segment's effective command is
     /// dangerous, or `nil` if the segment looks read-only.
     private static func classifySegment(_ words: [String]) -> MCPSecurityGate.ActionRisk? {
-        var idx = 0
-        // Skip leading `VAR=value` environment assignments.
-        while idx < words.count, isAssignment(words[idx]) { idx += 1 }
-        guard idx < words.count else { return nil }
+        guard let commandToken = words.first else { return nil }
+        if isAssignment(commandToken) {
+            return .modifying(reason: "Execute command with environment assignment")
+        }
+        // Resolve the command to classify. A bare name (`ls`) or an absolute
+        // path (`/usr/bin/ls`, `/opt/homebrew/bin/ls`) is classified by its
+        // basename against the allow/deny lists below: the directory doesn't
+        // change whether a command *named* `ls` is read-only, and a remote host
+        // that has trojaned its own `/usr/bin/ls` is already fully compromised —
+        // beyond what a client-side gate can address. Requiring an absolute path
+        // under a fixed set of system directories (the previous approach) forced
+        // approval on essentially every AI-issued command — agents emit `ls`,
+        // `git status`, `cat …`, not `/usr/bin/ls` — and broke Homebrew, Nix,
+        // and `/usr/local/bin` layouts, defeating the "safe, no-prompt" tier and
+        // training users to approve reflexively. A *relative* path with a slash
+        // (`./x`, `../x`, `a/b`) targets a specific local file we can't identify
+        // by name, so it stays modifying.
+        if commandToken.contains("/") && !commandToken.hasPrefix("/") {
+            return .modifying(reason: "Execute command from a relative path '\(commandToken)'")
+        }
 
-        let firstCmd = basename(words[idx])
+        let firstCmd = basename(commandToken)
         if privileged.contains(firstCmd) {
             return .modifying(reason: "Execute privileged command '\(firstCmd)'")
         }
 
-        let rest = Array(words[(idx + 1)...])
+        let rest = Array(words.dropFirst())
 
         // A wrapper (env, xargs, timeout, nice, loop bodies, …) runs *another*
         // command. Wrapper argument shapes vary too much to parse precisely
@@ -188,7 +229,7 @@ public enum ShellCommandClassifier {
             if restContainsFindMutation(rest) {
                 return .modifying(reason: "Execute filesystem-mutating 'find'")
             }
-            return subcommandRisk(after: rest)
+            return .modifying(reason: "Execute wrapper command '\(firstCmd)' that is not provably read-only")
         }
 
         // Non-wrapper: the command is `firstCmd`; its arguments are data/paths,
@@ -200,7 +241,16 @@ public enum ShellCommandClassifier {
         if firstCmd == "find", restContainsFindMutation(rest) {
             return .modifying(reason: "Execute filesystem-mutating 'find'")
         }
-        return subcommandRisk(command: firstCmd, rest: rest)
+        if let subcommandRisk = subcommandRisk(command: firstCmd, rest: rest) {
+            return subcommandRisk
+        }
+        if let argumentRisk = argumentRisk(command: firstCmd, rest: rest) {
+            return argumentRisk
+        }
+        if firstCmd == "find" || readOnlyCommands.contains(firstCmd) {
+            return nil
+        }
+        return .modifying(reason: "Execute command '\(firstCmd)' that is not on the read-only allowlist")
     }
 
     /// Risk for a command identified purely by its (basename'd) name.
@@ -228,13 +278,53 @@ public enum ShellCommandClassifier {
 
     /// git/docker subcommand risk for an explicit command name + its args.
     private static func subcommandRisk(command: String, rest: [String]) -> MCPSecurityGate.ActionRisk? {
-        if command == "git", let sub = firstNonFlag(rest),
-           ["commit", "push", "merge", "rebase", "reset", "clean", "checkout", "am", "apply", "cherry-pick", "stash", "tag", "fetch", "pull"].contains(sub) {
-            return .modifying(reason: "Modify repository state via 'git \(sub)'")
+        if command == "git" {
+            guard let sub = firstNonFlag(rest),
+                  ["diff", "log", "show", "status"].contains(sub)
+            else {
+                return .modifying(reason: "Execute git operation that is not provably read-only")
+            }
+            if rest.contains(where: { $0 == "--output" || $0.hasPrefix("--output=") }) {
+                return .modifying(reason: "Execute git operation that writes an output file")
+            }
+            if rest.contains(where: { $0 == "--ext-diff" || $0 == "--textconv" }) {
+                return .modifying(reason: "Execute git operation that may invoke an external helper")
+            }
+            return nil
         }
-        if command == "docker" || command == "podman", let sub = firstNonFlag(rest),
-           ["run", "start", "stop", "restart", "rm", "rmi", "exec", "build", "push", "pull", "kill", "create", "cp", "commit", "load", "import"].contains(sub) {
-            return .modifying(reason: "Modify container state via '\(command) \(sub)'")
+        if command == "docker" || command == "podman" {
+            guard let sub = firstNonFlag(rest),
+                  ["diff", "events", "images", "info", "inspect", "logs", "ps", "stats", "top", "version"].contains(sub)
+            else {
+                return .modifying(reason: "Execute \(command) operation that is not provably read-only")
+            }
+            return nil
+        }
+        return nil
+    }
+
+    private static func argumentRisk(command: String, rest: [String]) -> MCPSecurityGate.ActionRisk? {
+        switch command {
+        case "date":
+            let safeFlags: Set<String> = ["-u", "--utc", "--universal", "--version", "--help", "-r", "-j"]
+            for argument in rest {
+                if argument.hasPrefix("+") || safeFlags.contains(argument) { continue }
+                return .modifying(reason: "Execute date operation that may change the system clock")
+            }
+        case "hostname":
+            let readOnlyFlags: Set<String> = [
+                "-f", "--fqdn", "-s", "--short", "-d", "--domain",
+                "-i", "--ip-address", "-I", "--all-ip-addresses",
+            ]
+            guard rest.allSatisfy({ readOnlyFlags.contains($0) }) else {
+                return .modifying(reason: "Execute hostname operation that may change the system hostname")
+            }
+        case "sort":
+            if rest.contains(where: { $0 == "-o" || $0 == "--output" || $0.hasPrefix("--output=") }) {
+                return .modifying(reason: "Execute sort operation that writes an output file")
+            }
+        default:
+            break
         }
         return nil
     }

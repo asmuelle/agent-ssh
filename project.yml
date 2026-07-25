@@ -18,6 +18,17 @@ options:
     # After project generation, copy the Rust library to a known location
     # that Xcode's linker can find without extra search paths.
 
+    # Restore the committed SwiftPM lockfile into the freshly generated
+    # project so builds resolve Sparkle / SwiftTerm / swift-argument-parser to
+    # the exact reviewed *revisions* (not just the tags, which are mutable and
+    # could be force-moved upstream — Sparkle is the auto-updater, so a hijacked
+    # tag would ship attacker code). The generated .xcodeproj is gitignored, so
+    # swiftpm/Package.resolved is the source of truth; update it deliberately
+    # after an intentional `xcodebuild -resolvePackageDependencies`.
+    mkdir -p Agent-Ssh.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+    cp swiftpm/Package.resolved \
+      Agent-Ssh.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -30,10 +41,10 @@ settings:
 packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
-    from: 1.0.0
+    exactVersion: 1.14.0
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    from: 2.9.1
+    exactVersion: 2.9.2
 
 targets:
   AgentSshApp:
@@ -175,10 +186,12 @@ targets:
         type: group
         createIntermediateGroups: true
       - path: Sources/AgentSshMacOS/AgentSshMacOS.swift
+      - path: Sources/AgentSshMacOS/FeatureFlags.swift
       - path: Sources/AgentSshMacOS/FileModels.swift
       - path: Sources/AgentSshMacOS/SharedJSONFileStore.swift
       - path: Sources/AgentSshMacOS/OperationalAuditStore.swift
       - path: Sources/AgentSshMacOS/NetworkPolishModels.swift
+      - path: Sources/AgentSshMacOS/PublicIPAddress.swift
       - path: Sources/AgentSshMacOS/ConnectionStore.swift
       - path: Sources/AgentSshMacOS/PlatformIntegrationModels.swift
       - path: Sources/AgentSshMacOS/WidgetSnapshots.swift
@@ -242,6 +255,7 @@ targets:
     scheme:
       testTargets:
         - AgentSshMobileTests
+      storeKitConfiguration: Tests/AgentSshMobileTests/Products.storekit
 
   AgentSshFileProvider:
     type: app-extension
@@ -412,7 +426,7 @@ targets:
           - group.com.agent-ssh.agent-ssh
     settings:
       base:
-        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
         INFOPLIST_FILE: AgentSshWidgets/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos.widgets
         PRODUCT_NAME: AgentSshWidgets
@@ -494,10 +508,11 @@ targets:
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/bindings
 
   # StoreKit product-config guard. A pure iOS logic test (no app host, no Rust
-  # link) that resolves every id in MobileEntitlementsStore.configuredProductIds
-  # against Products.storekit. Fails the build if an id is unsellable — the
-  # "empty paywall" failure mode. MobileEntitlementsStore.swift is compiled in
-  # directly so the ids under test are the same source of truth the app ships.
+  # link) that checks every id in MobileEntitlementsStore.configuredProductIds
+  # against Products.storekit and validates the local product metadata. Signed
+  # sandbox-device testing and App Store Connect saleability are separate
+  # release gates. MobileEntitlementsStore.swift is compiled in directly so the
+  # ids under test are the same source of truth the app ships.
   AgentSshMobileTests:
     type: bundle.unit-test
     platform: iOS
@@ -513,8 +528,6 @@ targets:
       # FFI-free health evaluator compiled directly into the logic-test target
       # so it exercises the exact source the app ships.
       - path: AgentSshMobile/MobileServerHealth.swift
-    dependencies:
-      - sdk: StoreKitTest.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile.tests

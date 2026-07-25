@@ -46,7 +46,7 @@ final class TerminalSessionManager {
             bufferManager: bufferManager
         )
         sessions[connectionId] = session
-        logger.info("Terminal session registered: \(connectionId, privacy: .public) gen=\(generation)")
+        logger.info("Terminal session registered: \(connectionId, privacy: .private(mask: .hash)) gen=\(generation)")
 
         // Drain any frames that arrived during the gap between
         // `rshell_pty_start` returning and SwiftUI materialising the
@@ -57,9 +57,9 @@ final class TerminalSessionManager {
         if let pending = pendingPayloads.removeValue(forKey: connectionId), !pending.isEmpty {
             let live = pending.filter { $0.generation == generation }
             if live.count != pending.count {
-                logger.info("Replaying \(live.count) of \(pending.count) buffered frames for \(connectionId, privacy: .public) (rest stale)")
+                logger.info("Replaying \(live.count) of \(pending.count) buffered frames for \(connectionId, privacy: .private(mask: .hash)) (rest stale)")
             } else {
-                logger.info("Replaying \(live.count) buffered frames for \(connectionId, privacy: .public)")
+                logger.info("Replaying \(live.count) buffered frames for \(connectionId, privacy: .private(mask: .hash))")
             }
             for frame in live {
                 bufferManager.append(frame.data)
@@ -75,7 +75,7 @@ final class TerminalSessionManager {
         // future session for the same connection id.
         pendingPayloads.removeValue(forKey: connectionId)
         shellIntegrationParsers.removeValue(forKey: connectionId)
-        logger.info("Terminal session unregistered: \(connectionId, privacy: .public)")
+        logger.info("Terminal session unregistered: \(connectionId, privacy: .private(mask: .hash))")
     }
 
     func session(for connectionId: String) -> Session? {
@@ -118,7 +118,7 @@ final class TerminalSessionManager {
         guard type == "pty_output" else { return }
 
         guard let frame = PtyPayloadDecoder.decode(payload) else {
-            logger.error("Failed to decode pty_output payload (\(payload.prefix(60), privacy: .public)…)")
+            logger.error("Failed to decode pty_output payload (\(payload.prefix(60), privacy: .private(mask: .hash))…) ")
             return
         }
 
@@ -128,7 +128,7 @@ final class TerminalSessionManager {
             // Equal generation = current session; lower = leftover from
             // before the most recent rshell_pty_start.
             guard frame.generation == session.ptyGeneration else {
-                logger.debug("Dropping stale PTY frame for \(connectionId, privacy: .public): gen \(frame.generation) vs current \(session.ptyGeneration)")
+                logger.debug("Dropping stale PTY frame for \(connectionId, privacy: .private(mask: .hash)): gen \(frame.generation) vs current \(session.ptyGeneration)")
                 return
             }
             handleShellIntegrationCommands(in: frame.data, connectionId: connectionId)
@@ -145,7 +145,7 @@ final class TerminalSessionManager {
                 queue.append(frame)
                 pendingPayloads[connectionId] = queue
             } else {
-                logger.warning("pendingPayloads cap reached for \(connectionId, privacy: .public); dropping early output")
+                logger.warning("pendingPayloads cap reached for \(connectionId, privacy: .private(mask: .hash)); dropping early output")
             }
         }
     }

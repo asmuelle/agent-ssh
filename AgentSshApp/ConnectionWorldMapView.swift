@@ -13,6 +13,7 @@ struct ConnectionWorldMapView: View {
     /// HTTP lookups every 60 s.
     var isActive: Bool = true
 
+    @AppStorage("privacy.allowExternalIPGeolocation") private var allowExternalIPGeolocation = false
     @State private var snapshot = RemoteIPMapSnapshot.empty
     @State private var isLoading = false
     @State private var lastError: String?
@@ -94,6 +95,23 @@ struct ConnectionWorldMapView: View {
                 }
             }
 
+            if !allowExternalIPGeolocation {
+                Text("Connection Map sends public source IP addresses to ipwho.is for approximate locations. No lookup occurs until you opt in.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Button("Allow IP Geolocation") {
+                    allowExternalIPGeolocation = true
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button("Disable IP Geolocation") {
+                    allowExternalIPGeolocation = false
+                    snapshot = .empty
+                    lastError = nil
+                }
+                .buttonStyle(.borderless)
+            }
+
             WorldMapCanvas(points: snapshot.points)
                 .frame(height: 132)
                 .help("Public IP geolocation is approximate.")
@@ -131,8 +149,8 @@ struct ConnectionWorldMapView: View {
         )
         // Re-key on `isActive` so the loop starts when the tab becomes visible
         // and tears down when it's hidden.
-        .task(id: "\(connectionId):\(isActive)") {
-            guard isActive else { return }
+        .task(id: "\(connectionId):\(isActive):\(allowExternalIPGeolocation)") {
+            guard isActive, allowExternalIPGeolocation else { return }
             await pollLoop()
         }
     }
@@ -195,6 +213,7 @@ struct ConnectionWorldMapView: View {
         banned: [String]
     ) -> (visible: [String], truncated: Int) {
         let all = RemoteIPParser.unique(connected + banned)
+            .filter(PublicIPAddress.isEligibleForExternalGeolocation)
         let visible = Array(all.prefix(maxGeolocatedIPs))
         return (visible, max(0, all.count - visible.count))
     }

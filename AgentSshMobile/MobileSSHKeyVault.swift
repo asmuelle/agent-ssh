@@ -1,6 +1,9 @@
 import CryptoKit
 import Foundation
 import Security
+import os
+
+private let mobileKeyVaultLogger = Logger(subsystem: "com.agent-ssh.mobile", category: "SSHKeyVault")
 
 struct MobileSSHKeyMetadata: Equatable {
     let id: String
@@ -18,6 +21,7 @@ enum MobileSSHKeyVaultError: LocalizedError {
     case keychainUnavailable(OSStatus)
     case encryptionFailed
     case decryptionFailed
+    case identityNameRequired
 
     var errorDescription: String? {
         switch self {
@@ -35,6 +39,8 @@ enum MobileSSHKeyVaultError: LocalizedError {
             return "The SSH key could not be encrypted for the app key vault."
         case .decryptionFailed:
             return "The SSH key could not be decrypted from the app key vault."
+        case .identityNameRequired:
+            return "Give the identity a name so you can tell it apart from your other keys."
         }
     }
 }
@@ -47,6 +53,29 @@ private struct MobileSSHKeyVaultRecord: Codable {
     let publicKey: String?
     let fingerprint: String?
     let encryptedKey: Data
+    /// User-chosen name when this record is a *shared identity* — a key meant
+    /// to be reused across connections. Nil for the legacy per-connection keys
+    /// generated inside the editor and reaped once unreferenced, so records
+    /// written by earlier builds decode unchanged.
+    var identityName: String?
+}
+
+/// A named keypair that any number of connections can share, as opposed to the
+/// per-connection keys the editor generates and garbage-collects.
+struct MobileSSHIdentity: Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let publicKey: String?
+    let fingerprint: String?
+    let source: String
+    let createdAt: Date
+
+    /// How a connection profile points at this identity's key material. Both
+    /// vault cases materialize identically at connect time; the distinction
+    /// only keeps `isGenerated` (and the vault's stats) truthful.
+    var reference: MobileSSHKeyReference {
+        source == "Imported" ? .vaultKey(id: id) : .generatedVaultKey(id: id)
+    }
 }
 
 final class MobileSSHKeyVault {
@@ -59,7 +88,20 @@ final class MobileSSHKeyVault {
 
     private init() {}
 
-    func importKey(from sourceURL: URL) throws -> MobileSSHKeyReference {
+    /// Read and validate a private key file, resolving the security-scoped
+    /// access the document picker hands us. Shared by the per-connection import
+    /// and the named-identity import.
+    /// The comment baked into an identity's key material, so the line is
+    /// recognizable in `authorized_keys` without leaking the device name.
+    private static func keyComment(for name: String) -> String {
+        let slug = name
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        return "agent-ssh-\(slug.isEmpty ? "identity" : slug)"
+    }
+
+    private func readPrivateKeyFile(at sourceURL: URL) throws -> Data {
         let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
         defer {
             if didStartAccess {
@@ -80,7 +122,11 @@ final class MobileSSHKeyVault {
         guard let text = String(data: keyData, encoding: .utf8), Self.looksLikePrivateKey(text) else {
             throw MobileSSHKeyVaultError.unsupportedFormat
         }
+        return keyData
+    }
 
+    func importKey(from sourceURL: URL) throws -> MobileSSHKeyReference {
+        let keyData = try readPrivateKeyFile(at: sourceURL)
         let publicKey = Self.readAdjacentPublicKey(for: sourceURL)
         let id = UUID().uuidString
         try writeRecord(
@@ -114,6 +160,120 @@ final class MobileSSHKeyVault {
             publicKey: publicKey
         )
         return (.generatedVaultKey(id: id), publicKey, fingerprint)
+    }
+
+    // MARK: - Shared identities
+
+    /// Every named identity in the vault, newest last. Per-connection keys are
+    /// deliberately excluded — they carry auto-derived labels and are reaped
+    /// when unreferenced, so offering them for reuse would be a trap.
+    func listIdentities() -> [MobileSSHIdentity] {
+        let dir = vaultDirectory()
+        guard let names = try? fileManager.contentsOfDirectory(atPath: dir.path) else { return [] }
+        return names
+            .filter { $0.hasSuffix(".msshkey") }
+            .compactMap { try? readRecord(id: String($0.dropLast(".msshkey".count))) }
+            .compactMap { record in
+                guard let identityName = record.identityName else { return nil }
+                return MobileSSHIdentity(
+                    id: record.id,
+                    name: identityName,
+                    publicKey: record.publicKey,
+                    fingerprint: record.fingerprint,
+                    source: record.source,
+                    createdAt: record.createdAt
+                )
+            }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    func identity(id: String?) -> MobileSSHIdentity? {
+        guard let id else { return nil }
+        return listIdentities().first { $0.id == id }
+    }
+
+    /// The identity a profile's key reference points at, if any.
+    func identity(for reference: MobileSSHKeyReference?) -> MobileSSHIdentity? {
+        guard let reference, let vaultId = reference.vaultId else { return nil }
+        return identity(id: vaultId)
+    }
+
+    /// Generate a new named keypair on the device.
+    @discardableResult
+    func createIdentity(name: String) throws -> MobileSSHIdentity {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw MobileSSHKeyVaultError.identityNameRequired }
+
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let publicBytes = privateKey.publicKey.rawRepresentation
+        let privateBytes = privateKey.rawRepresentation + publicBytes
+        let comment = Self.keyComment(for: trimmed)
+        let publicKey = Self.openSSHPublicKey(publicBytes: publicBytes, comment: comment)
+        let privateKeyText = try Self.openSSHPrivateKey(
+            privateBytes: privateBytes,
+            publicBytes: publicBytes,
+            comment: comment
+        )
+
+        let id = UUID().uuidString
+        try writeRecord(
+            id: id,
+            label: trimmed,
+            source: "Generated",
+            privateKey: Data(privateKeyText.utf8),
+            publicKey: publicKey,
+            identityName: trimmed
+        )
+        return MobileSSHIdentity(
+            id: id,
+            name: trimmed,
+            publicKey: publicKey,
+            fingerprint: Self.fingerprint(publicKeyLine: publicKey),
+            source: "Generated",
+            createdAt: Date()
+        )
+    }
+
+    /// Adopt an existing private key file as a named identity.
+    @discardableResult
+    func importIdentity(name: String, from sourceURL: URL) throws -> MobileSSHIdentity {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw MobileSSHKeyVaultError.identityNameRequired }
+
+        let keyData = try readPrivateKeyFile(at: sourceURL)
+        let publicKey = Self.readAdjacentPublicKey(for: sourceURL)
+        let id = UUID().uuidString
+        try writeRecord(
+            id: id,
+            label: trimmed,
+            source: "Imported",
+            privateKey: keyData,
+            publicKey: publicKey,
+            identityName: trimmed
+        )
+        return MobileSSHIdentity(
+            id: id,
+            name: trimmed,
+            publicKey: publicKey,
+            fingerprint: Self.fingerprint(publicKeyLine: publicKey),
+            source: "Imported",
+            createdAt: Date()
+        )
+    }
+
+    func renameIdentity(id: String, to name: String) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw MobileSSHKeyVaultError.identityNameRequired }
+        var record = try readRecord(id: id)
+        guard record.identityName != nil else { throw MobileSSHKeyVaultError.keyNotFound }
+        record.identityName = trimmed
+        try writeRecord(record)
+    }
+
+    /// Explicitly delete an identity. `deleteKey(for:)` deliberately refuses to
+    /// touch identities, so this is the only path that removes one.
+    func deleteIdentity(id: String) {
+        try? fileManager.removeItem(at: recordURL(id: id))
     }
 
     func metadata(for reference: MobileSSHKeyReference?) -> MobileSSHKeyMetadata? {
@@ -160,12 +320,18 @@ final class MobileSSHKeyVault {
         return url
     }
 
+    /// Garbage-collect a per-connection key. Named identities are exempt: they
+    /// outlive any single connection by design, so the editor's pending-key
+    /// cleanup and the store's unreferenced-key sweep must not reap one just
+    /// because the connection that used it changed or was deleted. Removing an
+    /// identity is always deliberate, via `deleteIdentity(id:)`.
     func deleteKey(for reference: MobileSSHKeyReference?) {
         guard let reference else { return }
         switch reference {
         case .plainPath(let path):
             MobileSSHKeyImportStore.deleteImportedKey(at: path)
         case .vaultKey(let id), .generatedVaultKey(let id):
+            guard (try? readRecord(id: id))?.identityName == nil else { return }
             try? fileManager.removeItem(at: recordURL(id: id))
         case .advancedAuthIdentity:
             break
@@ -206,17 +372,25 @@ final class MobileSSHKeyVault {
         label: String,
         source: String,
         privateKey: Data,
-        publicKey: String?
+        publicKey: String?,
+        identityName: String? = nil
     ) throws {
-        let record = MobileSSHKeyVaultRecord(
-            id: id,
-            label: label,
-            source: source,
-            createdAt: Date(),
-            publicKey: publicKey,
-            fingerprint: Self.fingerprint(publicKeyLine: publicKey),
-            encryptedKey: try encrypt(privateKey)
+        try writeRecord(
+            MobileSSHKeyVaultRecord(
+                id: id,
+                label: label,
+                source: source,
+                createdAt: Date(),
+                publicKey: publicKey,
+                fingerprint: Self.fingerprint(publicKeyLine: publicKey),
+                encryptedKey: try encrypt(privateKey),
+                identityName: identityName
+            )
         )
+    }
+
+    private func writeRecord(_ record: MobileSSHKeyVaultRecord) throws {
+        let id = record.id
         let data = try JSONEncoder.midnightSSHMobile.encode(record)
         let url = recordURL(id: id)
         try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -262,6 +436,7 @@ final class MobileSSHKeyVault {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecSuccess, let data = item as? Data, data.count == 32 {
+            migrateAccessibilityIfNeeded()
             return data
         }
         if status != errSecItemNotFound {
@@ -286,6 +461,43 @@ final class MobileSSHKeyVault {
             throw MobileSSHKeyVaultError.keychainUnavailable(addStatus)
         }
         return bytes
+    }
+
+    /// Opportunistically tightens the master key's keychain accessibility to
+    /// `…WhenUnlockedThisDeviceOnly`. Strictly best-effort: a failure must never
+    /// propagate, because `masterKey()` has already read the key it needs and
+    /// letting the migration throw would make every stored SSH key unreadable —
+    /// a full lockout for existing users on upgrade.
+    private func migrateAccessibilityIfNeeded() {
+        let attributeQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var attributes: CFTypeRef?
+        let attributeStatus = SecItemCopyMatching(attributeQuery as CFDictionary, &attributes)
+        if attributeStatus == errSecSuccess,
+           let current = (attributes as? [String: Any])?[kSecAttrAccessible as String] as? String,
+           current == (kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String) {
+            return
+        }
+
+        let migrationQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+        ]
+        let migrationStatus = SecItemUpdate(
+            migrationQuery as CFDictionary,
+            [kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly] as CFDictionary
+        )
+        if migrationStatus != errSecSuccess {
+            mobileKeyVaultLogger.warning(
+                "SSH key master-key accessibility migration failed: \(migrationStatus, privacy: .public)"
+            )
+        }
     }
 
     private func recordURL(id: String) -> URL {

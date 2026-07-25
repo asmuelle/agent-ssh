@@ -129,7 +129,7 @@ graph LR
 ## Native User Experience
 
 1. **Shortcuts App Integration**: The custom intent appears as a modular block inside the native macOS/iOS Shortcuts canvas. Users can drag and drop it, easily configuring the target server via a native dropdown and selecting variables from previous actions.
-2. **Apple Intelligence Orchestration**: Because the parameter relies on system-wide assistant schemas, users don't even need to construct a visual shortcut block. They can ask Apple Intelligence in plain English: *"Run a comprehensive Midnight SSH diagnostic on my backup node and text the summary to Sarah."* The system-wide AI parses the parameters, invokes `DiagnoseServerParameterIntent` with the backup server entity, receives the text output, and routes it directly to the Messages app.
+2. **Apple Intelligence Orchestration**: Because the parameter relies on system-wide assistant schemas, users don't even need to construct a visual shortcut block. They can ask Apple Intelligence in plain English: *"Run a comprehensive agent-ssh diagnostic on my backup node and text the summary to Sarah."* The system-wide AI parses the parameters, invokes `DiagnoseServerParameterIntent` with the backup server entity, receives the text output, and routes it directly to the Messages app.
 
 ---
 

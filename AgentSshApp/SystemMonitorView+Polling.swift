@@ -181,6 +181,17 @@ extension SystemMonitorView {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .memory)
     }
 
+    /// Percentages and load averages use the same locale as `formatBytes`
+    /// (which is locale-aware via `ByteCountFormatter`), so the card doesn't mix
+    /// `5,16 GB` (comma) with `8.6%` (period). German shows `8,6%`, English `8.6%`.
+    func formatPercent(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(1))))%"
+    }
+
+    func formatLoad(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(2)))
+    }
+
     func formatUptime(_ seconds: UInt64) -> String {
         let days = seconds / 86_400
         let hours = (seconds % 86_400) / 3600

@@ -81,6 +81,7 @@ struct SystemMonitorView: View {
     @State var servicesExpanded = false
     @State var activityExpanded = false
     @State var portsExpanded = false
+    @State var showAllDisks = false
     @State var mapExpanded = false
     /// Distro / kernel / arch summary shown under the connection label.
     /// `nil` until the probe finishes; reset on `connectionId` change.
