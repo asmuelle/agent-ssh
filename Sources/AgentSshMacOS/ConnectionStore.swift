@@ -133,6 +133,9 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var lastConnected: Date?
     public var favorite: Bool
+    /// Connect this profile automatically at app launch (only when its
+    /// stored credentials allow a silent connect — never prompts).
+    public var autoConnect: Bool
     public var tags: [String]
     public var color: String?
     public var notes: String?
@@ -153,6 +156,7 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         createdAt: Date = Date(),
         lastConnected: Date? = nil,
         favorite: Bool = false,
+        autoConnect: Bool = false,
         tags: [String] = [],
         color: String? = nil,
         notes: String? = nil,
@@ -178,6 +182,7 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.lastConnected = lastConnected
         self.favorite = favorite
+        self.autoConnect = autoConnect
         self.tags = tags
         self.color = color
         self.notes = notes
@@ -192,7 +197,7 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
     // (no `kind` field) round-trip cleanly.
     private enum CodingKeys: String, CodingKey {
         case id, name, host, port, username, authMethod, kind, folderPath
-        case privateKeyPath, sshKeyReference, createdAt, lastConnected, favorite, tags, color, notes
+        case privateKeyPath, sshKeyReference, createdAt, lastConnected, favorite, autoConnect, tags, color, notes
         case networkOptions, monitoredSystemdServices
     }
 
@@ -217,6 +222,7 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.lastConnected = try c.decodeIfPresent(Date.self, forKey: .lastConnected)
         self.favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite) ?? false
+        self.autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.color = try c.decodeIfPresent(String.self, forKey: .color)
         self.notes = try c.decodeIfPresent(String.self, forKey: .notes)
@@ -239,6 +245,7 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         try c.encode(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(lastConnected, forKey: .lastConnected)
         try c.encode(favorite, forKey: .favorite)
+        try c.encode(autoConnect, forKey: .autoConnect)
         try c.encode(tags, forKey: .tags)
         try c.encodeIfPresent(color, forKey: .color)
         try c.encodeIfPresent(notes, forKey: .notes)
