@@ -1,4 +1,5 @@
 import Foundation
+import AgentSshMacOS
 
 struct MacConfigBackup {
     let originalPath: String
