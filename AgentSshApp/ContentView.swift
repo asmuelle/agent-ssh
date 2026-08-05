@@ -30,11 +30,12 @@ struct ContentView: View {
     @StateObject private var connectionStore = ConnectionStoreManager.shared
     @StateObject private var transfersStore = TransferQueueStore()
     @State private var selectedConnection: ConnectionProfile?
-    @State private var dashboardVisible = false
-    @State private var agentVisible = false
-    @State private var filesVisible = false
+    /// What the detail column's main pane shows. `.server` is the
+    /// default: the active workspace tab's terminal + files split.
+    @State private var workspaceMode = WorkspaceMode.server
     @State private var showingCommandPalette = false
     @State private var serverDoctorTarget: ServerDoctorTarget?
+    @State private var didRunAutoConnect = false
 
     var body: some View {
         HSplitView {
@@ -56,9 +57,7 @@ struct ContentView: View {
 
             DetailColumn(
                 layoutManager: layoutManager,
-                dashboardVisible: $dashboardVisible,
-                agentVisible: $agentVisible,
-                filesVisible: $filesVisible,
+                mode: $workspaceMode,
                 onDiagnose: { tab in
                     serverDoctorTarget = ServerDoctorTarget(tab: tab)
                 }
@@ -66,6 +65,9 @@ struct ContentView: View {
         }
         .environmentObject(transfersStore)
         .frame(minWidth: 900, minHeight: 600)
+        .task {
+            await runAutoConnect()
+        }
         .sheet(isPresented: $showingCommandPalette) {
             CommandPaletteView(
                 connections: connectionStore.connections,
@@ -85,10 +87,8 @@ struct ContentView: View {
                     tabsStore.closeActiveTab()
                 },
                 onOpenDashboard: {
-                    dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
-                    if dashboardVisible {
-                        agentVisible = false
-                        filesVisible = false
+                    if tabsStore.connectedSSHTabs.count >= 2 {
+                        workspaceMode = .dashboard
                     }
                 },
                 onToggleSidebar: {
@@ -119,10 +119,8 @@ struct ContentView: View {
             case .showCommandPalette:
                 showingCommandPalette = true
             case .showDashboard:
-                dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
-                if dashboardVisible {
-                    agentVisible = false
-                    filesVisible = false
+                if tabsStore.connectedSSHTabs.count >= 2 {
+                    workspaceMode = .dashboard
                 }
             default:
                 break
@@ -173,6 +171,32 @@ struct ContentView: View {
         }
     }
 
+    /// Connect every profile marked "Connect at launch" — once per app
+    /// run, and only profiles whose stored credentials allow a silent
+    /// connect, so startup never opens a wall of password prompts.
+    @MainActor
+    private func runAutoConnect() async {
+        guard !didRunAutoConnect else { return }
+        didRunAutoConnect = true
+
+        for profile in connectionStore.connections where profile.autoConnect {
+            guard canConnectSilently(profile) else { continue }
+            await tabsStore.openConnection(profile)
+        }
+    }
+
+    private func canConnectSilently(_ profile: ConnectionProfile) -> Bool {
+        switch profile.authMethod {
+        case .password:
+            return KeychainManager.shared.hasPassword(
+                kind: .sshPassword,
+                account: profile.keychainAccount
+            )
+        case .publicKey:
+            return profile.sshKeyReference != nil
+        }
+    }
+
     private func handleDeepLink(_ url: URL) {
         guard let link = AgentSshDeepLink(url) else { return }
 
@@ -183,10 +207,8 @@ struct ContentView: View {
             {
                 selectedConnection = profile
             }
-            dashboardVisible = tabsStore.connectedSSHTabs.count >= 2
-            if dashboardVisible {
-                agentVisible = false
-                filesVisible = false
+            if tabsStore.connectedSSHTabs.count >= 2 {
+                workspaceMode = .dashboard
             }
         case .server, .terminal, .folder:
             guard let profileId = link.profileId,
@@ -276,9 +298,7 @@ private struct SidebarColumn: View {
 
 private struct DetailColumn: View {
     @ObservedObject var layoutManager: LayoutManager
-    @Binding var dashboardVisible: Bool
-    @Binding var agentVisible: Bool
-    @Binding var filesVisible: Bool
+    @Binding var mode: WorkspaceMode
     var onDiagnose: ((TerminalTab) -> Void)? = nil
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @State private var inspectorWidthDebounce: Task<Void, Never>?
@@ -288,18 +308,18 @@ private struct DetailColumn: View {
     }
 
     private var dashboardShouldRender: Bool {
-        dashboardVisible && tabsStore.connectedSSHTabs.count >= 2
+        mode == .dashboard && tabsStore.connectedSSHTabs.count >= 2
     }
 
     private var agentShouldRender: Bool {
-        agentVisible && !tabsStore.tabs.isEmpty
+        mode == .agent && !tabsStore.tabs.isEmpty
     }
 
     /// Files view stays useful down to a single connected host (unlike
     /// the dashboard's 2-host minimum) — one full-width pane is still a
     /// better file workspace than nothing when the user asked for it.
     private var filesShouldRender: Bool {
-        filesVisible && connectedFileTabCount >= 1
+        mode == .files && connectedFileTabCount >= 1
     }
 
     private var connectedFileTabCount: Int {
@@ -321,11 +341,7 @@ private struct DetailColumn: View {
     var body: some View {
         VStack(spacing: 0) {
             if !tabsStore.tabs.isEmpty {
-                ConnectionWorkspaceStrip(
-                    dashboardVisible: $dashboardVisible,
-                    agentVisible: $agentVisible,
-                    filesVisible: $filesVisible
-                )
+                ConnectionWorkspaceStrip(mode: $mode)
                 Divider()
             }
 
@@ -334,7 +350,7 @@ private struct DetailColumn: View {
                     onDiagnose: onDiagnose,
                     onOpenHost: { tabId in
                         tabsStore.setActive(tabId)
-                        agentVisible = false
+                        mode = .server
                     }
                 )
                 .frame(minWidth: 320, minHeight: 320)
@@ -342,8 +358,13 @@ private struct DetailColumn: View {
                 FilesPanel()
                     .frame(minWidth: 320, minHeight: 320)
             } else if dashboardShouldRender {
-                DashboardPanel()
-                    .frame(minWidth: 320, minHeight: 320)
+                DashboardPanel(
+                    onActivateHost: { tabId in
+                        tabsStore.setActive(tabId)
+                        mode = .server
+                    }
+                )
+                .frame(minWidth: 320, minHeight: 320)
             } else {
                 HSplitView {
                     MainPanel()
@@ -379,19 +400,22 @@ private struct DetailColumn: View {
             AgentTriageStore.shared.syncTabs(tabsStore.tabs)
         }
         .onPreferenceChange(InspectorWidthKey.self, perform: persistInspectorWidth)
+        // When a mode's precondition disappears, fall back to the
+        // server workspace instead of leaving a lit segment with a
+        // dead pane behind it.
         .onChange(of: connectedSSHTabIds) { ids in
-            if ids.count < 2 {
-                dashboardVisible = false
+            if ids.count < 2, mode == .dashboard {
+                mode = .server
             }
         }
         .onChange(of: tabsStore.tabs.isEmpty) { isEmpty in
-            if isEmpty {
-                agentVisible = false
+            if isEmpty, mode == .agent {
+                mode = .server
             }
         }
         .onChange(of: connectedFileTabCount) { count in
-            if count < 1 {
-                filesVisible = false
+            if count < 1, mode == .files {
+                mode = .server
             }
         }
     }

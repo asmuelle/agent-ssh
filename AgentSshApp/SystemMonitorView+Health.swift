@@ -12,7 +12,8 @@ extension SystemMonitorView {
             error: error,
             unsupportedOs: unsupportedOs,
             ufwSummary: ufwSummary,
-            connectionStatus: connectionStatus
+            connectionStatus: connectionStatus,
+            hygiene: hygiene
         )
     }
 
@@ -21,7 +22,8 @@ extension SystemMonitorView {
         error: String?,
         unsupportedOs: String?,
         ufwSummary: UFWProtectionSummary,
-        connectionStatus: TerminalConnectionStatus?
+        connectionStatus: TerminalConnectionStatus?,
+        hygiene: HygieneSnapshot? = nil
     ) -> [DashboardHealthIssue] {
         var issues: [DashboardHealthIssue] = []
 
@@ -130,12 +132,62 @@ extension SystemMonitorView {
             }
         }
 
+        if let hygiene {
+            if !hygiene.failedUnits.isEmpty {
+                let count = hygiene.failedUnits.count
+                issues.append(DashboardHealthIssue(
+                    id: "services-failed",
+                    title: "\(connectionLabel): Services",
+                    detail: "\(count) failed · \(hygiene.failedUnits.prefix(3).joined(separator: ", "))",
+                    icon: "gearshape.2",
+                    severity: .warning
+                ))
+            }
+            if !hygiene.dockerProblems.isEmpty {
+                let count = hygiene.dockerProblems.count
+                issues.append(DashboardHealthIssue(
+                    id: "docker",
+                    title: "\(connectionLabel): Docker",
+                    detail: "\(count) container\(count == 1 ? "" : "s") · \(hygiene.dockerProblems.prefix(2).joined(separator: ", "))",
+                    icon: "shippingbox",
+                    severity: .warning
+                ))
+            }
+            if hygiene.journalErrors >= Self.journalErrorThreshold {
+                issues.append(DashboardHealthIssue(
+                    id: "journal",
+                    title: "\(connectionLabel): Journal",
+                    detail: "\(hygiene.journalErrors) errors / 15 min",
+                    icon: "exclamationmark.bubble",
+                    severity: .warning
+                ))
+            }
+        }
+
         return issues.sorted {
             if $0.severity.rawValue != $1.severity.rawValue {
                 return $0.severity.rawValue > $1.severity.rawValue
             }
+            let lhsFamily = Self.issueFamilyPriority($0.id)
+            let rhsFamily = Self.issueFamilyPriority($1.id)
+            if lhsFamily != rhsFamily {
+                return lhsFamily < rhsFamily
+            }
             return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
+    }
+
+    /// Which family wins a chip slot when severities tie: connection
+    /// problems before down services, before containers, before
+    /// firewall exposure, before resource pressure, before log noise.
+    static func issueFamilyPriority(_ id: String) -> Int {
+        if id.hasPrefix("status:") { return 0 }
+        if id == "services-failed" { return 1 }
+        if id == "docker" { return 2 }
+        if id.hasPrefix("ufw") { return 3 }
+        if id == "cpu" || id == "memory" || id.hasPrefix("disk:") { return 4 }
+        if id == "journal" { return 5 }
+        return 6
     }
 
     func publishDashboardHealthSnapshot() {
@@ -143,8 +195,34 @@ extension SystemMonitorView {
         onDashboardHealthChange(DashboardHealthSnapshot(
             id: dashboardIdentity ?? connectionId ?? connectionLabel,
             hostName: connectionLabel,
-            issues: currentDashboardHealthIssues
+            issues: currentDashboardHealthIssues,
+            metrics: stats.map(dashboardHostMetrics)
         ))
+    }
+
+    func dashboardHostMetrics(_ stats: FfiSystemStats) -> DashboardHostMetrics {
+        let memoryPercent = stats.memoryTotal > 0
+            ? Double(stats.memoryUsed) / Double(stats.memoryTotal) * 100
+            : 0
+        let worstDisk = stats.disks
+            .compactMap { disk -> (String, Double)? in
+                guard disk.total > 0 else { return nil }
+                return (disk.mount, Double(disk.used) / Double(disk.total))
+            }
+            .max { $0.1 < $1.1 }
+        return DashboardHostMetrics(
+            cpuPercent: stats.cpuPercent,
+            memoryPercent: memoryPercent,
+            memoryUsed: stats.memoryUsed,
+            memoryTotal: stats.memoryTotal,
+            swapUsed: stats.swapUsed,
+            swapTotal: stats.swapTotal,
+            worstDiskFraction: worstDisk?.1,
+            worstDiskMount: worstDisk?.0,
+            loadAverage1m: stats.loadAverage1m,
+            uptimeSeconds: stats.uptimeSeconds,
+            disks: stats.disks
+        )
     }
 
 }
