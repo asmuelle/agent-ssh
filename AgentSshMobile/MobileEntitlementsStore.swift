@@ -130,8 +130,26 @@ final class MobileEntitlementsStore: ObservableObject {
             }
         }
 
-        isPro = proUnlocked
+        isPro = proUnlocked || Self.debugProOverride
     }
+
+    #if DEBUG
+    /// Debug-only Pro override so simulator and device test builds can
+    /// exercise Pro-gated flows (e.g. >3 saved hosts) without a
+    /// StoreKit purchase. Compiled out of release builds entirely.
+    static var debugProOverride: Bool {
+        UserDefaults.standard.bool(forKey: debugProOverrideKey)
+    }
+
+    private static let debugProOverrideKey = "debug.forcePro"
+
+    func setDebugProOverride(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.debugProOverrideKey)
+        Task { await refreshEntitlements() }
+    }
+    #else
+    static let debugProOverride = false
+    #endif
 
     private func listenForTransactionUpdates() -> Task<Void, Never> {
         Task { [weak self] in
@@ -219,6 +237,9 @@ struct MobileProUpgradeView: View {
                     header
                     featureList
                     purchaseControls
+                    #if DEBUG
+                    debugControls
+                    #endif
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -236,6 +257,24 @@ struct MobileProUpgradeView: View {
             }
         }
     }
+
+    #if DEBUG
+    /// Debug builds only: unlock Pro locally to test gated flows
+    /// (e.g. more than three saved hosts) without a purchase.
+    private var debugControls: some View {
+        Toggle(
+            "Debug: force Pro entitlement",
+            isOn: Binding(
+                get: { MobileEntitlementsStore.debugProOverride },
+                set: { entitlementsStore.setDebugProOverride($0) }
+            )
+        )
+        .font(.callout)
+        .padding()
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+    #endif
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {

@@ -242,6 +242,9 @@ targets:
     scheme:
       testTargets:
         - AgentSshMobileTests
+      # Local StoreKit catalog so simulator/dev builds can actually
+      # purchase Pro (App Store Connect products don't load there).
+      storeKitConfiguration: StoreKit/AgentSshMobileStore.storekit
 
   AgentSshFileProvider:
     type: app-extension

@@ -50,7 +50,8 @@ final class MobileKeychainManager: ObservableObject {
 
         let query = baseQuery(kind: kind, account: account)
         let update: [String: Any] = [
-            kSecValueData as String: data
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
         let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
         if updateStatus == errSecSuccess {

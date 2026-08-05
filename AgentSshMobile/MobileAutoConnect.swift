@@ -84,6 +84,9 @@ enum MobileAutoConnectCoordinator {
         connectionStore: MobileConnectionStore
     ) async -> Int {
         let eligible = profiles.filter { profile in
+            // Per-profile opt-out: only profiles marked "Connect on
+            // launch" participate in startup auto-connect.
+            guard profile.autoConnect else { return false }
             guard MobileCredentialResolver.canAutoConnect(
                 profile: profile,
                 keychainManager: keychainManager

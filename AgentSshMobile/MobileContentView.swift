@@ -307,16 +307,28 @@ struct MobileContentView: View {
         }
     }
 
+    /// One segmented switcher shared by both landing surfaces — the
+    /// same control in the same place on both, mirroring the macOS
+    /// workspace mode switcher, instead of asymmetric one-way buttons.
+    private var landingModeSwitcher: some View {
+        Picker("View", selection: Binding(
+            get: { landingMode ?? .connections },
+            set: { newMode in
+                compactPath = NavigationPath()
+                landingMode = newMode
+            }
+        )) {
+            Text("Dashboard").tag(LandingMode.dashboard)
+            Text("Connections").tag(LandingMode.connections)
+        }
+        .pickerStyle(.segmented)
+        .fixedSize()
+    }
+
     @ToolbarContentBuilder
     private var dashboardToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                compactPath = NavigationPath()
-                landingMode = .connections
-            } label: {
-                Label("Connections", systemImage: "list.bullet")
-            }
-            .accessibilityLabel("Show connections")
+        ToolbarItem(placement: .principal) {
+            landingModeSwitcher
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -356,7 +368,7 @@ struct MobileContentView: View {
         }
 
         let hasAutoConnectable = connectionStore.connections.contains { profile in
-            MobileCredentialResolver.canAutoConnect(
+            profile.autoConnect && MobileCredentialResolver.canAutoConnect(
                 profile: profile,
                 keychainManager: keychainManager
             )
@@ -521,15 +533,11 @@ struct MobileContentView: View {
             .accessibilityLabel("More actions")
         }
 
+        // The switcher only appears once there's something to switch
+        // to — with no connected server the dashboard would be empty.
         if hasConnectedServer {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    compactPath = NavigationPath()
-                    landingMode = .dashboard
-                } label: {
-                    Image(systemName: "square.grid.2x2")
-                }
-                .accessibilityLabel("Show dashboard")
+            ToolbarItem(placement: .principal) {
+                landingModeSwitcher
             }
         }
 

@@ -6,6 +6,8 @@ struct MobileServerDashboardView: View {
     let profileName: String
     let sshPort: UInt16
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     @State private var stats: FfiSystemStats?
     @State private var processes: [FfiProcess] = []
     @State private var ufwSummary = MobileUFWProtectionSummary.loading
@@ -175,28 +177,45 @@ struct MobileServerDashboardView: View {
                 Text("No process sample available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } else if horizontalSizeClass == .compact {
+                // iPhone: the two lists side by side truncate every
+                // command name — stack them instead.
+                VStack(alignment: .leading, spacing: 12) {
+                    processColumn(title: "By CPU", processes: topProcessesByCPU) {
+                        (String(format: "%.1f%%", $0.cpuPercent), loadColor($0.cpuPercent))
+                    }
+                    processColumn(title: "By Memory", processes: topProcessesByMemory) {
+                        (String(format: "%.1f%%", $0.memoryPercent), loadColor($0.memoryPercent))
+                    }
+                }
             } else {
                 HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("By CPU")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ForEach(topProcessesByCPU, id: \.pid) { process in
-                            processRow(process, metricText: String(format: "%.1f%%", process.cpuPercent), color: loadColor(process.cpuPercent))
-                        }
+                    processColumn(title: "By CPU", processes: topProcessesByCPU) {
+                        (String(format: "%.1f%%", $0.cpuPercent), loadColor($0.cpuPercent))
                     }
                     .frame(maxWidth: .infinity)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("By Memory")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ForEach(topProcessesByMemory, id: \.pid) { process in
-                            processRow(process, metricText: String(format: "%.1f%%", process.memoryPercent), color: loadColor(process.memoryPercent))
-                        }
+                    processColumn(title: "By Memory", processes: topProcessesByMemory) {
+                        (String(format: "%.1f%%", $0.memoryPercent), loadColor($0.memoryPercent))
                     }
                     .frame(maxWidth: .infinity)
                 }
+            }
+        }
+    }
+
+    private func processColumn(
+        title: String,
+        processes: [FfiProcess],
+        metric: @escaping (FfiProcess) -> (text: String, color: Color)
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(processes, id: \.pid) { process in
+                let value = metric(process)
+                processRow(process, metricText: value.text, color: value.color)
             }
         }
     }
@@ -413,10 +432,13 @@ struct MobileServerDashboardView: View {
         return Double(disk.used) / Double(disk.total) * 100
     }
 
+    /// Color is reserved for the exceptional: healthy values render in
+    /// the default text color (matching the fleet overview) so the one
+    /// hot metric is the only loud one.
     private func loadColor(_ percent: Double) -> Color {
         if percent >= 90 { return .red }
         if percent >= 75 { return .orange }
-        return .green
+        return .primary
     }
 }
 
