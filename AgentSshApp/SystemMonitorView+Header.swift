@@ -23,21 +23,32 @@ extension SystemMonitorView {
                     dashboardIssueBadges
                 }
                 Spacer()
-                if stats != nil {
+                // Dashboard mode: the refresh timestamp lives once in
+                // the dashboard toolbar instead of on every card.
+                if !dashboardMode, stats != nil {
                     Text("Updated \(Date().formatted(.dateTime.hour().minute().second()))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
             }
-            if dashboardMode, let endpointLine {
-                Text(endpointLine)
-                    .font(MidnightMacDesign.FontToken.metadataMono)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(endpointLine)
-            }
-            if let osInfo {
+            if dashboardMode {
+                // Always render all three meta lines (with blank
+                // placeholders while values resolve) so every card's
+                // header has the same height and the CPU/Memory/Disk
+                // rows line up across the grid.
+                dashboardMetaLine(
+                    endpointLine,
+                    font: MidnightMacDesign.FontToken.metadataMono,
+                    tint: .secondary
+                )
+                dashboardMetaLine(osInfo, font: .caption, tint: .secondary)
+                dashboardMetaLine(
+                    resolvedIPLine.map { "IP \($0)" },
+                    font: MidnightMacDesign.FontToken.metadataMono,
+                    tint: .tertiary,
+                    help: resolvedIPAddresses.joined(separator: ", ")
+                )
+            } else if let osInfo {
                 Text(osInfo)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -45,17 +56,26 @@ extension SystemMonitorView {
                     .truncationMode(.tail)
                     .help(osInfo)
             }
-            if dashboardMode, let resolvedIPLine {
-                Text("IP \(resolvedIPLine)")
-                    .font(MidnightMacDesign.FontToken.metadataMono)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(resolvedIPAddresses.joined(separator: ", "))
-            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// One fixed-height metadata line in the dashboard card header.
+    /// Renders a non-empty placeholder when the value hasn't resolved
+    /// yet so the header never changes height.
+    func dashboardMetaLine(
+        _ text: String?,
+        font: Font,
+        tint: HierarchicalShapeStyle,
+        help: String? = nil
+    ) -> some View {
+        Text(text ?? " ")
+            .font(font)
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .help(help ?? text ?? "")
     }
 
     var endpointLine: String? {

@@ -24,9 +24,7 @@ struct SidebarPanel: View {
 /// the selected tab together.
 struct ConnectionWorkspaceStrip: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
-    @Binding var dashboardVisible: Bool
-    @Binding var agentVisible: Bool
-    @Binding var filesVisible: Bool
+    @Binding var mode: WorkspaceMode
     @ObservedObject private var triage = AgentTriageStore.shared
 
     private var connectedSSHTabs: [TerminalTab] {
@@ -66,40 +64,18 @@ struct ConnectionWorkspaceStrip: View {
             statuses: Dictionary(
                 uniqueKeysWithValues: tabsStore.tabs.map { ($0.id, $0.status) }
             ),
-            showsDashboardButton: connectedSSHTabs.count >= 2,
-            dashboardVisible: dashboardVisible,
-            onToggleDashboard: {
-                dashboardVisible.toggle()
-                if dashboardVisible {
-                    agentVisible = false
-                    filesVisible = false
-                }
-            },
-            showsAgentButton: !tabsStore.tabs.isEmpty,
-            agentVisible: agentVisible,
-            agentIssueCount: triage.confirmedCount,
-            onToggleAgent: {
-                agentVisible.toggle()
-                if agentVisible {
-                    dashboardVisible = false
-                    filesVisible = false
-                }
-            },
-            showsFilesButton: connectedFileTabCount >= 1,
-            filesVisible: filesVisible,
-            onToggleFiles: {
-                filesVisible.toggle()
-                if filesVisible {
-                    dashboardVisible = false
-                    agentVisible = false
-                }
-            }
+            mode: $mode,
+            // In server mode the segment is a status ("you are on
+            // ud-orbit"); in every other mode it's a destination, and
+            // a host name would misread as a link to that one server.
+            serverSegmentTitle: mode == .server
+                ? (tabsStore.activeTab?.profile.name ?? "Details")
+                : "Details",
+            dashboardAvailable: connectedSSHTabs.count >= 2,
+            agentAvailable: !tabsStore.tabs.isEmpty,
+            filesAvailable: connectedFileTabCount >= 1,
+            agentIssueCount: triage.confirmedCount
         )
-        .onChange(of: connectedSSHTabs.map(\.id)) { ids in
-            if ids.count < 2 {
-                dashboardVisible = false
-            }
-        }
     }
 }
 
@@ -366,21 +342,48 @@ struct InspectorPanel: View {
 /// same view used by the right inspector panel, with polling enabled for
 /// every visible host.
 struct DashboardPanel: View {
+    /// Invoked when the user picks a host from the dashboard (row
+    /// double-click, context menu, "Open" on a saved card). The parent
+    /// switches the workspace to server mode with that tab active —
+    /// without this the activation would happen invisibly behind the
+    /// dashboard.
+    var onActivateHost: ((UUID) -> Void)? = nil
+
     @EnvironmentObject var tabsStore: TerminalTabsStore
-    @ObservedObject private var activityLog = ActivityLogStore.shared
     @ObservedObject private var connectionStore = ConnectionStoreManager.shared
-    @State private var sort = DashboardSort.order
+    @State private var sort = DashboardSort.attention
+    @State private var lastStatsUpdate: Date?
+    /// The row whose detail band (full monitor card) is open.
+    @State private var expandedTabId: UUID?
+    /// Remediation sheet opened from a row's chip or gauge.
+    @State private var rowSheet: FleetRowSheet?
     @State private var resolvedIPAddresses: [String: [String]] = [:]
     @State private var healthSnapshots: [String: DashboardHealthSnapshot] = [:]
     @State private var fleetHealthRecords: [String: FleetHostHealthRecord] = [:]
     @State private var showingFleetRunbook = false
     @State private var showingStackAudit = false
     private let fleetHealthStore = FleetHostHealthStore()
-    private static let problemVisibilityDuration: TimeInterval = 10
+    /// Hotness quantization step: peak-metric ties are bucketed to 5%
+    /// so rows don't reshuffle on every 3-second poll tick.
+    private static let hotnessStep = 0.05
 
     private var tabs: [TerminalTab] {
         let tabs = tabsStore.connectedSSHTabs
         switch sort {
+        case .attention:
+            return tabs.sorted {
+                let lhsSeverity = fleetSeverity(for: $0)
+                let rhsSeverity = fleetSeverity(for: $1)
+                if lhsSeverity != rhsSeverity {
+                    return lhsSeverity.rawValue < rhsSeverity.rawValue
+                }
+                let lhsHotness = fleetHotness(for: $0)
+                let rhsHotness = fleetHotness(for: $1)
+                if lhsHotness != rhsHotness {
+                    return lhsHotness > rhsHotness
+                }
+                return $0.profile.name.localizedCaseInsensitiveCompare($1.profile.name) == .orderedAscending
+            }
         case .order:
             return tabs
         case .name:
@@ -396,10 +399,16 @@ struct DashboardPanel: View {
         }
     }
 
+    private var unconnectedProfiles: [ConnectionProfile] {
+        savedProfiles.filter { profile in
+            !tabs.contains { $0.profile.id == profile.id }
+        }
+    }
+
     private var savedProfiles: [ConnectionProfile] {
         let profiles = connectionStore.connections
         switch sort {
-        case .order:
+        case .order, .attention:
             return profiles
         case .name:
             return profiles.sorted {
@@ -429,12 +438,13 @@ struct DashboardPanel: View {
             VStack(spacing: 0) {
                 dashboardToolbar
                 Divider()
-                TimelineView(.periodic(from: Date(), by: 1)) { context in
-                    problemStrip(now: context.date)
+                // Connected hosts already have a live row below — the
+                // inventory strip only lists what still needs a
+                // connection.
+                if !unconnectedProfiles.isEmpty {
+                    savedHostInventory
+                    Divider()
                 }
-                Divider()
-                savedHostInventory
-                Divider()
 
                 connectedMonitorArea
             }
@@ -449,12 +459,37 @@ struct DashboardPanel: View {
             }
             .onChange(of: tabs.map(\.id)) { _ in
                 pruneDashboardHealthSnapshots()
+                if let expandedTabId, !tabs.contains(where: { $0.id == expandedTabId }) {
+                    self.expandedTabId = nil
+                }
             }
             .sheet(isPresented: $showingFleetRunbook) {
                 FleetRunbookSheet(tabs: tabs)
             }
             .sheet(isPresented: $showingStackAudit) {
                 FleetStackAuditSheet(tabs: tabs)
+            }
+            .sheet(item: $rowSheet) { sheet in
+                switch sheet {
+                case .drill(let connectionId, let sshPort, let target):
+                    MonitorDrillDownSheet(
+                        connectionId: connectionId,
+                        drillDown: target,
+                        sshPort: sshPort
+                    )
+                case .service(let kind, let connectionId, let profileId, let label):
+                    ServiceModalSheet(
+                        kind: kind,
+                        connectionId: connectionId,
+                        profileId: profileId,
+                        connectionLabel: label
+                    )
+                case .journal(let connectionId, let label):
+                    FleetJournalSheet(
+                        connectionId: connectionId,
+                        connectionLabel: label
+                    )
+                }
             }
         }
     }
@@ -472,57 +507,421 @@ struct DashboardPanel: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            GeometryReader { proxy in
-                    let spacing: CGFloat = 12
-                    let horizontalPadding: CGFloat = 24
-                    let totalSpacing = spacing * CGFloat(max(tabs.count - 1, 0))
-                    let columnWidth = max(
-                        LayoutConstants.minInspectorWidth,
-                        (proxy.size.width - horizontalPadding - totalSpacing) / CGFloat(max(tabs.count, 1))
-                    )
-
-                    ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: spacing) {
-                            ForEach(tabs, id: \.id) { tab in
-                                SystemMonitorView(
-                                    connectionId: tab.connectionId,
-                                    connectionLabel: tab.profile.name,
-                                    profileId: tab.profile.id,
-                                    sshPort: tab.profile.port,
-                                    profile: tab.profile,
-                                    connectionStatus: tab.status,
-                                    isActive: true,
-                                    dashboardMode: true,
-                                    dashboardIdentity: dashboardSnapshotKey(for: tab),
-                                    resolvedIPAddresses: dashboardIPAddresses(for: tab.profile) ?? [],
-                                    onDashboardHealthChange: { snapshot in
-                                        recordDashboardHealthSnapshot(snapshot, profile: tab.profile)
-                                        // The Agent view's hidden pollers are
-                                        // suspended while the dashboard is open;
-                                        // keep its triage store fed from here.
-                                        AgentTriageStore.shared.ingest(snapshot: snapshot, tabId: tab.id)
-                                    }
-                                )
-                                .frame(width: columnWidth)
-                                .onTapGesture(count: 2) {
-                                    tabsStore.setActive(tab.id)
-                                }
-                                .help("Double-click to activate \(tab.profile.name)")
-                                .contextMenu {
-                                    dashboardHostContextMenu(tab)
-                                }
-                            }
-                        }
-                        .padding(12)
-                        .frame(
-                            minWidth: proxy.size.width,
-                            maxHeight: .infinity,
-                            alignment: .leading
-                        )
-                    }
-                    .background(MidnightMacDesign.ColorToken.controlBackground.opacity(0.35))
-                }
+            fleetTable
         }
+    }
+
+    private func dashboardMonitorView(
+        for tab: TerminalTab,
+        headless: Bool = false,
+        detailBand: Bool = false
+    ) -> some View {
+        SystemMonitorView(
+            connectionId: tab.connectionId,
+            connectionLabel: tab.profile.name,
+            profileId: tab.profile.id,
+            sshPort: tab.profile.port,
+            profile: tab.profile,
+            connectionStatus: tab.status,
+            isActive: true,
+            dashboardMode: true,
+            detailBandMode: detailBand,
+            dashboardIdentity: dashboardSnapshotKey(for: tab),
+            resolvedIPAddresses: dashboardIPAddresses(for: tab.profile) ?? [],
+            onDashboardHealthChange: { snapshot in
+                recordDashboardHealthSnapshot(snapshot, profile: tab.profile)
+                // The Agent view's hidden pollers are
+                // suspended while the dashboard is open;
+                // keep its triage store fed from here.
+                AgentTriageStore.shared.ingest(snapshot: snapshot, tabId: tab.id)
+            },
+            headless: headless
+        )
+    }
+
+    // MARK: Fleet table
+
+    /// The fleet as an attention-sorted table: one row per host with
+    /// aligned metric columns, warnings inline on their row, and a
+    /// click-to-expand detail band hosting the full monitor view.
+    private var fleetTable: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                fleetTableHeader
+                Divider()
+                ForEach(tabs, id: \.id) { tab in
+                    fleetTableRow(tab)
+                    if expandedTabId == tab.id {
+                        fleetDetailBand(tab)
+                    }
+                    Divider()
+                }
+            }
+            .padding(12)
+        }
+        .background(MidnightMacDesign.ColorToken.controlBackground.opacity(0.35))
+        .background(fleetTablePollers)
+    }
+
+    /// Invisible headless monitors keep each host's polling and
+    /// health-snapshot pipeline alive — the table renders from those
+    /// snapshots. The expanded host is excluded: its visible detail
+    /// band already runs the same pipeline.
+    private var fleetTablePollers: some View {
+        HStack(spacing: 0) {
+            ForEach(tabs.filter { $0.id != expandedTabId }, id: \.id) { tab in
+                dashboardMonitorView(for: tab, headless: true)
+            }
+        }
+        .frame(width: 0, height: 0)
+        .clipped()
+        .accessibilityHidden(true)
+    }
+
+    /// Compact monitor band for the expanded row: only what the row
+    /// doesn't already show (trends, all disks, drill-down panels), at
+    /// intrinsic height.
+    private func fleetDetailBand(_ tab: TerminalTab) -> some View {
+        dashboardMonitorView(for: tab, detailBand: true)
+            .padding(.vertical, 8)
+            .padding(.leading, 24)
+            .contextMenu {
+                dashboardHostContextMenu(tab)
+            }
+    }
+
+    private enum FleetColumn {
+        static let severity: CGFloat = 18
+        static let host: CGFloat = 150
+        static let metric: CGFloat = 110
+        static let load: CGFloat = 56
+        static let uptime: CGFloat = 44
+        static let chevron: CGFloat = 16
+    }
+
+    private var fleetTableHeader: some View {
+        HStack(spacing: 12) {
+            Spacer().frame(width: FleetColumn.severity)
+            Text("Host").frame(width: FleetColumn.host, alignment: .leading)
+            Text("Issues").frame(maxWidth: .infinity, alignment: .leading)
+            Text("CPU").frame(width: FleetColumn.metric, alignment: .leading)
+            Text("Memory").frame(width: FleetColumn.metric, alignment: .leading)
+            Text("Disk").frame(width: FleetColumn.metric, alignment: .leading)
+            Text("Load").frame(width: FleetColumn.load, alignment: .trailing)
+            Text("Up").frame(width: FleetColumn.uptime, alignment: .trailing)
+            Spacer().frame(width: FleetColumn.chevron)
+        }
+        .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.vertical, 6)
+    }
+
+    private func fleetTableRow(_ tab: TerminalTab) -> some View {
+        let snapshot = healthSnapshots[dashboardSnapshotKey(for: tab)]
+        let metrics = snapshot?.metrics
+        let severity = fleetSeverity(for: tab)
+        let isExpanded = expandedTabId == tab.id
+        let worstDisk = metrics.flatMap { m in
+            m.disks.first { $0.mount == m.worstDiskMount }
+        }
+
+        return HStack(spacing: 12) {
+            fleetSeverityIcon(severity, status: tab.status)
+                .frame(width: FleetColumn.severity)
+
+            Text(tab.profile.name)
+                .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
+                .lineLimit(1)
+                .frame(width: FleetColumn.host, alignment: .leading)
+                .help("\(tab.profile.username)@\(tab.profile.host):\(tab.profile.port)")
+
+            fleetIssueChips(snapshot, tab: tab)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            fleetMetricCell(
+                fraction: metrics.map { $0.cpuPercent / 100 },
+                detail: "Analyze CPU-intensive processes",
+                action: { presentRowSheet(.drill(.cpu), tab: tab) }
+            )
+            fleetMetricCell(
+                fraction: metrics.map { $0.memoryPercent / 100 },
+                detail: metrics.map {
+                    "\(fleetFormatBytes($0.memoryUsed)) / \(fleetFormatBytes($0.memoryTotal))"
+                        + " — click to analyze memory-intensive processes"
+                },
+                action: { presentRowSheet(.drill(.memory), tab: tab) }
+            )
+            fleetMetricCell(
+                fraction: metrics?.worstDiskFraction,
+                detail: metrics?.worstDiskMount.map {
+                    "\($0) — click to find large files"
+                },
+                action: worstDisk.map { disk in
+                    { presentRowSheet(.drill(.disk(disk)), tab: tab) }
+                }
+            )
+
+            Text(metrics.map { String(format: "%.2f", $0.loadAverage1m) } ?? "—")
+                .font(MidnightMacDesign.FontToken.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: FleetColumn.load, alignment: .trailing)
+
+            Text(metrics.map { fleetFormatUptime($0.uptimeSeconds) } ?? "—")
+                .font(MidnightMacDesign.FontToken.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: FleetColumn.uptime, alignment: .trailing)
+
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: FleetColumn.chevron)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .background(fleetRowTint(severity), in: RoundedRectangle(cornerRadius: 4))
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            activateHost(tab.id)
+        }
+        .onTapGesture {
+            expandedTabId = isExpanded ? nil : tab.id
+        }
+        .help("Click for details, double-click to activate \(tab.profile.name)")
+        .contextMenu {
+            dashboardHostContextMenu(tab)
+        }
+    }
+
+    private func fleetIssueChips(_ snapshot: DashboardHealthSnapshot?, tab: TerminalTab) -> some View {
+        Group {
+            if let snapshot {
+                if snapshot.issues.isEmpty {
+                    Text("—")
+                        .font(MidnightMacDesign.FontToken.caption)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    HStack(spacing: 4) {
+                        ForEach(Array(snapshot.issues.prefix(2)), id: \.id) { issue in
+                            fleetIssueChip(issue, tab: tab)
+                        }
+                        if snapshot.issues.count > 2 {
+                            // Overflow expands the row, where every
+                            // issue is listed with its action button.
+                            Button {
+                                expandedTabId = tab.id
+                            } label: {
+                                Text("+\(snapshot.issues.count - 2)")
+                                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .pointingHandCursor()
+                            .help(
+                                snapshot.issues.dropFirst(2)
+                                    .map { "\($0.title): \($0.detail)" }
+                                    .joined(separator: "\n")
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text("Collecting…")
+                    .font(MidnightMacDesign.FontToken.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func fleetIssueChip(_ issue: DashboardHealthIssue, tab: TerminalTab) -> some View {
+        let label = issue.title.replacingOccurrences(of: "\(tab.profile.name): ", with: "")
+        return Button {
+            openIssue(issue, tab: tab)
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: issue.icon)
+                    .font(MidnightMacDesign.FontToken.caption)
+                Text(label)
+                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(issue.severity.color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(issue.severity.color.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .help("\(issue.title): \(issue.detail) — click to open")
+    }
+
+    /// Chip click: open the issue's remediation surface, or expand the
+    /// row when the issue has no direct drill-down.
+    private func openIssue(_ issue: DashboardHealthIssue, tab: TerminalTab) {
+        let disks = healthSnapshots[dashboardSnapshotKey(for: tab)]?.metrics?.disks ?? []
+        guard let action = fleetIssueAction(issueId: issue.id, disks: disks) else {
+            expandedTabId = tab.id
+            return
+        }
+        presentRowSheet(action.destination, tab: tab)
+    }
+
+    private func presentRowSheet(_ destination: FleetIssueDestination, tab: TerminalTab) {
+        switch destination {
+        case .drill(let target):
+            rowSheet = .drill(
+                connectionId: tab.connectionId,
+                sshPort: tab.profile.port,
+                target: target
+            )
+        case .service(let kind):
+            rowSheet = .service(
+                kind: kind,
+                connectionId: tab.connectionId,
+                profileId: tab.profile.id,
+                label: tab.profile.name
+            )
+        case .journal:
+            rowSheet = .journal(
+                connectionId: tab.connectionId,
+                label: tab.profile.name
+            )
+        }
+    }
+
+    private func fleetMetricCell(
+        fraction: Double?,
+        detail: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        let content = HStack(spacing: 6) {
+            if let fraction {
+                ProgressView(value: max(0, min(1, fraction)))
+                    .progressViewStyle(.linear)
+                    .tint(fleetTint(fraction))
+                    .frame(width: 52)
+                Text("\(Int((fraction * 100).rounded()))%")
+                    .font(MidnightMacDesign.FontToken.caption.monospacedDigit())
+                    .foregroundStyle(fraction >= 0.6 ? fleetTint(fraction) : Color.secondary)
+            } else {
+                Text("—")
+                    .font(MidnightMacDesign.FontToken.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(width: FleetColumn.metric, alignment: .leading)
+
+        return Group {
+            if let action, fraction != nil {
+                Button(action: action) {
+                    content
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            } else {
+                content
+            }
+        }
+        .help(detail ?? "")
+    }
+
+    // MARK: Fleet severity
+
+    /// Attention buckets, worst first — the primary sort key of the
+    /// default "Attention" ordering.
+    private enum FleetSeverity: Int {
+        case critical = 0
+        case warning = 1
+        case collecting = 2
+        case healthy = 3
+    }
+
+    private func fleetSeverity(for tab: TerminalTab) -> FleetSeverity {
+        if tab.status == .error {
+            return .critical
+        }
+        guard let snapshot = healthSnapshots[dashboardSnapshotKey(for: tab)] else {
+            return tab.status == .connected ? .collecting : .warning
+        }
+        if snapshot.issues.contains(where: { $0.severity == .critical }) {
+            return .critical
+        }
+        if !snapshot.issues.isEmpty {
+            return .warning
+        }
+        return snapshot.metrics == nil ? .collecting : .healthy
+    }
+
+    /// Tiebreaker within a severity bucket: the host's peak metric
+    /// fraction, quantized so ordering stays stable across poll ticks.
+    private func fleetHotness(for tab: TerminalTab) -> Double {
+        guard let metrics = healthSnapshots[dashboardSnapshotKey(for: tab)]?.metrics else {
+            return 0
+        }
+        let peak = max(
+            metrics.cpuPercent / 100,
+            metrics.memoryPercent / 100,
+            metrics.worstDiskFraction ?? 0
+        )
+        return (peak / Self.hotnessStep).rounded() * Self.hotnessStep
+    }
+
+    @ViewBuilder
+    private func fleetSeverityIcon(_ severity: FleetSeverity, status: TerminalConnectionStatus) -> some View {
+        switch severity {
+        case .critical:
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(MidnightMacDesign.FontToken.caption)
+                .foregroundStyle(.red)
+        case .warning:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(MidnightMacDesign.FontToken.caption)
+                .foregroundStyle(.orange)
+        case .collecting, .healthy:
+            Circle()
+                .fill(fleetStatusColor(status))
+                .frame(width: 7, height: 7)
+        }
+    }
+
+    /// Subtle warm wash on rows that need attention so the healthy
+    /// majority reads as one quiet block.
+    private func fleetRowTint(_ severity: FleetSeverity) -> Color {
+        switch severity {
+        case .critical: return .red.opacity(0.08)
+        case .warning: return .orange.opacity(0.07)
+        case .collecting, .healthy: return .clear
+        }
+    }
+
+    /// Same thresholds as the monitor bars: muted when healthy so
+    /// color stays reserved for problems.
+    private func fleetTint(_ fraction: Double) -> Color {
+        switch fraction {
+        case ..<0.6:  return .green.opacity(0.55)
+        case ..<0.85: return .orange
+        default:      return .red
+        }
+    }
+
+    private func fleetStatusColor(_ status: TerminalConnectionStatus) -> Color {
+        switch status {
+        case .connected:    return .green
+        case .connecting:   return .orange
+        case .disconnected: return Color(nsColor: .tertiaryLabelColor)
+        case .error:        return .red
+        }
+    }
+
+    private func fleetFormatBytes(_ bytes: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .memory)
+    }
+
+    private func fleetFormatUptime(_ seconds: UInt64) -> String {
+        let days = seconds / 86_400
+        if days > 0 { return "\(days)d" }
+        let hours = seconds / 3_600
+        if hours > 0 { return "\(hours)h" }
+        return "\(seconds / 60)m"
     }
 
     private var dashboardIPResolutionKey: String {
@@ -542,6 +941,7 @@ struct DashboardPanel: View {
         profile: ConnectionProfile
     ) {
         healthSnapshots[snapshot.id] = snapshot
+        lastStatsUpdate = Date()
         pruneDashboardHealthSnapshots()
 
         let state: FleetHostHealthState
@@ -568,36 +968,28 @@ struct DashboardPanel: View {
         healthSnapshots = healthSnapshots.filter { activeKeys.contains($0.key) }
     }
 
-    private func problemEvents(now: Date) -> [ActivityLogEvent] {
-        activityLog.recentProblems(
-            limit: 5,
-            after: now.addingTimeInterval(-Self.problemVisibilityDuration)
-        )
+    /// Route host activation through the parent when it wants to
+    /// switch the workspace mode along with the active tab.
+    private func activateHost(_ tabId: UUID) {
+        if let onActivateHost {
+            onActivateHost(tabId)
+        } else {
+            tabsStore.setActive(tabId)
+        }
     }
 
     private var nonHealthyTabs: [TerminalTab] {
         tabs.filter { $0.status != .connected }
     }
 
-    private func dashboardHealthIssues() -> [DashboardHealthIssue] {
-        healthSnapshots.values
-            .flatMap { snapshot in
-                snapshot.issues.map { issue in
-                    DashboardHealthIssue(
-                        id: "\(snapshot.id):\(issue.id)",
-                        title: issue.title,
-                        detail: issue.detail,
-                        icon: issue.icon,
-                        severity: issue.severity
-                    )
-                }
-            }
-            .sorted {
-                if $0.severity.rawValue != $1.severity.rawValue {
-                    return $0.severity.rawValue > $1.severity.rawValue
-                }
-                return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-            }
+    /// Total warnings across the fleet: reported health issues plus
+    /// unhealthy connections that haven't produced a snapshot yet.
+    private var dashboardIssueCount: Int {
+        let healthIssues = healthSnapshots.values.reduce(0) { $0 + $1.issues.count }
+        let fallback = nonHealthyTabs
+            .filter { healthSnapshots[dashboardSnapshotKey(for: $0)] == nil }
+            .count
+        return healthIssues + fallback
     }
 
     private func dashboardIPAddresses(for profile: ConnectionProfile) -> [String]? {
@@ -606,7 +998,7 @@ struct DashboardPanel: View {
 
     @ViewBuilder
     private func dashboardHostContextMenu(_ tab: TerminalTab) -> some View {
-        Button("Activate Host") { tabsStore.setActive(tab.id) }
+        Button("Activate Host") { activateHost(tab.id) }
         Button("Reconnect") { Task { await tabsStore.reconnect(tabId: tab.id) } }
         Button("Copy SSH Command") {
             RemoteCommandRunner.copy("ssh -p \(tab.profile.port) \(tab.profile.username)@\(tab.profile.host)")
@@ -671,65 +1063,10 @@ struct DashboardPanel: View {
         return profile.networkOptions.tailscaleHostOverride ?? profile.host
     }
 
-    private func problemStrip(now: Date) -> some View {
-        let problemEvents = problemEvents(now: now)
-        let healthIssues = dashboardHealthIssues()
-        let fallbackNonHealthyTabs = nonHealthyTabs.filter {
-            healthSnapshots[dashboardSnapshotKey(for: $0)] == nil
-        }
-        let issueCount = problemEvents.count + healthIssues.count + fallbackNonHealthyTabs.count
-        let connectedCount = tabs.filter { $0.status == .connected }.count
-        let isCollectingHealth = healthSnapshots.count < tabs.count
-
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                dashboardStatusCard(
-                    connectedCount: connectedCount,
-                    totalCount: tabs.count,
-                    issueCount: issueCount,
-                    isCollectingHealth: isCollectingHealth
-                )
-
-                if issueCount > 0 {
-                    ForEach(fallbackNonHealthyTabs, id: \.id) { tab in
-                        dashboardProblemCard(
-                            title: tab.profile.name,
-                            detail: tab.status.rawValue.capitalized,
-                            icon: "wifi.slash",
-                            color: .orange,
-                            action: isReconnectable(tab.status) ? {
-                                Task { await tabsStore.reconnect(tabId: tab.id) }
-                            } : nil
-                        )
-                    }
-                    ForEach(Array(healthIssues.prefix(8)), id: \.id) { issue in
-                        dashboardProblemCard(
-                            title: issue.title,
-                            detail: issue.detail,
-                            icon: issue.icon,
-                            color: issue.severity.color
-                        )
-                    }
-                    ForEach(problemEvents, id: \.id) { event in
-                        dashboardProblemCard(
-                            title: event.title,
-                            detail: event.detail,
-                            icon: event.icon,
-                            color: event.severity.color
-                        )
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
-        .background(MidnightMacDesign.ColorToken.windowBackground)
-    }
-
     private var savedHostInventory: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(savedProfiles) { profile in
+                ForEach(unconnectedProfiles) { profile in
                     savedHostCard(profile)
                 }
             }
@@ -762,7 +1099,7 @@ struct DashboardPanel: View {
                     .buttonStyle(.borderless)
                     .controlSize(.mini)
                 } else {
-                    Button("Open") { tabsStore.setActive(tab!.id) }
+                    Button("Open") { activateHost(tab!.id) }
                         .buttonStyle(.borderless)
                         .controlSize(.mini)
                 }
@@ -817,94 +1154,39 @@ struct DashboardPanel: View {
         return isConnected ? record.summary : "Offline · \(record.summary)"
     }
 
-    private func dashboardStatusCard(
-        connectedCount: Int,
-        totalCount: Int,
-        issueCount: Int,
-        isCollectingHealth: Bool
-    ) -> some View {
-        let isClean = issueCount == 0
-        let color: Color = isClean ? (isCollectingHealth ? .secondary : .green) : .orange
-        let title: String
-        if isClean && isCollectingHealth {
-            title = "\(connectedCount)/\(totalCount) hosts online · collecting status"
-        } else if isClean {
-            title = "\(connectedCount) hosts online · no recent warnings"
-        } else {
-            title = "\(connectedCount)/\(totalCount) hosts online · \(issueCount) warning\(issueCount == 1 ? "" : "s")"
-        }
-
-        return Label(title, systemImage: isClean ? (isCollectingHealth ? "clock" : "checkmark.circle.fill") : "exclamationmark.triangle.fill")
-            .foregroundStyle(color)
-            .font(MidnightMacDesign.FontToken.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                color.opacity(0.10),
-                in: RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium)
-            )
-    }
-
-    private func dashboardProblemCard(
-        title: String,
-        detail: String,
-        icon: String,
-        color: Color,
-        action: (() -> Void)? = nil
-    ) -> some View {
-        Group {
-            if let action {
-                Button(action: action) {
-                    dashboardProblemCardContent(title: title, detail: detail, icon: icon, color: color)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Reconnect \(title)")
-            } else {
-                dashboardProblemCardContent(title: title, detail: detail, icon: icon, color: color)
-            }
-        }
-    }
-
-    private func dashboardProblemCardContent(
-        title: String,
-        detail: String,
-        icon: String,
-        color: Color
-    ) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
-                    .lineLimit(1)
-                Text(detail)
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium))
-    }
-
-    private func isReconnectable(_ status: TerminalConnectionStatus) -> Bool {
-        status == .disconnected || status == .error
-    }
-
     private var dashboardToolbar: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Workspace Dashboard")
                     .font(MidnightMacDesign.FontToken.title)
                     .lineLimit(1)
-                Label("\(tabs.count)/\(savedProfiles.count) connected", systemImage: "server.rack")
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Label("\(tabs.count)/\(savedProfiles.count) connected", systemImage: "server.rack")
+                        .foregroundStyle(.secondary)
+                    // Single refresh timestamp for the whole fleet —
+                    // every host polls on the same cadence.
+                    if let lastStatsUpdate {
+                        Text("· Updated \(lastStatsUpdate.formatted(.dateTime.hour().minute().second()))")
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
+                }
+                .font(MidnightMacDesign.FontToken.caption)
             }
 
             Spacer(minLength: 0)
+
+            // The former problem strip, reduced to its useful part:
+            // the count. The individual warnings live inline on the
+            // table rows they belong to.
+            if dashboardIssueCount > 0 {
+                Label(
+                    "\(dashboardIssueCount) warning\(dashboardIssueCount == 1 ? "" : "s")",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(.orange)
+                .font(MidnightMacDesign.FontToken.caption.weight(.medium))
+            }
 
             Button {
                 showingFleetRunbook = true
@@ -929,7 +1211,7 @@ struct DashboardPanel: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 220)
+            .frame(width: 290)
             .controlSize(.small)
         }
         .padding(.horizontal, 12)
@@ -937,7 +1219,42 @@ struct DashboardPanel: View {
     }
 }
 
+/// Remediation sheet opened from a fleet-table row's chip or gauge.
+/// Carries the connection context so the panel can present the sheet
+/// without going through a monitor view.
+private enum FleetRowSheet: Identifiable {
+    case drill(connectionId: String?, sshPort: UInt16?, target: MonitorDrillDown)
+    case service(kind: ServiceModalKind, connectionId: String?, profileId: String?, label: String)
+    case journal(connectionId: String?, label: String)
+
+    var id: String {
+        switch self {
+        case .drill(let connectionId, _, let target):
+            return "drill:\(connectionId ?? ""):\(target.id)"
+        case .service(let kind, let connectionId, _, _):
+            return "service:\(connectionId ?? ""):\(kind.rawValue)"
+        case .journal(let connectionId, _):
+            return "journal:\(connectionId ?? "")"
+        }
+    }
+}
+
+private extension View {
+    /// Pointing-hand cursor on hover so chips and gauges read as
+    /// clickable inside an otherwise tap-to-expand row.
+    func pointingHandCursor() -> some View {
+        onHover { inside in
+            if inside {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+}
+
 private enum DashboardSort: String, CaseIterable, Identifiable {
+    case attention
     case order
     case name
     case host
@@ -948,6 +1265,7 @@ private enum DashboardSort: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
+        case .attention: return "Attention"
         case .order: return "Opened"
         case .name: return "Name"
         case .host: return "Host"

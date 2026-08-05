@@ -39,6 +39,95 @@ extension SystemMonitorView {
         }
     }
 
+    func hygienePollLoop(connectionId: String) async {
+        await fetchHygiene(connectionId: connectionId)
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: Self.hygienePollInterval)
+            await fetchHygiene(connectionId: connectionId)
+        }
+    }
+
+    /// One combined command per tick — three problem sources, one SSH
+    /// round-trip. Each section degrades to empty output when the tool
+    /// is missing or permission is denied; that's "no findings", not
+    /// an error, so hosts without docker or journald never nag.
+    func fetchHygiene(connectionId: String) async {
+        defer { publishDashboardHealthSnapshot() }
+
+        let separator = "__AGENT_SSH_HYGIENE_SEP__"
+        let script = """
+        systemctl list-units --state=failed --plain --no-legend --no-pager 2>/dev/null | head -5
+        echo \(separator)
+        if command -v docker >/dev/null 2>&1; then
+          docker ps --filter health=unhealthy --format '{{.Names}}|{{.Status}}' 2>/dev/null | head -5
+          docker ps --filter status=restarting --format '{{.Names}}|{{.Status}}' 2>/dev/null | head -5
+        fi
+        echo \(separator)
+        journalctl -p warning --since '-15 min' --no-pager -q -n 200 2>/dev/null
+        """
+
+        guard let result = try? await RemoteCommandRunner.runShell(
+            connectionId: connectionId,
+            script: script
+        ) else {
+            // Transient transport failure: keep the previous snapshot
+            // rather than flapping issues off and back on.
+            return
+        }
+
+        hygiene = Self.parseHygieneOutput(result.output, separator: separator)
+    }
+
+    /// Split on the separator and parse each section. Static and pure
+    /// so it can be unit-tested without a connection.
+    static func parseHygieneOutput(_ output: String, separator: String) -> HygieneSnapshot {
+        let sections = output.components(separatedBy: separator)
+        let failedSection = sections.indices.contains(0) ? sections[0] : ""
+        let dockerSection = sections.indices.contains(1) ? sections[1] : ""
+        let journalSection = sections.indices.contains(2) ? sections[2] : ""
+
+        // `systemctl list-units --plain --no-legend`: unit name is the
+        // first column; ● markers are already suppressed by --plain.
+        let failedUnits = failedSection
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line -> String? in
+                let unit = line.trimmingCharacters(in: .whitespaces)
+                    .split(whereSeparator: \.isWhitespace)
+                    .first
+                    .map(String.init)
+                guard let unit, unit.contains(".") else { return nil }
+                return unit
+            }
+
+        var seenContainers = Set<String>()
+        let dockerProblems = dockerSection
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line -> String? in
+                let parts = line.split(separator: "|", maxSplits: 1)
+                guard let name = parts.first.map({ String($0).trimmingCharacters(in: .whitespaces) }),
+                      !name.isEmpty,
+                      seenContainers.insert(name).inserted
+                else { return nil }
+                let status = parts.count > 1
+                    ? String(parts[1]).trimmingCharacters(in: .whitespaces)
+                    : ""
+                return status.isEmpty ? name : "\(name) (\(status))"
+            }
+
+        let journalLines = journalSection
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let counts = JournalIssueClassifier.counts(in: journalLines)
+
+        return HygieneSnapshot(
+            failedUnits: failedUnits,
+            dockerProblems: dockerProblems,
+            journalErrors: counts.errors,
+            journalWarnings: counts.warnings
+        )
+    }
+
     /// One-shot probe for distro / kernel / arch. We only re-run on
     /// connection change — host identity doesn't shift between polls,
     /// and kernel upgrades require a reconnect to take effect anyway.

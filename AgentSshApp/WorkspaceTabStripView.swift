@@ -1,8 +1,20 @@
 import AgentSshMacOS
 import SwiftUI
 
-/// Browser-style workspace session switcher. This is intentionally not a
-/// platform tab bar: it switches connected workspaces, not app sections.
+/// What the detail column's main pane shows. One value, one source of
+/// truth — exactly one of these is active at any moment, so the
+/// switcher always has exactly one lit segment.
+enum WorkspaceMode: String {
+    case server
+    case dashboard
+    case agent
+    case files
+}
+
+/// Top bar of the detail column: workspace tabs on the left (only in
+/// server mode — in every other mode the tabs don't control the main
+/// pane and would just be misleading chrome), and the mode switcher
+/// pinned on the right.
 struct WorkspaceTabStripView: View {
     let tabs: [WorkspaceTab]
     @Binding var activeTabId: UUID?
@@ -15,143 +27,172 @@ struct WorkspaceTabStripView: View {
     var themeOverrides: [UUID: String] = [:]
     /// Live connection state per tab id, for the status symbol prefix.
     var statuses: [UUID: TerminalConnectionStatus] = [:]
-    var showsDashboardButton = false
-    var dashboardVisible = false
-    var onToggleDashboard: (() -> Void)? = nil
-    var showsAgentButton = false
-    var agentVisible = false
-    /// Confirmed triage issues — when > 0 the Agent button turns loud
+
+    @Binding var mode: WorkspaceMode
+    /// Name of the active host, shown on the Server segment so the
+    /// user knows where ⌘1 leads even while the tabs are hidden.
+    var serverSegmentTitle = "Server"
+    var dashboardAvailable = false
+    var agentAvailable = false
+    var filesAvailable = false
+    /// Confirmed triage issues — when > 0 the Agent segment turns loud
     /// (red, with a count) even while the Agent view is closed.
     var agentIssueCount = 0
-    var onToggleAgent: (() -> Void)? = nil
-    var showsFilesButton = false
-    var filesVisible = false
-    var onToggleFiles: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(tabs) { tab in
-                        WorkspaceTabItemView(
-                            tab: tab,
-                            isActive: tab.id == activeTabId,
-                            currentThemeOverride: themeOverrides[tab.id],
-                            status: statuses[tab.id] ?? .connected,
-                            onSelect: { activeTabId = tab.id },
-                            onClose: { onClose(tab) },
-                            onSetTheme: onSetTheme.map { setter in
-                                { themeId in setter(tab, themeId) }
-                            }
-                        )
-                    }
-
-                    if tabs.isEmpty {
-                        Button(action: onNewTab) {
-                            Image(systemName: "plus")
-                                .font(MidnightMacDesign.FontToken.subheadline)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
+            if mode == .server {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 0) {
+                        ForEach(tabs) { tab in
+                            WorkspaceTabItemView(
+                                tab: tab,
+                                isActive: tab.id == activeTabId,
+                                currentThemeOverride: themeOverrides[tab.id],
+                                status: statuses[tab.id] ?? .connected,
+                                onSelect: { activeTabId = tab.id },
+                                onClose: { onClose(tab) },
+                                onSetTheme: onSetTheme.map { setter in
+                                    { themeId in setter(tab, themeId) }
+                                }
+                            )
                         }
-                        .buttonStyle(.plain)
-                        .help("New Connection")
+
+                        if tabs.isEmpty {
+                            Button(action: onNewTab) {
+                                Image(systemName: "plus")
+                                    .font(MidnightMacDesign.FontToken.subheadline)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                            }
+                            .buttonStyle(.plain)
+                            .help("New Connection")
+                        }
                     }
                 }
             }
 
             Spacer(minLength: 0)
 
-            if showsAgentButton, let onToggleAgent {
-                Button(action: onToggleAgent) {
-                    HStack(spacing: 5) {
-                        Label("Agent", systemImage: "waveform.path.ecg")
-                            .font(MidnightMacDesign.FontToken.label)
-                            .labelStyle(.titleAndIcon)
-
-                        if agentIssueCount > 0 {
-                            Text("\(agentIssueCount)")
-                                .font(.system(size: 10, weight: .bold).monospacedDigit())
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(Color.red))
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small)
-                            .fill(
-                                agentVisible
-                                    ? Color.accentColor.opacity(0.18)
-                                    : Color.clear
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(
-                    agentVisible
-                        ? Color.accentColor
-                        : (agentIssueCount > 0 ? Color.red : Color.primary)
-                )
-                .help(
-                    agentIssueCount > 0
-                        ? "\(agentIssueCount) issue\(agentIssueCount == 1 ? "" : "s") need attention"
-                        : (agentVisible ? "Close agent view" : "Open agent view — silent unless something needs fixing")
-                )
-                .padding(.trailing, (showsFilesButton || showsDashboardButton) ? 4 : 8)
-            }
-
-            if showsFilesButton, let onToggleFiles {
-                Button(action: onToggleFiles) {
-                    Label("Files", systemImage: "folder")
-                        .font(MidnightMacDesign.FontToken.label)
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small)
-                                .fill(
-                                    filesVisible
-                                        ? Color.accentColor.opacity(0.18)
-                                        : Color.clear
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(filesVisible ? Color.accentColor : Color.primary)
-                .help(
-                    filesVisible
-                        ? "Close files view"
-                        : "Browse every connected host's files side by side — drag between panes to copy across servers"
-                )
-                .padding(.trailing, showsDashboardButton ? 4 : 8)
-            }
-
-            if showsDashboardButton, let onToggleDashboard {
-                Button(action: onToggleDashboard) {
-                    Label("Dashboard", systemImage: "square.grid.2x2")
-                        .font(MidnightMacDesign.FontToken.label)
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small)
-                                .fill(
-                                    dashboardVisible
-                                        ? Color.accentColor.opacity(0.18)
-                                        : Color.clear
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(dashboardVisible ? Color.accentColor : Color.primary)
-                .help(dashboardVisible ? "Close dashboard" : "Open multi-host dashboard")
-                .padding(.trailing, 8)
-            }
+            WorkspaceModeSwitcher(
+                mode: $mode,
+                serverTitle: serverSegmentTitle,
+                dashboardAvailable: dashboardAvailable,
+                agentAvailable: agentAvailable,
+                filesAvailable: filesAvailable,
+                agentIssueCount: agentIssueCount
+            )
+            .padding(.trailing, 8)
         }
         .frame(height: LayoutConstants.workspaceTabStripHeight)
         .background(MidnightMacDesign.ColorToken.controlBackground)
+    }
+}
+
+/// Segmented switcher for the main pane. Exactly one segment is always
+/// selected; unavailable modes hide their segment entirely. ⌘1–⌘4
+/// switch modes from the keyboard.
+struct WorkspaceModeSwitcher: View {
+    @Binding var mode: WorkspaceMode
+    var serverTitle = "Server"
+    var dashboardAvailable = false
+    var agentAvailable = false
+    var filesAvailable = false
+    var agentIssueCount = 0
+
+    var body: some View {
+        HStack(spacing: 2) {
+            segment(
+                .server,
+                title: serverTitle,
+                icon: "terminal",
+                shortcut: "1",
+                help: "Show the active server workspace (⌘1)"
+            )
+            if dashboardAvailable {
+                segment(
+                    .dashboard,
+                    title: "Dashboard",
+                    icon: "square.grid.2x2",
+                    shortcut: "2",
+                    help: "Multi-host dashboard (⌘2)"
+                )
+            }
+            if agentAvailable {
+                segment(
+                    .agent,
+                    title: "Agent",
+                    icon: "waveform.path.ecg",
+                    shortcut: "3",
+                    help: agentIssueCount > 0
+                        ? "\(agentIssueCount) issue\(agentIssueCount == 1 ? "" : "s") need attention (⌘3)"
+                        : "Agent view — silent unless something needs fixing (⌘3)",
+                    badge: agentIssueCount
+                )
+            }
+            if filesAvailable {
+                segment(
+                    .files,
+                    title: "Files",
+                    icon: "folder",
+                    shortcut: "4",
+                    help: "Browse every connected host's files side by side (⌘4)"
+                )
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small + 2)
+                .fill(MidnightMacDesign.ColorToken.controlBackground.opacity(0.9))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small + 2)
+                .stroke(MidnightMacDesign.ColorToken.separator.opacity(0.5), lineWidth: 1)
+        )
+    }
+
+    private func segment(
+        _ target: WorkspaceMode,
+        title: String,
+        icon: String,
+        shortcut: Character,
+        help: String,
+        badge: Int = 0
+    ) -> some View {
+        let isActive = mode == target
+        return Button {
+            mode = target
+        } label: {
+            HStack(spacing: 5) {
+                Label(title, systemImage: icon)
+                    .font(MidnightMacDesign.FontToken.label)
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
+
+                if badge > 0 {
+                    Text("\(badge)")
+                        .font(.system(size: 10, weight: .bold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.red))
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.small)
+                    .fill(isActive ? Color.accentColor.opacity(0.18) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(
+            isActive
+                ? Color.accentColor
+                : (badge > 0 ? Color.red : Color.primary)
+        )
+        .keyboardShortcut(KeyEquivalent(shortcut), modifiers: .command)
+        .help(help)
     }
 }
 

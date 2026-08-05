@@ -93,6 +93,11 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
     var createdAt: Date
     var lastConnected: Date?
     var favorite: Bool
+    /// Connect this profile automatically at app launch. Defaults to
+    /// true (and decodes missing as true) because mobile has always
+    /// auto-connected every profile with stored credentials — the flag
+    /// adds the ability to opt a server out.
+    var autoConnect: Bool
     var folder: String?
     var tags: [String]
     var color: String?
@@ -116,6 +121,7 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         createdAt: Date = Date(),
         lastConnected: Date? = nil,
         favorite: Bool = false,
+        autoConnect: Bool = true,
         folder: String? = nil,
         tags: [String] = [],
         color: String? = nil,
@@ -140,6 +146,7 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.lastConnected = lastConnected
         self.favorite = favorite
+        self.autoConnect = autoConnect
         self.folder = folder
         self.tags = tags
         self.color = color
@@ -150,7 +157,7 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, name, host, port, username, authMethod, kind
         case privateKeyPath, sshKeyReference, createdAt, lastConnected, favorite
-        case folder, tags, color, notes, networkOptions
+        case autoConnect, folder, tags, color, notes, networkOptions
     }
 
     init(from decoder: Decoder) throws {
@@ -176,6 +183,7 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         lastConnected = try c.decodeIfPresent(Date.self, forKey: .lastConnected)
         favorite = try c.decode(Bool.self, forKey: .favorite)
+        autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? true
         folder = try c.decodeIfPresent(String.self, forKey: .folder)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         color = try c.decodeIfPresent(String.self, forKey: .color)
@@ -197,6 +205,7 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         try c.encode(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(lastConnected, forKey: .lastConnected)
         try c.encode(favorite, forKey: .favorite)
+        try c.encode(autoConnect, forKey: .autoConnect)
         try c.encodeIfPresent(folder, forKey: .folder)
         try c.encode(tags, forKey: .tags)
         try c.encodeIfPresent(color, forKey: .color)

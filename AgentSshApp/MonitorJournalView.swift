@@ -155,6 +155,92 @@ struct MonitorJournalLine: Identifiable {
     }
 }
 
+/// Standalone journal drill-down sheet: fetches the last hour of
+/// warning-and-worse entries and renders them in the filterable log
+/// view. Opened from a fleet-row journal chip or the expanded row's
+/// "Open journal" action.
+struct FleetJournalSheet: View {
+    let connectionId: String?
+    let connectionLabel: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var rawLines: [String] = []
+    @State private var isLoading = true
+    @State private var loadError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Label("Journal · \(connectionLabel)", systemImage: "exclamationmark.bubble")
+                    .font(.headline)
+                Text("errors and warnings · last hour")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button("Refresh") {
+                    Task { await load() }
+                }
+                .disabled(isLoading || connectionId == nil)
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+            Divider()
+            Group {
+                if let loadError {
+                    Text(loadError)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    MonitorJournalLogView(rawLines: rawLines)
+                        .padding(12)
+                }
+            }
+        }
+        .frame(minWidth: 760, idealWidth: 920, minHeight: 520, idealHeight: 640)
+        .task {
+            await load()
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        guard let connectionId else {
+            loadError = "Not connected to this host."
+            isLoading = false
+            return
+        }
+        isLoading = true
+        loadError = nil
+        do {
+            let result = try await RemoteCommandRunner.runShell(
+                connectionId: connectionId,
+                script: "journalctl -p warning --since '-1 hour' --no-pager -q -n 400 2>/dev/null"
+            )
+            let lines = result.output
+                .split(whereSeparator: \.isNewline)
+                .map(String.init)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            if lines.isEmpty && !result.succeeded {
+                loadError = "journalctl isn't available on this host, or reading the journal requires elevated permissions."
+            } else {
+                rawLines = lines
+            }
+        } catch {
+            loadError = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
 struct MonitorJournalLogView: View {
     let rawLines: [String]
     var fallbackHints: [String] = []

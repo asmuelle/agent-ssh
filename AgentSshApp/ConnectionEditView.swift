@@ -109,6 +109,7 @@ struct ConnectionEditView: View {
     @State private var generatedPublicKey: String?
     @State private var folderPath: String = ""
     @State private var favorite: Bool = false
+    @State private var autoConnect: Bool = false
     @State private var tags: String = ""
     @State private var notes: String = ""
     @State private var tailscaleResolutionMode: TailscaleResolutionMode = .system
@@ -222,6 +223,7 @@ struct ConnectionEditView: View {
                 }
                 folderPath = p.folderPath ?? ""
                 favorite = p.favorite
+                autoConnect = p.autoConnect
                 tags = p.tags.joined(separator: ", ")
                 notes = p.notes ?? ""
                 tailscaleResolutionMode = p.networkOptions.tailscaleResolutionMode
@@ -331,6 +333,11 @@ struct ConnectionEditView: View {
                     }
                     HStack {
                         Toggle("Favorite", isOn: $favorite)
+                        Spacer()
+                    }
+                    HStack {
+                        Toggle("Connect at launch", isOn: $autoConnect)
+                            .help("Connect this server automatically when the app starts. Only applies when saved credentials allow connecting without a prompt.")
                         Spacer()
                     }
                     HStack {
@@ -584,6 +591,7 @@ struct ConnectionEditView: View {
             sshKeyReference: authMethod == .publicKey ? referenceToSave : nil,
             lastConnected: existingProfile?.lastConnected,
             favorite: favorite,
+            autoConnect: autoConnect,
             tags: tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
             notes: notes,
             networkOptions: NetworkConnectionOptions(

@@ -13,6 +13,80 @@ enum ServiceModalKind: String, Identifiable {
     var id: String { rawValue }
 }
 
+/// Where a dashboard issue's remediation lives: a diagnostic
+/// drill-down sheet, a service modal, or the journal viewer.
+enum FleetIssueDestination {
+    case drill(MonitorDrillDown)
+    case service(ServiceModalKind)
+    case journal
+}
+
+struct FleetIssueAction {
+    let label: String
+    let help: String
+    let destination: FleetIssueDestination
+}
+
+/// Maps a health-issue id (assigned in `dashboardHealthIssues`) to the
+/// surface that helps fix it. Shared by the fleet table's chips and
+/// the expanded row's action buttons so a problem always opens the
+/// same remediation view. `disks` is needed to resolve `disk:<mount>`
+/// ids to the full mount record the drill-down requires.
+func fleetIssueAction(issueId: String, disks: [FfiDiskMount]) -> FleetIssueAction? {
+    if issueId.hasPrefix("ufw") {
+        return FleetIssueAction(
+            label: "Review firewall",
+            help: "Inspect UFW rules and exposed ports",
+            destination: .drill(.ufw)
+        )
+    }
+    switch issueId {
+    case "cpu":
+        return FleetIssueAction(
+            label: "Top processes",
+            help: "Analyze CPU-intensive processes",
+            destination: .drill(.cpu)
+        )
+    case "memory":
+        return FleetIssueAction(
+            label: "Top processes",
+            help: "Analyze memory-intensive processes",
+            destination: .drill(.memory)
+        )
+    case "services-failed":
+        return FleetIssueAction(
+            label: "Open services",
+            help: "Inspect and restart failed systemd units",
+            destination: .service(.systemd)
+        )
+    case "docker":
+        return FleetIssueAction(
+            label: "Open Docker",
+            help: "Inspect unhealthy or restarting containers",
+            destination: .service(.docker)
+        )
+    case "journal":
+        return FleetIssueAction(
+            label: "Open journal",
+            help: "Browse recent error and warning entries",
+            destination: .journal
+        )
+    default:
+        break
+    }
+    if issueId.hasPrefix("disk:") {
+        let mount = String(issueId.dropFirst("disk:".count))
+        if let disk = disks.first(where: { $0.mount == mount }) {
+            return FleetIssueAction(
+                label: "Find large files",
+                help: "Show recently changed large files on \(mount)",
+                destination: .drill(.disk(disk))
+            )
+        }
+    }
+    return nil
+}
+
 enum MonitorDrillDown: Identifiable {
     case cpu
     case memory

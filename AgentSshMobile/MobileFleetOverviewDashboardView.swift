@@ -10,9 +10,11 @@ struct MobileFleetOverviewDashboardView: View {
 
     @EnvironmentObject private var sessionStore: MobileSessionStore
     @EnvironmentObject private var healthStore: MobileServerHealthStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// The row whose inline expansion is open.
+    @State private var expandedProfileId: String?
 
     private let refreshInterval: Duration = .seconds(30)
-    private let columns = [GridItem(.adaptive(minimum: 260), spacing: 12)]
 
     var body: some View {
         ScrollView {
@@ -22,7 +24,6 @@ struct MobileFleetOverviewDashboardView: View {
                 if items.isEmpty {
                     emptyState
                 } else {
-                    attentionSection
                     serversSection
                 }
             }
@@ -57,9 +58,17 @@ struct MobileFleetOverviewDashboardView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(headline(attention: attention))
                     .font(.title2.weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 if healthStore.isRefreshing {
                     ProgressView().controlSize(.small)
+                } else if let lastUpdated {
+                    // One fleet-wide refresh timestamp — mirrors the
+                    // macOS dashboard toolbar.
+                    Text("Updated \(lastUpdated.formatted(.dateTime.hour().minute().second()))")
+                        .font(MidnightMobileDesign.FontToken.caption)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
                 }
             }
 
@@ -96,45 +105,124 @@ struct MobileFleetOverviewDashboardView: View {
         return "\(attention) server\(attention == 1 ? "" : "s") need attention"
     }
 
-    // MARK: - Needs attention
+    // MARK: - Servers list
 
-    @ViewBuilder
-    private var attentionSection: some View {
-        let flagged = items.filter { $0.severity.needsAttention }
-
+    /// Attention-sorted list: one row per server, worst first, with
+    /// issues inline on the row. Tapping a row expands it in place —
+    /// full issue list, disks, and meta, mirroring the macOS fleet
+    /// table — and "Open server" in the expansion navigates to the
+    /// detail page.
+    private var serversSection: some View {
         VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.large) {
-            sectionTitle("Needs Attention", systemImage: "exclamationmark.triangle.fill")
-
-            if flagged.isEmpty {
-                Label("Every connected server is healthy.", systemImage: "checkmark.circle.fill")
-                    .font(MidnightMobileDesign.FontToken.subheadline)
-                    .foregroundStyle(.green)
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium))
-            } else {
-                ForEach(flagged) { item in
-                    NavigationLink(value: item.profile.id) {
-                        attentionCard(item)
-                    }
-                    .buttonStyle(.plain)
+            sectionTitle("Servers", systemImage: "server.rack")
+            LazyVStack(spacing: 8) {
+                ForEach(items) { item in
+                    serverEntry(item)
                 }
             }
         }
     }
 
-    private func attentionCard(_ item: FleetItem) -> some View {
-        VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.medium) {
-            HStack(spacing: MidnightMobileDesign.Spacing.medium) {
-                Circle().fill(item.severity.color).frame(width: 10, height: 10)
+    /// One list entry: the tappable row plus its inline expansion,
+    /// sharing one card background so they read as a unit.
+    private func serverEntry(_ item: FleetItem) -> some View {
+        let isExpanded = expandedProfileId == item.profile.id
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    expandedProfileId = isExpanded ? nil : item.profile.id
+                }
+            } label: {
+                serverRow(item, isExpanded: isExpanded)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                serverExpansion(item)
+            }
+        }
+        .background(
+            // Warm wash on rows that need attention so the healthy
+            // majority reads as one quiet block.
+            item.severity.needsAttention
+                ? item.severity.color.opacity(0.10)
+                : MidnightMobileDesign.ColorToken.secondaryGroupedBackground,
+            in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium)
+                .strokeBorder(item.severity.needsAttention ? item.severity.color.opacity(0.5) : .clear, lineWidth: 1)
+        )
+    }
+
+    /// Compact list row: one host per line with aligned metric
+    /// columns — easier to scan than cards once the fleet grows.
+    private func serverRow(_ item: FleetItem, isExpanded: Bool = false) -> some View {
+        HStack(spacing: MidnightMobileDesign.Spacing.large) {
+            Circle().fill(item.statusColor).frame(width: 8, height: 8)
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.profile.name)
                     .font(MidnightMobileDesign.FontToken.headline)
                     .lineLimit(1)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(MidnightMobileDesign.FontToken.caption)
-                    .foregroundStyle(.tertiary)
+                // Second line: warnings belong on the row they're
+                // about. Healthy rows show the endpoint instead (iPad
+                // only — on iPhone widths it would squeeze the metric
+                // columns, and it lives on the detail page anyway).
+                if let issue = item.issues.first {
+                    HStack(spacing: 4) {
+                        Image(systemName: issue.systemImage)
+                        Text(
+                            item.issues.count > 1
+                                ? "\(issue.title) +\(item.issues.count - 1)"
+                                : issue.title
+                        )
+                        .lineLimit(1)
+                    }
+                    .font(MidnightMobileDesign.FontToken.captionStrong)
+                    .foregroundStyle(item.severity.color)
+                } else if horizontalSizeClass != .compact {
+                    Text("\(item.profile.username)@\(item.profile.host):\(item.profile.port)")
+                        .font(MidnightMobileDesign.FontToken.metadataMono)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let sample = item.snapshot?.sample {
+                rowMetric("CPU", percent: sample.cpuPercent)
+                rowMetric("MEM", percent: sample.memoryPercent)
+                rowMetric("DISK", percent: sample.primaryDisk?.usedPercent)
+            } else {
+                Text(item.statusLabel)
+                    .font(MidnightMobileDesign.FontToken.caption)
+                    .foregroundStyle(item.statusColor)
+                    .lineLimit(1)
+                    .frame(
+                        width: horizontalSizeClass == .compact ? 120 : 170,
+                        alignment: .trailing
+                    )
+            }
+
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(MidnightMobileDesign.FontToken.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
+    /// Inline expansion under a row: every issue with its detail, disk
+    /// fill levels, swap, a metadata line, and the navigation to the
+    /// full server page. Mirrors the macOS fleet table's detail band
+    /// at mobile scale.
+    private func serverExpansion(_ item: FleetItem) -> some View {
+        VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.medium) {
+            Divider()
 
             ForEach(item.issues) { issue in
                 HStack(alignment: .top, spacing: MidnightMobileDesign.Spacing.medium) {
@@ -148,94 +236,90 @@ struct MobileFleetOverviewDashboardView: View {
                         Text(issue.detail)
                             .font(MidnightMobileDesign.FontToken.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                            .lineLimit(3)
                     }
                 }
             }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(MidnightMobileDesign.ColorToken.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium))
-        .overlay(
-            RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium)
-                .strokeBorder(item.severity.color.opacity(0.5), lineWidth: 1)
-        )
-    }
 
-    // MARK: - Servers grid
-
-    private var serversSection: some View {
-        VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.large) {
-            sectionTitle("Servers", systemImage: "server.rack")
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(items) { item in
-                    NavigationLink(value: item.profile.id) {
-                        serverTile(item)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private func serverTile(_ item: FleetItem) -> some View {
-        VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.medium) {
-            HStack(spacing: MidnightMobileDesign.Spacing.medium) {
-                Circle().fill(item.statusColor).frame(width: 10, height: 10)
-                Text(item.profile.name)
-                    .font(MidnightMobileDesign.FontToken.headline)
-                    .lineLimit(1)
-                Spacer()
-                if item.profile.favorite {
-                    Image(systemName: "star.fill")
-                        .font(MidnightMobileDesign.FontToken.caption)
-                        .foregroundStyle(.yellow)
-                }
-            }
-
-            Text("\(item.profile.username)@\(item.profile.host):\(item.profile.port)")
+            Text(expansionMetaLine(item))
                 .font(MidnightMobileDesign.FontToken.metadataMono)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(2)
 
             if let sample = item.snapshot?.sample {
-                metricsRow(sample)
-            } else {
-                Text(item.statusLabel)
-                    .font(MidnightMobileDesign.FontToken.caption)
-                    .foregroundStyle(item.statusColor)
-                    .lineLimit(2)
+                ForEach(sample.disks, id: \.mount) { disk in
+                    HStack(spacing: MidnightMobileDesign.Spacing.medium) {
+                        Text(disk.mount)
+                            .font(MidnightMobileDesign.FontToken.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Text("\(bytes(disk.used)) / \(bytes(disk.total))")
+                            .font(MidnightMobileDesign.FontToken.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        Text(String(format: "%.0f%%", disk.usedPercent))
+                            .font(MidnightMobileDesign.FontToken.captionStrong.monospacedDigit())
+                            .foregroundStyle(metricColor(disk.usedPercent))
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+
+                if sample.swapTotal > 0 {
+                    HStack(spacing: MidnightMobileDesign.Spacing.medium) {
+                        Text("Swap")
+                            .font(MidnightMobileDesign.FontToken.caption)
+                        Spacer()
+                        Text("\(bytes(sample.swapUsed)) / \(bytes(sample.swapTotal))")
+                            .font(MidnightMobileDesign.FontToken.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+
+            NavigationLink(value: item.profile.id) {
+                Label("Open server", systemImage: "arrow.right.circle")
+                    .font(MidnightMobileDesign.FontToken.captionStrong)
+            }
+            .buttonStyle(.borderless)
         }
-        .padding()
-        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-        .background(MidnightMobileDesign.ColorToken.secondaryGroupedBackground, in: RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium))
-        .overlay(
-            RoundedRectangle(cornerRadius: MidnightMobileDesign.Radius.medium)
-                .strokeBorder(item.severity.needsAttention ? item.severity.color.opacity(0.5) : .clear, lineWidth: 1)
-        )
+        .padding(.horizontal)
+        .padding(.bottom, 10)
     }
 
-    private func metricsRow(_ sample: MobileServerResourceSample) -> some View {
-        HStack(spacing: MidnightMobileDesign.Spacing.large) {
-            miniMetric("CPU", percent: sample.cpuPercent)
-            miniMetric("MEM", percent: sample.memoryPercent)
-            if let disk = sample.primaryDisk {
-                miniMetric("DISK", percent: disk.usedPercent)
-            }
+    private func expansionMetaLine(_ item: FleetItem) -> String {
+        var parts = ["\(item.profile.username)@\(item.profile.host):\(item.profile.port)"]
+        if let sample = item.snapshot?.sample {
+            parts.append("up \(uptimeText(sample.uptimeSeconds))")
+            parts.append(String(format: "load %.2f", sample.loadAverage1m))
+        } else {
+            parts.append(item.statusLabel)
         }
+        return parts.joined(separator: " · ")
     }
 
-    private func miniMetric(_ label: String, percent: Double) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+    private func uptimeText(_ seconds: UInt64) -> String {
+        let days = seconds / 86_400
+        if days > 0 { return "\(days)d" }
+        let hours = seconds / 3_600
+        if hours > 0 { return "\(hours)h" }
+        return "\(seconds / 60)m"
+    }
+
+    private func bytes(_ value: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .memory)
+    }
+
+    /// Fixed-width metric column so values line up across list rows.
+    private func rowMetric(_ label: String, percent: Double?) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
             Text(label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.tertiary)
-            Text(String(format: "%.0f%%", percent))
+            Text(percent.map { String(format: "%.0f%%", $0) } ?? "–")
                 .font(MidnightMobileDesign.FontToken.captionStrong.monospacedDigit())
-                .foregroundStyle(metricColor(percent))
+                .foregroundStyle(percent.map(metricColor) ?? Color(.tertiaryLabel))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 46, alignment: .trailing)
     }
 
     private func metricColor(_ percent: Double) -> Color {
@@ -282,8 +366,15 @@ struct MobileFleetOverviewDashboardView: View {
             }
             .sorted { lhs, rhs in
                 if lhs.sortRank != rhs.sortRank { return lhs.sortRank < rhs.sortRank }
+                if lhs.hotness != rhs.hotness { return lhs.hotness > rhs.hotness }
                 return lhs.profile.name.localizedStandardCompare(rhs.profile.name) == .orderedAscending
             }
+    }
+
+    /// Most recent health-snapshot time across the fleet — shown once
+    /// in the summary header instead of per tile.
+    private var lastUpdated: Date? {
+        items.compactMap { $0.snapshot?.updatedAt }.max()
     }
 
     private var connectedSignature: String {
@@ -346,6 +437,19 @@ private struct FleetItem: Identifiable {
         case .disconnected: return "Disconnected"
         case .failed(let message): return message
         }
+    }
+
+    /// Tiebreaker within a sort rank: the server's peak metric
+    /// percent, quantized to 5% steps so ordering stays stable
+    /// across refresh ticks.
+    var hotness: Double {
+        guard let sample = snapshot?.sample else { return 0 }
+        let peak = max(
+            sample.cpuPercent,
+            sample.memoryPercent,
+            sample.primaryDisk?.usedPercent ?? 0
+        )
+        return (peak / 5).rounded() * 5
     }
 
     /// Sort: needs-attention first (critical, then warning), then healthy
