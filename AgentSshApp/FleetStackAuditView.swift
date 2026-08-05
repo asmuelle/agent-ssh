@@ -130,7 +130,7 @@ struct FleetStackAuditSheet: View {
             HStack {
                 Label(result.hostName, systemImage: result.error == nil ? "server.rack" : "exclamationmark.triangle.fill")
                     .font(.headline)
-                    .foregroundStyle(result.error == nil ? .primary : .red)
+                    .foregroundStyle(result.error == nil ? Color.primary : Color.red)
                 Spacer()
                 Text(result.finishedAt, style: .time)
                     .font(.caption.monospacedDigit())

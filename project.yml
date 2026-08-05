@@ -177,6 +177,7 @@ targets:
       - path: Sources/AgentSshMacOS/AgentSshMacOS.swift
       - path: Sources/AgentSshMacOS/FileModels.swift
       - path: Sources/AgentSshMacOS/SharedJSONFileStore.swift
+      - path: Sources/AgentSshMacOS/OperationalAuditStore.swift
       - path: Sources/AgentSshMacOS/NetworkPolishModels.swift
       - path: Sources/AgentSshMacOS/ConnectionStore.swift
       - path: Sources/AgentSshMacOS/PlatformIntegrationModels.swift

@@ -38,6 +38,14 @@ public struct StackDiagnosticComponent: Codable, Identifiable, Equatable, Sendab
 public struct StackDiagnosticSnapshot: Equatable, Sendable {
     public var components: [StackDiagnosticComponent]
     public var rawOutput: String
+
+    /// Explicit public initializer: the synthesized memberwise one is internal
+    /// to this module, so app targets that build a snapshot directly (the stack
+    /// audit view) can't see it.
+    public init(components: [StackDiagnosticComponent], rawOutput: String) {
+        self.components = components
+        self.rawOutput = rawOutput
+    }
 }
 
 public enum StackDiagnosticParser {
