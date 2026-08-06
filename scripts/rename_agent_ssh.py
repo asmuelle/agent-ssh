@@ -7,7 +7,7 @@ replacements = [
     ("McSshApp", "AgentSshApp"),
     ("McSsh", "AgentSsh"),
     ("mcSsh", "agentSsh"),
-    ("midnight-ssh", "agent-ssh"),
+    ("agent-ssh", "agent-ssh"),
 ]
 
 ignored_dirs = {".git", "target", ".derivedData", "Agent-Ssh.xcodeproj"}

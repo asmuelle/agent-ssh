@@ -2,13 +2,47 @@
 
 set -euo pipefail
 
-notarize="${1:-false}"
+mode="${1:-false}"
+notarize="${mode}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 macos_dir="$(cd "${script_dir}/.." && pwd)"
-repo_root="$(cd "${macos_dir}/.." && pwd)"
 plist="${macos_dir}/AgentSshApp/Info.plist"
 app_name="agent-ssh"
-app_path="${macos_dir}/build/Build/Products/Release/${app_name}.app"
+app_path="${ASSH_MAC_DERIVED_DATA:-${macos_dir}/.derivedData/macos}/Build/Products/Release/${app_name}.app"
+
+if [[ "${mode}" == "--check" ]]; then
+    for command in just xcodegen xcodebuild hdiutil codesign shasum; do
+        command -v "${command}" >/dev/null || {
+            echo "Missing release prerequisite: ${command}" >&2
+            exit 1
+        }
+    done
+    bash -n "${BASH_SOURCE[0]}"
+    plutil -lint "$plist" "${macos_dir}/AgentSshWidgets/Info.plist" >/dev/null
+    echo "macOS release script preflight passed (static checks only)"
+    echo "Expected app: ${app_path}"
+    exit 0
+fi
+
+if [[ "${mode}" != "true" && "${mode}" != "false" ]]; then
+    echo "Usage: scripts/mac_release.sh [true|false|--check]" >&2
+    exit 1
+fi
+
+if [[ "${notarize}" != "true" && -n "${MAC_RELEASE_BASE_URL:-}" ]]; then
+    echo "MAC_RELEASE_BASE_URL requires notarization. Non-notarized artifacts are local-only." >&2
+    exit 1
+fi
+
+if [[ -z "${APPLE_DEVELOPMENT_TEAM:-}" ]]; then
+    echo "APPLE_DEVELOPMENT_TEAM is required for a release build." >&2
+    exit 1
+fi
+
+if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+    echo "APPLE_SIGNING_IDENTITY is required for a public Developer ID release." >&2
+    exit 1
+fi
 
 # A release with an empty SUPublicEDKey ships updates that Sparkle cannot
 # signature-verify. Fail early instead of producing an unverifiable artifact.
@@ -19,30 +53,38 @@ if [[ -z "$sparkle_key" ]]; then
     exit 1
 fi
 
-version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
 build="${CURRENT_PROJECT_VERSION:-$(date -u +%Y%m%d%H%M%S)}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+latest_dmg="${macos_dir}/${app_name}.dmg"
+
+cd "$macos_dir"
+
+just mac-clean
+
+CURRENT_PROJECT_VERSION="$build" just mac-build-signed
+
+if [[ ! -d "$app_path" ]]; then
+    echo "Expected app not found after build: ${app_path}" >&2
+    exit 1
+fi
+
+codesign --verify --deep --strict --verbose=2 "$app_path"
+if ! codesign -dv --verbose=4 "$app_path" 2>&1 | grep -q '^Authority=Developer ID Application:'; then
+    echo "Built app is not signed with a Developer ID Application certificate: ${app_path}" >&2
+    exit 1
+fi
+
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${app_path}/Contents/Info.plist")"
+if [[ -z "$version" || "$version" == *'$('* ]]; then
+    echo "Built app has an invalid version: ${version}" >&2
+    exit 1
+fi
+
 release_name="${app_name}-${version}-${build}-${stamp}"
 release_dir="${macos_dir}/build/release/${release_name}"
 release_dmg="${release_dir}/${app_name}-${version}.dmg"
-latest_dmg="${macos_dir}/${app_name}.dmg"
-
-cd "$repo_root"
-
-just mac-clean
 rm -rf "$release_dir"
 mkdir -p "$release_dir"
-
-if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
-    CURRENT_PROJECT_VERSION="$build" just mac-build-signed
-else
-    if [[ "$notarize" == "true" ]]; then
-        echo "APPLE_SIGNING_IDENTITY is required before notarizing a release." >&2
-        exit 1
-    fi
-    echo "APPLE_SIGNING_IDENTITY is not set; building a development-signed local artifact."
-    CURRENT_PROJECT_VERSION="$build" just mac-build
-fi
 
 just mac-dmg
 
@@ -76,11 +118,13 @@ EOF
 
 if [[ "$notarize" == "true" ]]; then
     just mac-notarize "$release_dmg"
+    xcrun stapler validate "$release_dmg"
+    spctl --assess --type open --context context:primary-signature --verbose=2 "$release_dmg"
 else
-    echo "Skipping notarization. Pass 'true' after Apple Developer credentials are available."
+    echo "Skipping notarization. This artifact is not ready for public distribution. Pass 'true' to notarize it."
 fi
 
-if [[ -n "${MAC_RELEASE_BASE_URL:-}" ]]; then
+if [[ "$notarize" == "true" && -n "${MAC_RELEASE_BASE_URL:-}" ]]; then
     # generate_appcast signs each DMG with the EdDSA private key from the
     # keychain (created by `just mac-sparkle-keygen`), producing enclosure
     # entries with a sparkle:edSignature that the app can verify.

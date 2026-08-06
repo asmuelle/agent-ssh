@@ -75,7 +75,7 @@
       }
       .badge .pip { width: 9px; height: 9px; border-radius: 50%; background: var(--grad); }
       h1 {
-        font-size: 92px;
+        font-size: 76px;
         line-height: 0.95;
         letter-spacing: -0.045em;
         font-weight: 800;
@@ -148,26 +148,24 @@
     <div class="frame"></div>
     <div class="wrap">
       <div class="left">
-        <div class="badge"><span class="pip"></span> macOS · iPadOS · Rust core</div>
-        <h1>agent<span class="slash">/</span>ssh</h1>
-        <p class="tag">The native SSH workspace for people who <b>live in production</b>.</p>
+        <div class="badge"><span class="pip"></span> Mac · iPhone · iPad · Agentless</div>
+        <h1>agent-<span class="slash">ssh</span></h1>
+        <p class="tag">Diagnose and <b>safely fix</b> Linux servers over SSH.</p>
         <div class="chips">
-          <span class="chip">SwiftUI</span>
-          <span class="chip">Rust 2024</span>
-          <span class="chip">UniFFI</span>
-          <span class="chip">tokio</span>
-          <span class="chip">PostgreSQL</span>
-          <span class="chip">SFTP</span>
+          <span class="chip">Server Doctor</span>
+          <span class="chip">Safe changes</span>
+          <span class="chip">Runbooks</span>
+          <span class="chip">Incident evidence</span>
         </div>
       </div>
       <div class="right">
         <div class="icon-glow"><img src="icon.png" alt="" /></div>
         <div class="term">
-          <div class="bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="bt">prod-edge-01 — ssh</span></div>
-          <div class="body"><span class="cp">andreas@prod</span><span class="pa"> ~</span> <span class="cm">psql -c "select count(*)"</span><br />
-            count<br />
-            ───────<br />
-            <span class="nu">4821934</span></div>
+          <div class="bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="bt">Server Doctor — prod-edge-01</span></div>
+          <div class="body"><span class="ok">✓</span> failed services: none<br />
+            <span class="ok">✓</span> disk pressure: normal<br />
+            <span class="nu">!</span> security updates: 7<br />
+            <span class="cp">→</span> review evidence</div>
         </div>
       </div>
     </div>

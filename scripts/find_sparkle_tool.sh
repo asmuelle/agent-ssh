@@ -18,7 +18,7 @@ fi
 
 candidates=(
     "${macos_dir}/build/SourcePackages/artifacts/sparkle/Sparkle/bin/${tool_name}"
-    "/private/tmp/rshell-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/${tool_name}"
+    "/private/tmp/agent-ssh-dd/SourcePackages/artifacts/sparkle/Sparkle/bin/${tool_name}"
     "/Applications/Sparkle/bin/${tool_name}"
 )
 
