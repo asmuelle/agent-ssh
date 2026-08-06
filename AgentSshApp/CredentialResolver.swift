@@ -92,7 +92,7 @@ final class CredentialResolver {
             account,
             "Enter password for \(profile.name) (\(account))"
         ) else {
-            logger.info("Password prompt cancelled for \(account, privacy: .public)")
+            logger.info("Password prompt cancelled for \(account, privacy: .private(mask: .hash))")
             return nil
         }
         return ResolvedCredential(

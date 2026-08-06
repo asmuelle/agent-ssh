@@ -2,6 +2,9 @@ import CryptoKit
 import Foundation
 import Security
 import AgentSshMacOS
+import os
+
+private let keyVaultLogger = Logger(subsystem: "com.agent-ssh.app", category: "SSHKeyVault")
 
 struct SSHKeyMetadata: Equatable {
     let id: String
@@ -329,6 +332,7 @@ final class SSHKeyVault {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecSuccess, let data = item as? Data, data.count == 32 {
+            migrateAccessibilityIfNeeded()
             return data
         }
         if status != errSecItemNotFound {
@@ -347,11 +351,51 @@ final class SSHKeyVault {
         addQuery.removeValue(forKey: kSecReturnData as String)
         addQuery.removeValue(forKey: kSecMatchLimit as String)
         addQuery[kSecValueData as String] = bytes
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
             throw SSHKeyVaultError.keychainUnavailable(addStatus)
         }
         return bytes
+    }
+
+    /// Opportunistically tightens the master key's keychain accessibility to
+    /// `…WhenUnlockedThisDeviceOnly`. Strictly best-effort: a failure here (a
+    /// transient keychain error, or a context where the update is denied) must
+    /// never propagate, because `masterKey()` has already read the key it needs
+    /// and letting the migration throw would make every stored SSH key
+    /// unreadable — a full lockout for existing users on upgrade.
+    private func migrateAccessibilityIfNeeded() {
+        let attributeQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var attributes: CFTypeRef?
+        let attributeStatus = SecItemCopyMatching(attributeQuery as CFDictionary, &attributes)
+        if attributeStatus == errSecSuccess,
+           let current = (attributes as? [String: Any])?[kSecAttrAccessible as String] as? String,
+           current == (kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String) {
+            // Already migrated — avoid a needless write on every key read.
+            return
+        }
+
+        let migrationQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+        ]
+        let migrationStatus = SecItemUpdate(
+            migrationQuery as CFDictionary,
+            [kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly] as CFDictionary
+        )
+        if migrationStatus != errSecSuccess {
+            keyVaultLogger.warning(
+                "SSH key master-key accessibility migration failed: \(migrationStatus, privacy: .public)"
+            )
+        }
     }
 
     private func recordURL(id: String) -> URL {

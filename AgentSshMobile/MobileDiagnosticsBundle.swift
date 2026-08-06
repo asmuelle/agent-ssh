@@ -253,21 +253,11 @@ enum MobileDiagnosticsRedactor {
     }
 
     static func redactSecrets(_ input: String) -> String {
-        let patterns = [
-            #"(?i)(password|passphrase|secret|token|authorization)\s*[:=]\s*[^,\s;]+"#,
-            #"(?i)(private[_ -]?key)\s*[:=]\s*[^,\s;]+"#,
-        ]
-        return patterns.reduce(input) { partial, pattern in
-            guard let regex = try? NSRegularExpression(pattern: pattern) else {
-                return partial
-            }
-            let range = NSRange(partial.startIndex..<partial.endIndex, in: partial)
-            return regex.stringByReplacingMatches(
-                in: partial,
-                options: [],
-                range: range,
-                withTemplate: "$1=[redacted]"
-            )
-        }
+        // Delegate to the shared, well-tested redactor (compiled into this
+        // target) rather than a weaker parallel regex set. The previous inline
+        // patterns terminated the secret value at the first whitespace, leaking
+        // multi-word secrets such as `Authorization: Bearer eyJ…`, and had no
+        // PEM private-key-block pattern. `.balanced` closes both gaps.
+        ServerDoctorRedactor.redact(input, preset: .balanced).text
     }
 }

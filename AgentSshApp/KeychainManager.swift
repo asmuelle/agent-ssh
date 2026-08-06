@@ -21,7 +21,7 @@ class KeychainManager {
     func savePassword(kind: FfiCredentialKind, account: String, secret: String) -> Bool {
         let result = rshellKeychainSave(kind: kind, account: account, secret: secret)
         if !result.success {
-            logger.error("keychain save failed: \(result.error ?? "?", privacy: .public)")
+            logger.error("keychain save failed: \(result.error ?? "?", privacy: .private(mask: .hash))")
         }
         return result.success
     }
@@ -34,7 +34,7 @@ class KeychainManager {
     func loadPassword(kind: FfiCredentialKind, account: String) -> String? {
         let result = rshellKeychainLoad(kind: kind, account: account)
         if !result.success {
-            logger.error("keychain load failed: \(result.error ?? "?", privacy: .public)")
+            logger.error("keychain load failed: \(result.error ?? "?", privacy: .private(mask: .hash))")
             return nil
         }
         // Rust returns `success: true, value: nil` when no entry exists.
@@ -47,7 +47,7 @@ class KeychainManager {
     func deletePassword(kind: FfiCredentialKind, account: String) -> Bool {
         let result = rshellKeychainDelete(kind: kind, account: account)
         if !result.success {
-            logger.error("keychain delete failed: \(result.error ?? "?", privacy: .public)")
+            logger.error("keychain delete failed: \(result.error ?? "?", privacy: .private(mask: .hash))")
         }
         return result.success
     }

@@ -4,9 +4,11 @@ import SwiftUI
 struct MobileConnectionMapView: View {
     let connectionId: String
 
+    @AppStorage("privacy.allowExternalIPGeolocation") private var allowExternalIPGeolocation = false
     @State private var snapshot = MobileRemoteIPMapSnapshot.empty
     @State private var isLoading = false
     @State private var lastError: String?
+    @State private var refreshTask: Task<Void, Never>?
 
     private static let maxGeolocatedIPs = 24
     private static let remoteAddressScript = """
@@ -68,6 +70,25 @@ struct MobileConnectionMapView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
 
+            if !allowExternalIPGeolocation {
+                Text("Connection Map sends public source IP addresses to ipwho.is to obtain approximate locations. No lookup occurs until you opt in.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Allow IP Geolocation") {
+                    allowExternalIPGeolocation = true
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Button("Disable IP Geolocation") {
+                    allowExternalIPGeolocation = false
+                    refreshTask?.cancel()
+                    refreshTask = nil
+                    snapshot = .empty
+                    lastError = nil
+                }
+                .buttonStyle(.bordered)
+            }
+
             MobileWorldMapCanvas(points: snapshot.points)
                 .frame(height: 180)
 
@@ -99,8 +120,13 @@ struct MobileConnectionMapView: View {
         }
         .padding(10)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-        .task(id: connectionId) {
+        .task(id: "\(connectionId):\(allowExternalIPGeolocation)") {
+            guard allowExternalIPGeolocation else { return }
             await refresh()
+        }
+        .onDisappear {
+            refreshTask?.cancel()
+            refreshTask = nil
         }
     }
 
@@ -123,12 +149,13 @@ struct MobileConnectionMapView: View {
             }
 
             Button {
-                Task { await refresh() }
+                refreshTask?.cancel()
+                refreshTask = Task { await refresh() }
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
-            .disabled(isLoading)
+            .disabled(isLoading || !allowExternalIPGeolocation)
             .accessibilityLabel("Refresh connection map")
         }
     }
@@ -146,6 +173,7 @@ struct MobileConnectionMapView: View {
 
     @MainActor
     private func refresh() async {
+        guard allowExternalIPGeolocation, !Task.isCancelled else { return }
         isLoading = true
         defer { isLoading = false }
 
@@ -159,7 +187,9 @@ struct MobileConnectionMapView: View {
                 connected: addresses.connected,
                 banned: addresses.banned
             )
+            guard allowExternalIPGeolocation, !Task.isCancelled else { return }
             let locations = await MobileIPGeolocationService.shared.lookup(sourceIPs.visible)
+            guard allowExternalIPGeolocation, !Task.isCancelled else { return }
             snapshot = MobileRemoteIPMapSnapshot(
                 connectedCount: addresses.connected.count,
                 bannedCount: addresses.banned.count,
@@ -182,6 +212,7 @@ struct MobileConnectionMapView: View {
         banned: [String]
     ) -> (visible: [String], truncated: Int) {
         let all = MobileRemoteIPParser.unique(connected + banned)
+            .filter(PublicIPAddress.isEligibleForExternalGeolocation)
         let visible = Array(all.prefix(maxGeolocatedIPs))
         return (visible, max(0, all.count - visible.count))
     }
@@ -393,6 +424,7 @@ private actor MobileIPGeolocationService {
         var result: [String: MobileIPGeolocation] = [:]
 
         for ip in unique {
+            guard UserDefaults.standard.bool(forKey: "privacy.allowExternalIPGeolocation") else { break }
             if let cached = cache[ip] {
                 result[ip] = cached
                 continue
@@ -413,6 +445,9 @@ private actor MobileIPGeolocationService {
     }
 
     private func fetch(_ ip: String) async -> MobileIPGeolocation? {
+        guard UserDefaults.standard.bool(forKey: "privacy.allowExternalIPGeolocation"),
+              !Task.isCancelled
+        else { return nil }
         guard let encodedIP = ip.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "https://ipwho.is/\(encodedIP)?fields=success,message,ip,latitude,longitude,city,country,country_code")
         else { return nil }
