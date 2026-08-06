@@ -37,6 +37,17 @@ struct MonitorDrillDownSheet: View {
         self.drillDown = drillDown
         self.sshPort = sshPort
         _processSortOrder = State(initialValue: Self.defaultProcessSortOrder(for: drillDown))
+        _mode = State(initialValue: Self.defaultMode(for: drillDown))
+    }
+
+    /// Unit drill-downs open on the journal (Details) so the errors and
+    /// warnings that brought the user here are visible immediately —
+    /// status and actions are one segment away in Overview.
+    static func defaultMode(for drillDown: MonitorDrillDown) -> DrillDownMode {
+        if case .systemdService = drillDown {
+            return .details
+        }
+        return .overview
     }
 
     var body: some View {

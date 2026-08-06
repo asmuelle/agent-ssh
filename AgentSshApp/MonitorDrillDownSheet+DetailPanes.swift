@@ -127,7 +127,8 @@ extension MonitorDrillDownSheet {
                 .frame(minWidth: 340)
             MonitorJournalLogView(
                 rawLines: diagnostic.journalLines,
-                fallbackHints: diagnostic.warnings
+                fallbackHints: diagnostic.warnings,
+                focusOnIssues: true
             )
             .padding(12)
             .frame(minWidth: 460)
