@@ -101,10 +101,26 @@ struct MonitoredSystemdServicesPane: View {
                                     .truncationMode(.middle)
                                 Spacer(minLength: 8)
                                 if service.journalIssueCounts.hasIssues {
-                                    JournalIssueBadges(
-                                        counts: service.journalIssueCounts,
-                                        compact: true
-                                    )
+                                    // The badge is what the eye lands on —
+                                    // make it a first-class click target for
+                                    // the unit drill-down, not just the row.
+                                    Button {
+                                        onSelectService(service.name)
+                                    } label: {
+                                        JournalIssueBadges(
+                                            counts: service.journalIssueCounts,
+                                            compact: true
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .onHover { inside in
+                                        if inside {
+                                            NSCursor.pointingHand.push()
+                                        } else {
+                                            NSCursor.pop()
+                                        }
+                                    }
+                                    .help("Show \(service.name)'s status and recent journal")
                                 }
                                 Text(formatServiceUptime(service.uptimeSeconds))
                                     .font(.caption2.monospacedDigit())

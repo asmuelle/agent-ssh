@@ -69,4 +69,33 @@ struct HygieneProbeParserTests {
         #expect(snapshot.failedUnits.isEmpty)
         #expect(snapshot.dockerProblems.isEmpty)
     }
+
+    @Test("Monitored-service log lines parse unit, state, and counts")
+    func serviceLogSection() {
+        let output = """
+        \(separator)
+        \(separator)
+        \(separator)
+        kms.service\tactive\t15\t101
+        nginx.service\tactive\t0\t54
+        broken line without tabs
+        """
+        let snapshot = parse(output)
+        #expect(snapshot.serviceLogs == [
+            HygieneServiceLogHealth(
+                unit: "kms.service", activeState: "active",
+                journalErrors: 15, journalWarnings: 101
+            ),
+            HygieneServiceLogHealth(
+                unit: "nginx.service", activeState: "active",
+                journalErrors: 0, journalWarnings: 54
+            ),
+        ])
+    }
+
+    @Test("Output without a service-log section yields no service logs")
+    func missingServiceLogSection() {
+        let snapshot = parse("\n\(separator)\n\(separator)\n")
+        #expect(snapshot.serviceLogs.isEmpty)
+    }
 }

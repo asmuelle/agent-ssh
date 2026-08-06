@@ -162,6 +162,35 @@ extension SystemMonitorView {
                     severity: .warning
                 ))
             }
+
+            // Monitored services whose recent journal shows trouble.
+            // Any error surfaces (the user chose to watch this unit);
+            // warnings alone need a real pile. Counts mirror the
+            // badges inside the expanded Services pane.
+            for log in hygiene.serviceLogs {
+                let severity: DashboardHealthIssue.Severity
+                if log.journalErrors >= Self.serviceLogErrorsCritical {
+                    severity = .critical
+                } else if log.journalErrors > 0 {
+                    severity = .warning
+                } else if log.journalWarnings >= Self.serviceLogWarningsThreshold {
+                    severity = .warning
+                } else {
+                    continue
+                }
+                let shortName = log.unit.hasSuffix(".service")
+                    ? String(log.unit.dropLast(".service".count))
+                    : log.unit
+                let leadCount = log.journalErrors > 0 ? log.journalErrors : log.journalWarnings
+                issues.append(DashboardHealthIssue(
+                    id: "service-logs:\(log.unit)",
+                    title: "\(connectionLabel): \(shortName) · \(leadCount)",
+                    detail: "\(log.journalErrors) errors · \(log.journalWarnings) warnings in recent log"
+                        + (log.activeState == "active" ? "" : " · \(log.activeState)"),
+                    icon: "exclamationmark.gearshape",
+                    severity: severity
+                ))
+            }
         }
 
         return issues.sorted {
@@ -183,11 +212,12 @@ extension SystemMonitorView {
     static func issueFamilyPriority(_ id: String) -> Int {
         if id.hasPrefix("status:") { return 0 }
         if id == "services-failed" { return 1 }
-        if id == "docker" { return 2 }
-        if id.hasPrefix("ufw") { return 3 }
-        if id == "cpu" || id == "memory" || id.hasPrefix("disk:") { return 4 }
-        if id == "journal" { return 5 }
-        return 6
+        if id.hasPrefix("service-logs:") { return 2 }
+        if id == "docker" { return 3 }
+        if id.hasPrefix("ufw") { return 4 }
+        if id == "cpu" || id == "memory" || id.hasPrefix("disk:") { return 5 }
+        if id == "journal" { return 6 }
+        return 7
     }
 
     func publishDashboardHealthSnapshot() {

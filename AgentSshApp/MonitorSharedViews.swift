@@ -74,6 +74,14 @@ func fleetIssueAction(issueId: String, disks: [FfiDiskMount]) -> FleetIssueActio
     default:
         break
     }
+    if issueId.hasPrefix("service-logs:") {
+        let unit = String(issueId.dropFirst("service-logs:".count))
+        return FleetIssueAction(
+            label: "Open service",
+            help: "Inspect \(unit)'s status and recent journal",
+            destination: .drill(.systemdService(unit))
+        )
+    }
     if issueId.hasPrefix("disk:") {
         let mount = String(issueId.dropFirst("disk:".count))
         if let disk = disks.first(where: { $0.mount == mount }) {
