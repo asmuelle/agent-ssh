@@ -126,7 +126,7 @@ graph TD
 > *"Decrypt server logs instantly. The power of Apple Writing Tools, built directly into your terminal."*
 
 ### Feature Showcase Scenario (App Store Video Storyboard)
-* **Visual**: A developer is holding an iPad Pro in split-screen mode, viewing a long, chaotic Postgres migration log in Midnight SSH.
+* **Visual**: A developer is holding an iPad Pro in split-screen mode, viewing a long, chaotic Postgres migration log in agent-ssh.
 * **Action**: They highlight a messy 20-line SQL exception block, tap the selection, and select **Writing Tools -> Summarize**.
 * **Animation**: The screen glows with Apple Intelligence's signature color gradient. A beautifully summarized popover slides in: `Summary: The database migration failed because the 'users' table already has a column named 'email'.`
 * **Voiceover**: *"Stop squinting at massive terminal log files. Highlight any trace, log, or config setting, and let native Apple Writing Tools break it down instantly."*

@@ -55,3 +55,27 @@ This repository is continuously protected by:
 
 These measures reduce, but do not eliminate, risk. Well-intentioned reports of
 anything they miss are genuinely appreciated.
+
+## Release Signing Key Management
+
+The Sparkle auto-updater verifies every update against the EdDSA public key
+embedded in the app (`SUPublicEDKey` in `AgentSshApp/Info.plist`). The
+corresponding **private key is the root of trust for all shipped updates** and
+must be handled accordingly:
+
+- **Escrow.** The Sparkle EdDSA private key (stored in the login Keychain by
+  `just mac-sparkle-keygen`) MUST be backed up out of band — e.g. exported to a
+  password manager or an offline encrypted volume. If the only copy is lost
+  (laptop failure/wipe), no future update the installed base will accept can
+  ever be signed again, orphaning every existing install.
+- **Confidentiality.** Anyone with this key can sign a malicious update that
+  passes signature verification. Never place it in the repo, CI, or any shared
+  storage. Release builds run locally; keep it that way until release signing
+  moves to a hardware-backed or provisioned key.
+- **Rotation.** To rotate, ship a new `SUPublicEDKey` in a normally-signed
+  release (signed with the *old* key), then sign subsequent releases with the
+  new key. Because clients only trust the key baked into the version they
+  currently run, plan for a transition window where the old key stays valid.
+- **Notarization credentials** (`APPLE_APP_SPECIFIC_PASSWORD`) should be stored
+  via `notarytool store-credentials` and referenced with `--keychain-profile`
+  rather than passed as a plaintext environment variable.

@@ -74,7 +74,7 @@ struct MidnightSSHAppShortcuts: AppShortcutsProvider {
 }
 
 struct MidnightSSHServerEntity: AppEntity {
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Midnight SSH Server")
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "agent-ssh Server")
     static var defaultQuery = MidnightSSHServerQuery()
 
     var id: String
@@ -122,7 +122,7 @@ struct MidnightSSHServerQuery: EntityStringQuery {
 }
 
 struct MidnightSSHOfflineFolderEntity: AppEntity {
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Midnight SSH Offline Folder")
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "agent-ssh Offline Folder")
     static var defaultQuery = MidnightSSHOfflineFolderQuery()
 
     var id: String
@@ -196,14 +196,14 @@ enum MidnightSSHAutomationPolicyOption: String, AppEnum {
 }
 
 struct ListMidnightSSHServersIntent: AppIntent {
-    static var title: LocalizedStringResource = "List Midnight SSH Servers"
-    static var description = IntentDescription("Returns the saved Midnight SSH servers available to Shortcuts.")
+    static var title: LocalizedStringResource = "List agent-ssh Servers"
+    static var description = IntentDescription("Returns the saved agent-ssh servers available to Shortcuts.")
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let data = try ShortcutIntentSupport.loadIntegrations()
         let servers = data.shortcutServers(matching: "")
         let output = servers.isEmpty
-            ? "No Midnight SSH servers are available to Shortcuts. Open the app once to publish saved servers."
+            ? "No agent-ssh servers are available to Shortcuts. Open the app once to publish saved servers."
             : servers.map { "\($0.displayName) - \($0.endpoint)" }.joined(separator: "\n")
 
         try ShortcutIntentSupport.recordCompletedShortcut(
@@ -216,8 +216,8 @@ struct ListMidnightSSHServersIntent: AppIntent {
 }
 
 struct UploadMidnightSSHFileIntent: AppIntent {
-    static var title: LocalizedStringResource = "Upload File with Midnight SSH"
-    static var description = IntentDescription("Queues a file upload to a saved Midnight SSH server.")
+    static var title: LocalizedStringResource = "Upload File with agent-ssh"
+    static var description = IntentDescription("Queues a file upload to a saved agent-ssh server.")
 
     @Parameter(title: "Server")
     var server: MidnightSSHServerEntity
@@ -260,8 +260,8 @@ struct UploadMidnightSSHFileIntent: AppIntent {
 }
 
 struct DownloadMidnightSSHFileIntent: AppIntent {
-    static var title: LocalizedStringResource = "Download File with Midnight SSH"
-    static var description = IntentDescription("Queues a remote file download from a saved Midnight SSH server.")
+    static var title: LocalizedStringResource = "Download File with agent-ssh"
+    static var description = IntentDescription("Queues a remote file download from a saved agent-ssh server.")
 
     @Parameter(title: "Server")
     var server: MidnightSSHServerEntity
@@ -301,8 +301,8 @@ struct DownloadMidnightSSHFileIntent: AppIntent {
 }
 
 struct RunMidnightSSHCommandIntent: AppIntent {
-    static var title: LocalizedStringResource = "Run Midnight SSH Command"
-    static var description = IntentDescription("Queues a command for a saved Midnight SSH server.")
+    static var title: LocalizedStringResource = "Run agent-ssh Command"
+    static var description = IntentDescription("Queues a command for a saved agent-ssh server.")
 
     @Parameter(title: "Server")
     var server: MidnightSSHServerEntity
@@ -334,8 +334,8 @@ struct RunMidnightSSHCommandIntent: AppIntent {
 }
 
 struct OpenMidnightSSHTerminalIntent: AppIntent {
-    static var title: LocalizedStringResource = "Open Midnight SSH Terminal"
-    static var description = IntentDescription("Opens Midnight SSH and queues a terminal focus request for a saved server.")
+    static var title: LocalizedStringResource = "Open agent-ssh Terminal"
+    static var description = IntentDescription("Opens agent-ssh and queues a terminal focus request for a saved server.")
     static var openAppWhenRun = true
 
     @Parameter(title: "Server")
@@ -358,12 +358,12 @@ struct OpenMidnightSSHTerminalIntent: AppIntent {
             forceQueued: true
         )
 
-        return .result(value: operation.id, dialog: "Opening Midnight SSH for \(record.displayName).")
+        return .result(value: operation.id, dialog: "Opening agent-ssh for \(record.displayName).")
     }
 }
 
 struct SyncMidnightSSHOfflineFolderIntent: AppIntent {
-    static var title: LocalizedStringResource = "Sync Midnight SSH Offline Folder"
+    static var title: LocalizedStringResource = "Sync agent-ssh Offline Folder"
     static var description = IntentDescription("Queues a refresh for an offline SFTP folder.")
 
     @Parameter(title: "Folder")
@@ -393,7 +393,7 @@ struct SyncMidnightSSHOfflineFolderIntent: AppIntent {
 }
 
 struct TailMidnightSSHLogsIntent: AppIntent {
-    static var title: LocalizedStringResource = "Tail Midnight SSH Logs"
+    static var title: LocalizedStringResource = "Tail agent-ssh Logs"
     static var description = IntentDescription("Queues a portable recent-log command for a saved server.")
 
     @Parameter(title: "Server")
@@ -429,7 +429,7 @@ struct TailMidnightSSHLogsIntent: AppIntent {
 }
 
 struct StartMidnightSSHMonitorIntent: AppIntent {
-    static var title: LocalizedStringResource = "Start Midnight SSH Monitor"
+    static var title: LocalizedStringResource = "Start agent-ssh Monitor"
     static var description = IntentDescription("Queues a monitor refresh for a saved server.")
 
     @Parameter(title: "Server")
@@ -455,7 +455,7 @@ struct StartMidnightSSHMonitorIntent: AppIntent {
 }
 
 struct SetMidnightSSHAutomationPolicyIntent: AppIntent {
-    static var title: LocalizedStringResource = "Set Midnight SSH Automation Policy"
+    static var title: LocalizedStringResource = "Set agent-ssh Automation Policy"
     static var description = IntentDescription("Sets how Shortcuts may use saved credentials for a server.")
     static var openAppWhenRun = true
 
@@ -565,7 +565,7 @@ private enum ShortcutIntentSupport {
         case .queued:
             return "Operation \(queuedVerb). ID: \(operation.id)"
         case .waitingForApproval:
-            return "Operation \(approvalVerb) in Midnight SSH. ID: \(operation.id)"
+            return "Operation \(approvalVerb) in agent-ssh. ID: \(operation.id)"
         case .running, .completed, .failed, .cancelled:
             return "Operation recorded. ID: \(operation.id)"
         }
@@ -658,7 +658,7 @@ private enum ShortcutIntentError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notFound(let name):
-            return "\(name) was not found in the shared Midnight SSH Shortcuts index."
+            return "\(name) was not found in the shared agent-ssh Shortcuts index."
         case .unsupported(let detail):
             return detail
         }
@@ -763,7 +763,7 @@ struct CheckServerHealthIntent: AppIntent {
         guard !scoped.isEmpty else {
             return .result(
                 value: "No recent diagnoses.",
-                dialog: "I don't have recent Server Doctor results. Open Midnight SSH and run a diagnosis first."
+                dialog: "I don't have recent Server Doctor results. Open agent-ssh and run a diagnosis first."
             )
         }
 
@@ -828,7 +828,7 @@ struct DiagnoseServerParameterIntent: AppIntent {
 
         return .result(
             value: "No diagnosis yet.",
-            dialog: "Open Midnight SSH and run Server Doctor on \(record.displayName) to see results here."
+            dialog: "Open agent-ssh and run Server Doctor on \(record.displayName) to see results here."
         )
     }
 }

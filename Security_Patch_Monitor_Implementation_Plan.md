@@ -4,7 +4,7 @@
 
 Implement Security Patch Monitor as an SSH-native, evidence-backed maintenance workflow for saved hosts. The first release should detect the remote OS and package manager, show update and reboot status, inspect risky SSH daemon settings, and render a per-host `Security` view without making system changes.
 
-This plan turns the product proposal in `Security_Patch_Monitor.md` into concrete work for the current Midnight SSH codebase.
+This plan turns the product proposal in `Security_Patch_Monitor.md` into concrete work for the current agent-ssh codebase.
 
 ## Implementation Principles
 

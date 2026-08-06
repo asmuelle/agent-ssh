@@ -163,13 +163,21 @@ struct SecurityPatchMonitorView: View {
 
     private func findingsList(_ result: SecurityPatchScanResult) -> some View {
         List(selection: $store.selectedFindingId) {
-            ForEach(result.findings) { finding in
+            ForEach(store.orderedFindings) { finding in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         severitySymbol(finding.severity)
                         Text(finding.title)
                             .font(.callout.weight(.medium))
                             .lineLimit(2)
+                        if !store.advisoryMatches(for: finding).isEmpty {
+                            Text("KEV")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.red, in: Capsule())
+                        }
                     }
                     Text(finding.summary)
                         .font(.caption)

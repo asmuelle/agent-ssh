@@ -91,7 +91,7 @@ final class TerminalTabsStore: ObservableObject {
         guard let idx = tabs.firstIndex(where: { $0.connectionId == connectionId })
         else { return }
         guard tabs[idx].status != status else { return }
-        logger.info("\(connectionId, privacy: .public) status: \(status.rawValue)")
+        logger.info("\(connectionId, privacy: .private(mask: .hash)) status: \(status.rawValue)")
         tabs[idx].status = status
         publishWidgetSnapshot(for: tabs[idx])
     }
@@ -106,7 +106,7 @@ final class TerminalTabsStore: ObservableObject {
         password: String? = nil,
         passphrase: String? = nil
     ) async {
-        logger.info("Opening connection \(profile.name, privacy: .public)")
+        logger.info("Opening connection \(profile.name, privacy: .private(mask: .hash))")
         lastError = nil
 
         // One tab per profile. If the existing tab's session is dead
@@ -116,10 +116,10 @@ final class TerminalTabsStore: ObservableObject {
            let existing = tabs.first(where: { $0.profile.id == profile.id }) {
             activeTabId = existing.id
             if existing.status == .disconnected || existing.status == .error {
-                logger.info("Existing tab for \(profile.name, privacy: .public) is dead — reconnecting")
+                logger.info("Existing tab for \(profile.name, privacy: .private(mask: .hash)) is dead — reconnecting")
                 await reconnect(tabId: existing.id)
             } else {
-                logger.info("Reusing existing tab for \(profile.name, privacy: .public)")
+                logger.info("Reusing existing tab for \(profile.name, privacy: .private(mask: .hash))")
             }
             return
         }
@@ -130,7 +130,7 @@ final class TerminalTabsStore: ObservableObject {
         // fresh from the UI (never re-entrantly with explicit credentials), so
         // an in-flight id means a genuine duplicate we should drop.
         guard !connectingProfileIds.contains(profile.id) else {
-            logger.info("Connect already in flight for \(profile.name, privacy: .public); ignoring duplicate")
+            logger.info("Connect already in flight for \(profile.name, privacy: .private(mask: .hash)); ignoring duplicate")
             return
         }
         connectingProfileIds.insert(profile.id)
@@ -170,7 +170,7 @@ final class TerminalTabsStore: ObservableObject {
         let profile = tab.profile
         let sessionId = tab.sessionId
 
-        logger.info("Reconnecting \(tab.connectionId, privacy: .public)")
+        logger.info("Reconnecting \(tab.connectionId, privacy: .private(mask: .hash))")
         tabs[idx].status = .connecting
         publishWidgetSnapshot(for: tabs[idx])
         lastError = nil
@@ -233,7 +233,7 @@ final class TerminalTabsStore: ObservableObject {
             )
         } else {
             guard let resolved = await resolver.resolve() else {
-                logger.info("Credential resolution cancelled for \(profile.name, privacy: .public)")
+                logger.info("Credential resolution cancelled for \(profile.name, privacy: .private(mask: .hash))")
                 return
             }
             credential = resolved
@@ -271,7 +271,7 @@ final class TerminalTabsStore: ObservableObject {
                       resolvedId == existingConnId
                 else {
                     lastError = "Reconnect routed to a different connection id; aborting"
-                    logger.error("Reconnect mismatch for \(sessionId, privacy: .public)")
+                    logger.error("Reconnect mismatch for \(sessionId, privacy: .private(mask: .hash))")
                     if let tabId { markTabError(tabId) }
                     return
                 }
@@ -329,7 +329,7 @@ final class TerminalTabsStore: ObservableObject {
                 generation = try await BridgeManager.shared.openTerminal(connectionId: connectionId)
             } catch {
                 if await BridgeManager.shared.canUseSftp(connectionId: connectionId) {
-                    logger.info("Server denied PTY but accepts SFTP; demoting tab for \(connectionId, privacy: .public)")
+                    logger.info("Server denied PTY but accepts SFTP; demoting tab for \(connectionId, privacy: .private(mask: .hash))")
                     kindOverride = .sftp
                     displayTitle = "\(profile.name) (SFTP)"
                     pendingFallback = PendingFallback(
@@ -438,7 +438,7 @@ final class TerminalTabsStore: ObservableObject {
                 detail: detail
             )
             if outcome == .trust {
-                logger.info("User trusted new host key for \(promptHost, privacy: .public):\(promptPort); retrying")
+                logger.info("User trusted new host key for \(promptHost, privacy: .private(mask: .hash)):\(promptPort); retrying")
                 await connectWithRetry(profile: profile, resolver: resolver, sessionId: sessionId, tabId: tabId)
                 return true
             }
@@ -484,7 +484,7 @@ final class TerminalTabsStore: ObservableObject {
             icon: "exclamationmark.triangle.fill",
             severity: .critical
         )
-        logger.error("Connect failed: \(message, privacy: .public)")
+        logger.error("Connect failed: \(message, privacy: .private(mask: .hash))")
     }
 
     private func keyPromptLabel(for profile: ConnectionProfile) -> String {

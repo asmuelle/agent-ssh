@@ -4,7 +4,7 @@ Implementation detail: see [`Security_Patch_Monitor_Implementation_Plan.md`](Sec
 
 ## Positioning
 
-Midnight SSH can grow beyond "SSH client" into a security-aware development workspace. The user is already connecting to servers, browsing files, running commands, and managing infrastructure. That makes the app a natural place to answer:
+agent-ssh can grow beyond "SSH client" into a security-aware development workspace. The user is already connecting to servers, browsing files, running commands, and managing infrastructure. That makes the app a natural place to answer:
 
 > Which connected machines need security attention before they become incidents?
 
@@ -12,7 +12,7 @@ The feature should be sold as **Security Patch Monitor for SSH Workspaces**, not
 
 ## Core Promise
 
-When a user opens a saved host, Midnight SSH should show whether that machine is:
+When a user opens a saved host, agent-ssh should show whether that machine is:
 
 - up to date
 - missing security updates
@@ -161,7 +161,7 @@ Useful files to detect:
 - Dockerfiles
 - container image references
 
-Scan these through OSV and GitHub advisories. This turns Midnight SSH into a remote development security assistant, not just a server patching tool.
+Scan these through OSV and GitHub advisories. This turns agent-ssh into a remote development security assistant, not just a server patching tool.
 
 ### Fleet Dashboard
 
@@ -305,7 +305,7 @@ Supporting messages:
 
 ## Strategic Differentiation
 
-Generic vulnerability scanners are noisy and external. Midnight SSH can be quieter and more useful because it operates from the developer's actual SSH workspace.
+Generic vulnerability scanners are noisy and external. agent-ssh can be quieter and more useful because it operates from the developer's actual SSH workspace.
 
 The differentiated angle is:
 

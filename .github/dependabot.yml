@@ -8,3 +8,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # NOTE: Sparkle and SwiftTerm are declared in project.yml (XcodeGen), which
+  # Dependabot cannot parse, so it does not surface updates for them. The pinned
+  # revisions live in swiftpm/Package.resolved; review upstream releases for
+  # those two packages manually until Dependabot can read the resolved file.
+  - package-ecosystem: "swift"
+    directory: "/swiftpm"
+    schedule:
+      interval: "weekly"

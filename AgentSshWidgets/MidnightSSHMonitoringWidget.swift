@@ -635,7 +635,7 @@ public struct ServerQuickCheckControl: ControlWidget {
                 Label(state.title, systemImage: state.iconName)
             }
         }
-        .displayName("agent-ssh Quick-Check")
+        .displayName("agent-ssh Quick Check")
     }
 
     private func fetchCurrentScannerState() -> (title: String, iconName: String) {

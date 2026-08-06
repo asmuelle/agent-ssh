@@ -2,21 +2,21 @@
 
 Date: 2026-05-07
 
-Scope: Termius, Secure ShellFish, ServerCat, Prompt 3, Blink Shell, and WebSSH. This is a source-based market and feature teardown for positioning Midnight SSH. It uses public official pages, Apple App Store listings, Google Play listings where available, and the local Midnight SSH feature catalog in `TOOLS.md`.
+Scope: Termius, Secure ShellFish, ServerCat, Prompt 3, Blink Shell, and WebSSH. This is a source-based market and feature teardown for positioning agent-ssh. It uses public official pages, Apple App Store listings, Google Play listings where available, and the local agent-ssh feature catalog in `TOOLS.md`.
 
 Important caveat: App Store ratings, in-app purchase prices, and exact package names vary by country and can change without notice. Treat price and rating references as directional snapshots, not permanent facts.
 
 ## Executive Read
 
-The mobile SSH market is not underserved at the basic terminal level. The leading products already cover SSH, SFTP, port forwarding, key management, snippets, themes, and cloud sync. Midnight SSH should therefore avoid positioning itself as "another SSH terminal". The credible opening is agentless server operations: diagnose a host, edit configs safely, run repeatable runbooks, collect incident evidence, inspect processes/logs/network state, and handle Postgres-over-SSH work without jumping between several apps.
+The mobile SSH market is not underserved at the basic terminal level. The leading products already cover SSH, SFTP, port forwarding, key management, snippets, themes, and cloud sync. agent-ssh should therefore avoid positioning itself as "another SSH terminal". The credible opening is agentless server operations: diagnose a host, edit configs safely, run repeatable runbooks, collect incident evidence, inspect processes/logs/network state, and handle Postgres-over-SSH work without jumping between several apps.
 
 Termius is the broadest commercial platform. Its moat is cross-platform reach, encrypted sync, teams, vaults, snippets, SFTP, port forwarding, and enterprise polish. It is the benchmark for "professional SSH client", but its subscription model and generic terminal-first framing leave room for a local-first, ops-specific alternative.
 
-Secure ShellFish is the strongest Apple-native SFTP and Files app integration competitor. It is likely the product users compare against if they want remote files, Finder/Files workflows, snippets, Shortcuts, and a native iOS/iPadOS feel. Midnight SSH should not fight ShellFish on "SFTP only"; it should win when remote file edits need change review, snapshots, operational context, and follow-up diagnostics.
+Secure ShellFish is the strongest Apple-native SFTP and Files app integration competitor. It is likely the product users compare against if they want remote files, Finder/Files workflows, snippets, Shortcuts, and a native iOS/iPadOS feel. agent-ssh should not fight ShellFish on "SFTP only"; it should win when remote file edits need change review, snapshots, operational context, and follow-up diagnostics.
 
-ServerCat is the closest direct threat to Midnight SSH's server-ops wedge. It presents Linux server monitoring, Docker management, SSH terminal access, background SSH, iCloud sync, and very low pricing. Midnight SSH must look more professional, safer, and more complete than ServerCat to justify premium pricing.
+ServerCat is the closest direct threat to agent-ssh's server-ops wedge. It presents Linux server monitoring, Docker management, SSH terminal access, background SSH, iCloud sync, and very low pricing. agent-ssh must look more professional, safer, and more complete than ServerCat to justify premium pricing.
 
-Prompt 3 is a terminal-quality benchmark. Panic's strengths are trust, native polish, Mosh, Eternal Terminal, GPU acceleration, clips, Panic Sync, key handling, jump hosts, agent forwarding, and a premium but understandable purchase model. Midnight SSH does not need to out-Prompt Prompt, but core terminal trust must be good enough that users accept the broader ops value.
+Prompt 3 is a terminal-quality benchmark. Panic's strengths are trust, native polish, Mosh, Eternal Terminal, GPU acceleration, clips, Panic Sync, key handling, jump hosts, agent forwarding, and a premium but understandable purchase model. agent-ssh does not need to out-Prompt Prompt, but core terminal trust must be good enough that users accept the broader ops value.
 
 Blink Shell is the iPad power-user and remote-development benchmark. It is deeper than a normal SSH client: Mosh, SSH config support, Secure Enclave keys, VS Code-style coding, remote build environments, port forwarding, agent forwarding, SFTP through Files, hardware-keyboard ergonomics, and iCloud host sync. Its complexity and developer-workstation focus leave room for a simpler server-admin workflow.
 
@@ -24,7 +24,7 @@ WebSSH is the broad sysadmin toolbox benchmark. It combines SSH, SFTP, Telnet, s
 
 ## Positioning Map
 
-| Product | Primary job | Best-known strengths | Main weakness / opening for Midnight SSH |
+| Product | Primary job | Best-known strengths | Main weakness / opening for agent-ssh |
 |---|---|---|---|
 | Termius | Cross-platform professional SSH platform | Vault, sync, teams, snippets, SFTP, port forwarding, Mosh, AI autocomplete, enterprise trust | Expensive subscriptions, broad/generic positioning, less focused on guided server diagnosis |
 | Secure ShellFish | Apple-native SSH and SFTP with Files/Finder integration | Files app provider, Finder integration, Shortcuts, snippets, tmux support, security-key and Secure Enclave support | File-centric; not primarily a server monitoring, runbook, or incident tool |
@@ -35,18 +35,18 @@ WebSSH is the broad sysadmin toolbox benchmark. It combines SSH, SFTP, Telnet, s
 
 ## Feature Matrix
 
-| Capability | Termius | Secure ShellFish | ServerCat | Prompt 3 | Blink Shell | WebSSH | Midnight implication |
+| Capability | Termius | Secure ShellFish | ServerCat | Prompt 3 | Blink Shell | WebSSH | agent-ssh implication |
 |---|---:|---:|---:|---:|---:|---:|---|
 | SSH terminal | Strong | Strong | Present | Very strong | Very strong | Strong | Must be competent and trustworthy, even if not the main differentiator |
 | Mosh / resilient sessions | Yes, per listings | tmux-oriented persistence | Not emphasized | Mosh and Eternal Terminal | Mosh is core | Not emphasized | Add Mosh, Eternal Terminal, or first-class tmux/session recovery to avoid a visible gap |
-| SFTP / remote files | Strong | Very strong | Not the lead message | Not the lead message | Files app SFTP | Very strong | Midnight's safe diff/snapshot save is a real differentiator if surfaced clearly |
+| SFTP / remote files | Strong | Very strong | Not the lead message | Not the lead message | Files app SFTP | Very strong | agent-ssh's safe diff/snapshot save is a real differentiator if surfaced clearly |
 | Files/Finder integration | Some platform integration | Very strong | Not emphasized | Not central | Files app integration | Present through SFTP browsing/editing | Apple-native file workflows matter for iPadOS adoption |
-| Port forwarding / tunneling | Strong | Present in ecosystem | Not central | Present | Local/remote/dynamic, SOCKS | Local port forwarding | Midnight can connect this to Postgres and admin workflows, not just expose raw tunnels |
-| Server metrics | Not core | Not core | Core | Not core | Not core | Network tools, not full monitor | Midnight should make server health a first-screen promise |
-| Docker/container management | Not core | Not core | Core | No | Not core | No | ServerCat owns this best among the set; Midnight needs either Docker depth or clearer non-Docker ops value |
-| Automation / snippets | Strong snippets and automation | Snippets and Shortcuts | Saved commands / automation | Clips | SSH config and workflows | Startup commands and deep links | Midnight runbooks should be more structured, auditable, and safer than snippets |
-| Incident reporting | Not emphasized | Not emphasized | Not emphasized | No | No | No | Strong whitespace for Midnight |
-| Database over SSH | Not emphasized | No | No | No | No | No | Midnight's Postgres workspace is a meaningful differentiator |
+| Port forwarding / tunneling | Strong | Present in ecosystem | Not central | Present | Local/remote/dynamic, SOCKS | Local port forwarding | agent-ssh can connect this to Postgres and admin workflows, not just expose raw tunnels |
+| Server metrics | Not core | Not core | Core | Not core | Not core | Network tools, not full monitor | agent-ssh should make server health a first-screen promise |
+| Docker/container management | Not core | Not core | Core | No | Not core | No | ServerCat owns this best among the set; agent-ssh needs either Docker depth or clearer non-Docker ops value |
+| Automation / snippets | Strong snippets and automation | Snippets and Shortcuts | Saved commands / automation | Clips | SSH config and workflows | Startup commands and deep links | agent-ssh runbooks should be more structured, auditable, and safer than snippets |
+| Incident reporting | Not emphasized | Not emphasized | Not emphasized | No | No | No | Strong whitespace for agent-ssh |
+| Database over SSH | Not emphasized | No | No | No | No | No | agent-ssh's Postgres workspace is a meaningful differentiator |
 | Team / enterprise | Strong | Individual/pro Apple tool | Individual/prosumer | Individual/pro Panic Sync | Individual/dev | Individual/prosumer | Team vaults are Termius territory; do later only if needed |
 | Low-price / lifetime appeal | Mixed; subscription-heavy | Strong | Very strong | Strong one-time option | Mixed subscriptions | Strong one-time option | Lifetime Pro can exploit subscription fatigue, but ServerCat anchors low expectations |
 
@@ -56,7 +56,7 @@ WebSSH is the broad sysadmin toolbox benchmark. It combines SSH, SFTP, Telnet, s
 
 Termius is the category default for cross-platform professional SSH. It is available across Apple platforms, Android, Windows, Linux, and the web, and it positions itself as a secure terminal platform rather than a simple app-store utility. The product is built around saved hosts, encrypted vaults, SFTP, snippets, port forwarding, sync, team sharing, and enterprise-grade trust.
 
-For many users, "Termius alternative" is the buying frame. If Midnight SSH is seen only as a terminal, Termius will look safer because it has broader platform coverage, more years in market, team features, and a strong brand.
+For many users, "Termius alternative" is the buying frame. If agent-ssh is seen only as a terminal, Termius will look safer because it has broader platform coverage, more years in market, team features, and a strong brand.
 
 ### Feature Inventory
 
@@ -83,7 +83,7 @@ Termius' public listings and official pages emphasize:
 
 ### Market Signal
 
-Termius has one of the strongest visible demand signals in the category. The Apple App Store listing shows tens of thousands of ratings, while the Google Play listing shows 1M+ downloads and tens of thousands of reviews. It is the only product in this comparison with obvious serious Android reach, which matters if Midnight SSH later considers cross-platform expansion.
+Termius has one of the strongest visible demand signals in the category. The Apple App Store listing shows tens of thousands of ratings, while the Google Play listing shows 1M+ downloads and tens of thousands of reviews. It is the only product in this comparison with obvious serious Android reach, which matters if agent-ssh later considers cross-platform expansion.
 
 The monetization posture is also the most aggressive. Official pricing presents a free starter tier and paid Pro/Team tiers, while the App Store listing includes monthly and annual Pro subscriptions. That creates two simultaneous signals: users are willing to pay for serious SSH tooling, but there is likely subscription fatigue among individual sysadmins and power users.
 
@@ -101,11 +101,11 @@ The monetization posture is also the most aggressive. Official pricing presents 
 - Subscription pricing is a major opening for a polished lifetime or hybrid pricing model.
 - The product is broad and terminal-first; it does not appear to frame itself around "diagnose this unhealthy server right now".
 - Team and vault sophistication may be unnecessary overhead for solo developers, homelab users, and small operators.
-- Its strongest value is cross-device infrastructure memory. Midnight SSH can win when the job is safer operation on the currently connected host.
+- Its strongest value is cross-device infrastructure memory. agent-ssh can win when the job is safer operation on the currently connected host.
 
-### Implications for Midnight SSH
+### Implications for agent-ssh
 
-Midnight SSH should not try to match Termius feature-for-feature at launch. The better wedge is "Termius plus a server doctor, safe config editor, runbook flight deck, Postgres workspace, and incident bundle." If Midnight has to compete with Termius screenshots, the App Store listing must show more than terminal panes: it should show host health, process triage, config diff review, runbook execution, and a report that can be shared after an outage.
+agent-ssh should not try to match Termius feature-for-feature at launch. The better wedge is "Termius plus a server doctor, safe config editor, runbook flight deck, Postgres workspace, and incident bundle." If agent-ssh has to compete with Termius screenshots, the App Store listing must show more than terminal panes: it should show host health, process triage, config diff review, runbook execution, and a report that can be shared after an outage.
 
 Recommended competitive moves:
 
@@ -121,7 +121,7 @@ Recommended competitive moves:
 
 Secure ShellFish is an Apple-native SSH/SFTP product from the developer ecosystem around Working Copy. It is not trying to be an enterprise SSH platform. Its center of gravity is native iOS/iPadOS/macOS integration: Files app, Finder, Shortcuts, snippets, terminal workflows, secure keys, and practical remote file access.
 
-This makes it highly relevant to Midnight SSH because Midnight also has file-transfer and mobile workflows. The difference is that ShellFish is mostly a file and terminal utility, while Midnight can be an operations workspace.
+This makes it highly relevant to agent-ssh because agent-ssh also has file-transfer and mobile workflows. The difference is that ShellFish is mostly a file and terminal utility, while agent-ssh can be an operations workspace.
 
 ### Feature Inventory
 
@@ -162,9 +162,9 @@ Secure ShellFish has a strong App Store rating profile and a much friendlier pri
 - SFTP is a crowded feature category. Users who only need remote files can buy ShellFish cheaply.
 - It is not framed as a postmortem, incident, or operational safety tool.
 
-### Implications for Midnight SSH
+### Implications for agent-ssh
 
-Midnight SSH should treat ShellFish as the benchmark for Apple-native file UX, not as the product to clone. The differentiator should be safe remote change management:
+agent-ssh should treat ShellFish as the benchmark for Apple-native file UX, not as the product to clone. The differentiator should be safe remote change management:
 
 - Show "edit remote config with snapshot and diff review" prominently.
 - Pair SFTP with logs, service status, process list, and runbook follow-up.
@@ -176,7 +176,7 @@ Midnight SSH should treat ShellFish as the benchmark for Apple-native file UX, n
 
 ### Product Position
 
-ServerCat is the closest direct competitor to Midnight SSH's server-ops concept. Its App Store listing positions it as Linux monitor, Docker management, and SSH terminal in one app. It explicitly says it does not require server dependencies or agents, which is the same low-friction promise Midnight SSH should use for server diagnostics.
+ServerCat is the closest direct competitor to agent-ssh's server-ops concept. Its App Store listing positions it as Linux monitor, Docker management, and SSH terminal in one app. It explicitly says it does not require server dependencies or agents, which is the same low-friction promise agent-ssh should use for server diagnostics.
 
 This is not just a terminal competitor. It competes for the "check my server from my phone" job.
 
@@ -221,11 +221,11 @@ At the same time, some public reviews point to reliability and UX concerns, such
 - Low pricing may correlate with lower expectations and less room for advanced pro workflows.
 - It appears focused on Linux/Docker status more than safe change execution.
 - It does not appear to own Postgres, runbooks, incident reports, safe config save, or diagnostic bundles.
-- If terminal quality was historically weaker and is being improved, Midnight can still win on terminal plus structured ops.
+- If terminal quality was historically weaker and is being improved, agent-ssh can still win on terminal plus structured ops.
 
-### Implications for Midnight SSH
+### Implications for agent-ssh
 
-ServerCat is the competitor Midnight SSH should respect most for the iPhone/iPad server-ops market. It already validates demand for agentless mobile monitoring and Docker administration. Midnight should win by going deeper and safer:
+ServerCat is the competitor agent-ssh should respect most for the iPhone/iPad server-ops market. It already validates demand for agentless mobile monitoring and Docker administration. agent-ssh should win by going deeper and safer:
 
 - Make "Server Doctor" a hero feature, not a secondary tab.
 - Add or expose historical metrics, severity explanations, and recommended next commands.
@@ -240,7 +240,7 @@ ServerCat is the competitor Midnight SSH should respect most for the iPhone/iPad
 
 Prompt 3 is a premium native SSH client from Panic. It competes on trust, feel, terminal rendering, durable sessions, sync, clips, and Panic's long-standing developer-tool reputation. It is not trying to be a server-monitoring dashboard or SFTP workspace.
 
-Prompt matters because power users will compare terminal quality immediately. If Midnight SSH's terminal feels weak, broader ops features may not get a fair evaluation.
+Prompt matters because power users will compare terminal quality immediately. If agent-ssh's terminal feels weak, broader ops features may not get a fair evaluation.
 
 ### Feature Inventory
 
@@ -282,9 +282,9 @@ Prompt has a smaller visible rating count than Termius, WebSSH, or Secure ShellF
 - File transfer, monitoring, database, runbook, and incident workflows are not the visible product promise.
 - It may be overkill for casual SSH but still not enough for structured operations.
 
-### Implications for Midnight SSH
+### Implications for agent-ssh
 
-Prompt defines the minimum bar for a premium terminal experience on Apple platforms. Midnight does not need to beat Prompt on terminal aesthetics, but it should remove obvious objections:
+Prompt defines the minimum bar for a premium terminal experience on Apple platforms. agent-ssh does not need to beat Prompt on terminal aesthetics, but it should remove obvious objections:
 
 - Add Mosh or Eternal Terminal support if feasible.
 - Make tmux workflows easy if protocol-level Mosh/ET is deferred.
@@ -297,7 +297,7 @@ Prompt defines the minimum bar for a premium terminal experience on Apple platfo
 
 Blink Shell is the power iPad terminal and remote-development environment. It is not merely an SSH client; the App Store listing positions it around building and coding from iPad/iPhone, with Mosh, SSH, VS Code-style workflows, remote build environments, Copilot language in current listing text, SFTP file-provider integration, and deep keyboard control.
 
-Blink competes for advanced iPad users who want to turn the iPad into a real development machine. Midnight should not chase that whole surface unless it intentionally becomes a mobile IDE. The more attractive opening is narrower: mobile server administration and incident response.
+Blink competes for advanced iPad users who want to turn the iPad into a real development machine. agent-ssh should not chase that whole surface unless it intentionally becomes a mobile IDE. The more attractive opening is narrower: mobile server administration and incident response.
 
 ### Feature Inventory
 
@@ -344,9 +344,9 @@ Blink has a strong reputation among technical iPad users, but its current App St
 - The monetization model may cause friction for hobbyist and indie users.
 - It does not appear to own server health, Docker monitoring, incident reporting, or safe admin changes as a first-order product story.
 
-### Implications for Midnight SSH
+### Implications for agent-ssh
 
-Blink is the strongest warning against trying to become a full remote IDE. Midnight should borrow the infrastructure primitives that matter, then keep the product workflow narrower:
+Blink is the strongest warning against trying to become a full remote IDE. agent-ssh should borrow the infrastructure primitives that matter, then keep the product workflow narrower:
 
 - Support OpenSSH config import and advanced host options.
 - Prioritize Mosh/session recovery or tmux continuity.
@@ -360,7 +360,7 @@ Blink is the strongest warning against trying to become a full remote IDE. Midni
 
 WebSSH is a mature, broad "sysadmin toolbox" for Apple platforms. It competes on breadth and utility: SSH, SFTP, Telnet, serial, port forwarding, local shell commands, network diagnostics, terminal profiles, deep links, and privacy-forward App Store messaging. It is the product most likely to win users who want one affordable app with many admin protocols.
 
-For Midnight SSH, WebSSH is the baseline "toolbox" competitor. Midnight must make its tools feel connected to a host and an operational workflow, not just assembled into a long list.
+For agent-ssh, WebSSH is the baseline "toolbox" competitor. agent-ssh must make its tools feel connected to a host and an operational workflow, not just assembled into a long list.
 
 ### Feature Inventory
 
@@ -400,9 +400,9 @@ WebSSH has one of the strongest visible App Store rating counts in this comparis
 - Server monitoring, Docker, Postgres, runbooks, safe config saves, and incident reports are not the apparent core.
 - It may satisfy many individual tools, but not the "I need to safely fix and document an outage" job.
 
-### Implications for Midnight SSH
+### Implications for agent-ssh
 
-Midnight should respect WebSSH's breadth but avoid copying a generic toolbox layout. The differentiator is context:
+agent-ssh should respect WebSSH's breadth but avoid copying a generic toolbox layout. The differentiator is context:
 
 - Tools should be attached to a host, service, incident, or runbook.
 - DNS, ports, tcpdump, logs, processes, and file edits should build a coherent diagnostic timeline.
@@ -424,7 +424,7 @@ The following features are table stakes in this category:
 - Biometric lock or secure key handling in premium products.
 - Mobile-friendly terminal gestures and extra keyboard rows.
 
-Midnight SSH should not lead with these unless the implementation is unusually strong. They are necessary credibility features, not the main market story.
+agent-ssh should not lead with these unless the implementation is unusually strong. They are necessary credibility features, not the main market story.
 
 ## Underserved Jobs
 
@@ -439,9 +439,9 @@ The six competitors leave several jobs under-served or under-positioned:
 7. Mobile-friendly destructive-action gates, such as Face ID before kill/delete/restart.
 8. Fleet confidence: which connections are flaky, unhealthy, or recently changed.
 
-These map directly to features already present in Midnight SSH's local catalog: server doctor, system monitor, process list, logs, runbooks, incident report builder, safe config save, Postgres workspace, network tools, connection confidence, and privacy gates.
+These map directly to features already present in agent-ssh's local catalog: server doctor, system monitor, process list, logs, runbooks, incident report builder, safe config save, Postgres workspace, network tools, connection confidence, and privacy gates.
 
-## Strategic Recommendations for Midnight SSH
+## Strategic Recommendations for agent-ssh
 
 ### Positioning
 
@@ -458,7 +458,7 @@ Avoid leading with:
 - "SFTP client."
 - "Mobile terminal."
 
-Those frames pull Midnight into mature commodity comparisons where competitors already look strong.
+Those frames pull agent-ssh into mature commodity comparisons where competitors already look strong.
 
 ### Product Priorities
 
@@ -475,7 +475,7 @@ P1:
 - Add Mosh, Eternal Terminal, or tmux-first continuity.
 - Add OpenSSH config import.
 - Add competitor import from common sources where technically feasible.
-- Add Docker visibility if Midnight wants to contest ServerCat directly.
+- Add Docker visibility if agent-ssh wants to contest ServerCat directly.
 - Add app-store-visible trust page: Keychain, local storage, known-host trust, no plaintext secrets.
 
 P2:
@@ -490,7 +490,7 @@ The competitor set supports three viable pricing signals:
 
 - Termius proves subscriptions can work for serious SSH workflows, especially with sync and teams.
 - ShellFish, Prompt, ServerCat, and WebSSH show users still value lifetime or one-time purchases.
-- ServerCat anchors server-monitor pricing very low, so Midnight needs visibly higher professional value if priced above it.
+- ServerCat anchors server-monitor pricing very low, so agent-ssh needs visibly higher professional value if priced above it.
 
 Recommended model:
 
@@ -538,7 +538,7 @@ Competitor-specific landing pages:
 ## High-Conviction Differentiators
 
 1. Safe config editing: This is easy to understand and is not prominently owned by the competitors. "Snapshot before write" plus diff review creates a strong safety promise.
-2. Server Doctor: ServerCat validates demand, but Midnight can be more diagnostic and professional if it gives reasons, severity, and next commands.
+2. Server Doctor: ServerCat validates demand, but agent-ssh can be more diagnostic and professional if it gives reasons, severity, and next commands.
 3. Runbook flight deck: Competitors have snippets and startup commands; structured runbooks with status and audit trail are more valuable.
 4. Incident report builder: This is clear whitespace. Make it a shareable artifact, not just a log dump.
 5. Postgres over SSH: A strong niche feature for developers and operators. It should be shown as "query production safely through your SSH profile".
@@ -560,4 +560,4 @@ Competitor-specific landing pages:
 - Blink Shell Apple App Store: https://apps.apple.com/us/app/blink-shell-build-code/id1594898306
 - WebSSH Apple App Store: https://apps.apple.com/us/app/webssh-sysadmin-toolbox/id497714887
 - WebSSH documentation: https://webssh.net/documentation/
-- Midnight SSH local feature catalog: `TOOLS.md`
+- agent-ssh local feature catalog: `TOOLS.md`

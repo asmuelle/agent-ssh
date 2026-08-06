@@ -593,7 +593,7 @@ pub fn rshell_pg_parquet_close(writer_id: u64) -> Result<(), FfiPgError> {
         })
 }
 
-mod schema;
+pub(super) mod schema;
 
 #[cfg(test)]
 mod tests {

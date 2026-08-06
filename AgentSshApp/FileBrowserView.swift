@@ -723,7 +723,7 @@ struct FileBrowserView: View {
             var isDir: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
             else {
-                logger.info("Skipping non-existent drop: \(url.path, privacy: .public)")
+                logger.info("Skipping non-existent drop: \(url.path, privacy: .private(mask: .hash))")
                 continue
             }
 

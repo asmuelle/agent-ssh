@@ -66,7 +66,7 @@ public enum FeatureFlags: String, CaseIterable, Sendable {
         case .gpuMonitor: return false
         case .fileProviderIntegration: return false
         case .shareSheetUploads: return false
-        case .shortcutsAutomation: return true
+        case .shortcutsAutomation: return false
         case .offlineSFTPCache: return false
         case .cloudSync: return false
         case .filenameAwareTerminal: return false

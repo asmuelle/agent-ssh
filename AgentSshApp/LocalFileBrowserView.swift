@@ -463,7 +463,7 @@ struct LocalFileBrowserView: View {
             do {
                 try FileManager.default.trashItem(at: url, resultingItemURL: nil)
             } catch {
-                logger.error("Trash failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                logger.error("Trash failed for \(url.path, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private(mask: .hash))")
             }
         }
         refresh()

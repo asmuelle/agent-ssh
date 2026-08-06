@@ -174,11 +174,11 @@ enum DirectServerCopyCoordinator {
 
             await cleanUp()
             store.complete(copyId)
-            logger.info("Direct copy of \(drag.name, privacy: .public) completed")
+            logger.info("Direct copy of \(drag.name, privacy: .private(mask: .hash)) completed")
         } catch {
             await cleanUp()
             store.fail(copyId, message: error.localizedDescription)
-            logger.error("Direct copy failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Direct copy failed: \(error.localizedDescription, privacy: .private(mask: .hash))")
         }
     }
 }

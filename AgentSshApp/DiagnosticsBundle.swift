@@ -302,7 +302,7 @@ private struct SettingsDiagnostics: Codable {
             mouseReporting: defaults.object(forKey: "terminalMouseReporting") as? Bool ?? true,
             optionAsMeta: defaults.object(forKey: "terminalOptionAsMeta") as? Bool ?? true,
             copyOnSelect: defaults.object(forKey: "terminalCopyOnSelect") as? Bool ?? false,
-            includeUnifiedLogsInDiagnostics: defaults.object(forKey: "privacy.includeUnifiedLogsInDiagnostics") as? Bool ?? true,
+            includeUnifiedLogsInDiagnostics: defaults.object(forKey: "privacy.includeUnifiedLogsInDiagnostics") as? Bool ?? false,
             shareUsageDiagnostics: defaults.object(forKey: "privacy.shareUsageDiagnostics") as? Bool ?? false
         )
     }
@@ -383,21 +383,14 @@ private enum Redactor {
     }
 
     static func redactSecrets(_ input: String) -> String {
-        let patterns = [
-            #"(?i)(password|passphrase|secret|token|authorization)\s*[:=]\s*[^,\s;]+"#,
-            #"(?i)(private[_ -]?key)\s*[:=]\s*[^,\s;]+"#,
-        ]
-        return patterns.reduce(input) { partial, pattern in
-            guard let regex = try? NSRegularExpression(pattern: pattern) else {
-                return partial
-            }
-            let range = NSRange(partial.startIndex..<partial.endIndex, in: partial)
-            return regex.stringByReplacingMatches(
-                in: partial,
-                options: [],
-                range: range,
-                withTemplate: "$1=[redacted]"
-            )
-        }
+        // Delegate to the shared, well-tested redactor rather than maintaining a
+        // weaker parallel regex set. The previous inline patterns terminated the
+        // secret value at the first whitespace (`[^,\s;]+`), so a multi-word
+        // secret like `Authorization: Bearer eyJ…` leaked everything after
+        // "Bearer", and there was no PEM private-key-block pattern at all.
+        // `.balanced` covers full-line Authorization/Cookie headers, PEM blocks,
+        // database URLs, and AWS keys, without stripping IPs/hostnames that
+        // diagnostics legitimately need.
+        ServerDoctorRedactor.redact(input, preset: .balanced).text
     }
 }

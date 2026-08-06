@@ -362,6 +362,7 @@ struct DashboardPanel: View {
     @State private var fleetHealthRecords: [String: FleetHostHealthRecord] = [:]
     @State private var showingFleetRunbook = false
     @State private var showingStackAudit = false
+    @State private var showingActuatorFleet = false
     private let fleetHealthStore = FleetHostHealthStore()
     /// Hotness quantization step: peak-metric ties are bucketed to 5%
     /// so rows don't reshuffle on every 3-second poll tick.
@@ -468,6 +469,9 @@ struct DashboardPanel: View {
             }
             .sheet(isPresented: $showingStackAudit) {
                 FleetStackAuditSheet(tabs: tabs)
+            }
+            .sheet(isPresented: $showingActuatorFleet) {
+                ActuatorFleetSheet(tabs: tabs)
             }
             .sheet(item: $rowSheet) { sheet in
                 switch sheet {
@@ -1200,6 +1204,14 @@ struct DashboardPanel: View {
                 showingStackAudit = true
             } label: {
                 Label("Stack Audit", systemImage: "square.stack.3d.up")
+            }
+            .disabled(tabs.isEmpty)
+            .controlSize(.small)
+
+            Button {
+                showingActuatorFleet = true
+            } label: {
+                Label("App Health", systemImage: "heart.text.square")
             }
             .disabled(tabs.isEmpty)
             .controlSize(.small)

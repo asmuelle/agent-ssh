@@ -133,7 +133,7 @@ graph LR
 ### Feature Showcase Scenario (App Store Video Storyboard)
 * **Visual**: A clean macOS desktop. The developer presses `Cmd + Space` to bring up the Spotlight Search prompt.
 * **Action**: They type: *"certificates"*
-* **Outcome**: Spotlight instantly lists a dynamic finding card from Midnight SSH: `[web-01] Let's Encrypt Expiring in 4 days`.
+* **Outcome**: Spotlight instantly lists a dynamic finding card from agent-ssh: `[web-01] Let's Encrypt Expiring in 4 days`.
 * **Action**: They press `Space` to inspect it, seeing the exact certificate paths and a deep link to check the renewal log.
 * **Voiceover**: *"Don't hunt through terminal tabs. If there's an issue with your config, certificate, or disk space, finding it is as simple as searching your Mac."*
 

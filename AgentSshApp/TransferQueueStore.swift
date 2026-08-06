@@ -197,7 +197,7 @@ final class TransferQueueStore: ObservableObject {
             transfers[idx].bytesTransferred = bytes
             transfers[idx].status = .completed
             publishLiveActivity(for: transfers[idx])
-            logger.info("Transfer completed: \(transfer.remotePath, privacy: .public) (\(bytes) bytes)")
+            logger.info("Transfer completed: \(transfer.remotePath, privacy: .private(mask: .hash)) (\(bytes) bytes)")
 
             // Reveal the downloaded file in Finder. Coalesce — if more
             // downloads finish within the debounce window they get
@@ -215,12 +215,12 @@ final class TransferQueueStore: ObservableObject {
             case .Cancelled:
                 transfers[idx].status = .cancelled
                 publishLiveActivity(for: transfers[idx])
-                logger.info("Transfer cancelled: \(transfer.remotePath, privacy: .public)")
+                logger.info("Transfer cancelled: \(transfer.remotePath, privacy: .private(mask: .hash))")
             default:
                 transfers[idx].status = .failed
                 transfers[idx].error = error.localizedDescription
                 publishLiveActivity(for: transfers[idx])
-                logger.error("Transfer failed for \(transfer.remotePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                logger.error("Transfer failed for \(transfer.remotePath, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private(mask: .hash))")
             }
             transfers[idx].onCompleted?(false)
         } catch {
@@ -228,7 +228,7 @@ final class TransferQueueStore: ObservableObject {
             transfers[idx].status = .failed
             transfers[idx].error = error.localizedDescription
             publishLiveActivity(for: transfers[idx])
-            logger.error("Transfer failed for \(transfer.remotePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error("Transfer failed for \(transfer.remotePath, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private(mask: .hash))")
             transfers[idx].onCompleted?(false)
         }
     }

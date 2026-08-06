@@ -81,7 +81,7 @@ final class ShareViewController: UIViewController {
             requester: .shareExtension,
             status: destination == nil ? .waitingForApproval : .queued,
             title: "Upload \(staged.fileName)",
-            detail: destination == nil ? "Choose a server and destination in Midnight SSH." : nil,
+            detail: destination == nil ? "Choose a server and destination in agent-ssh." : nil,
             localFilePath: staged.localPath,
             remotePath: remotePath,
             metadata: [

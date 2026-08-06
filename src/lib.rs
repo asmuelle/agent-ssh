@@ -1,4 +1,4 @@
-//! midnight-ssh: Native macOS app Rust side.
+//! agent-ssh: Native macOS app Rust side.
 //!
 //! This crate provides the FFI bridge between the Rust domain layer
 //! (`ssh-commander-core`) and the native macOS Swift frontend.

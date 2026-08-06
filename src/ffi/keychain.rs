@@ -43,7 +43,10 @@ pub fn rshell_keychain_save(kind: FfiCredentialKind, account: String, secret: St
         },
         Err(e) => FfiResult {
             success: false,
-            error: Some(e.to_string()),
+            // Route through sanitize_error like every other FFI error path so
+            // the boundary stays consistent if the keychain backend's error
+            // Display ever grows redundant chained context.
+            error: Some(sanitize_error(anyhow::anyhow!("{e}"))),
             value: None,
         },
     }
@@ -65,7 +68,10 @@ pub fn rshell_keychain_load(kind: FfiCredentialKind, account: String) -> FfiResu
         },
         Err(e) => FfiResult {
             success: false,
-            error: Some(e.to_string()),
+            // Route through sanitize_error like every other FFI error path so
+            // the boundary stays consistent if the keychain backend's error
+            // Display ever grows redundant chained context.
+            error: Some(sanitize_error(anyhow::anyhow!("{e}"))),
             value: None,
         },
     }
@@ -82,7 +88,10 @@ pub fn rshell_keychain_delete(kind: FfiCredentialKind, account: String) -> FfiRe
         },
         Err(e) => FfiResult {
             success: false,
-            error: Some(e.to_string()),
+            // Route through sanitize_error like every other FFI error path so
+            // the boundary stays consistent if the keychain backend's error
+            // Display ever grows redundant chained context.
+            error: Some(sanitize_error(anyhow::anyhow!("{e}"))),
             value: None,
         },
     }

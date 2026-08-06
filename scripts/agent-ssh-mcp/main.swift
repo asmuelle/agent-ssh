@@ -57,7 +57,7 @@ func connectToSocket(path: String) -> Int32 {
     }
     
     guard connectResult >= 0 else {
-        fputs("Could not connect to agent-ssh socket at \(path). Make sure the agent-ssh application is running.\n", stderr)
+        fputs("Could not connect to the agent-ssh socket at \(path). Make sure agent-ssh is running.\n", stderr)
         close(fd)
         return -1
     }

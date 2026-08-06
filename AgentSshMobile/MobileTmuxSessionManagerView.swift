@@ -8,7 +8,7 @@ struct MobileTmuxSessionManagerView: View {
     @State private var sessions: [MobileTmuxSession] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var newSessionName = "midnight"
+    @State private var newSessionName = "agent-ssh"
 
     var body: some View {
         NavigationStack {

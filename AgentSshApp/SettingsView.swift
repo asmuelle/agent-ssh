@@ -17,7 +17,7 @@ struct SettingsView: View {
     @AppStorage("SUEnableAutomaticChecks") private var automaticUpdateChecks = true
     @AppStorage("SUAllowsAutomaticUpdates") private var automaticUpdateInstall = true
     @AppStorage("privacy.shareUsageDiagnostics") private var shareUsageDiagnostics = false
-    @AppStorage("privacy.includeUnifiedLogsInDiagnostics") private var includeUnifiedLogsInDiagnostics = true
+    @AppStorage("privacy.includeUnifiedLogsInDiagnostics") private var includeUnifiedLogsInDiagnostics = false
 
     @EnvironmentObject private var updateManager: UpdateManager
     @EnvironmentObject private var entitlementsStore: EntitlementsStore
@@ -264,42 +264,44 @@ struct SettingsView: View {
 
     private var syncSettings: some View {
         Form {
-            Section {
-                statusRow(
-                    icon: "key.fill",
-                    title: "Secrets",
-                    value: "Local Keychain only",
-                    color: .green
-                )
-                statusRow(
-                    icon: "icloud.fill",
-                    title: "Profile metadata",
-                    value: "iCloud key-value snapshot",
-                    color: .blue
-                )
-            } header: {
-                Text("Scope")
-            } footer: {
-                Text("Sync snapshots contain server names, hosts, usernames, folders, tags, snippets, and terminal preferences. Passwords and passphrases are not exported from Keychain.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Manual sync") {
-                HStack {
-                    Button("Publish Snapshot") {
-                        publishSyncSnapshot()
-                    }
-                    Button("Apply Latest Snapshot") {
-                        applySyncSnapshot()
-                    }
-                    Spacer()
-                }
-
-                if let syncStatus {
-                    Text(syncStatus)
+            if FeatureFlags.cloudSync.isEnabled {
+                Section {
+                    statusRow(
+                        icon: "key.fill",
+                        title: "Secrets",
+                        value: "Local Keychain only",
+                        color: .green
+                    )
+                    statusRow(
+                        icon: "icloud.fill",
+                        title: "Profile metadata",
+                        value: "iCloud key-value snapshot",
+                        color: .blue
+                    )
+                } header: {
+                    Text("Scope")
+                } footer: {
+                    Text("Sync snapshots contain server names, hosts, usernames, folders, tags, snippets, and terminal preferences. Passwords and passphrases are not exported from Keychain.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Section("Manual sync") {
+                    HStack {
+                        Button("Publish Snapshot") {
+                            publishSyncSnapshot()
+                        }
+                        Button("Apply Latest Snapshot") {
+                            applySyncSnapshot()
+                        }
+                        Spacer()
+                    }
+
+                    if let syncStatus {
+                        Text(syncStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

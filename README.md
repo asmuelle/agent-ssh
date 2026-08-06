@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/asmuelle/agent-ssh/actions/workflows/ci.yml/badge.svg)](https://github.com/asmuelle/agent-ssh/actions/workflows/ci.yml)
 
-Native macOS / iPadOS SSH workspace. AppKit + SwiftUI shell, SwiftTerm for the PTY, [`ssh-commander-core`](https://github.com/asmuelle/ssh-commander-core) for the protocol layer, [uniffi](https://mozilla.github.io/uniffi-rs/) for the FFI bridge.
+Native macOS, iPhone, and iPad SSH workspace. AppKit + SwiftUI shell, SwiftTerm for the PTY, [`ssh-commander-core`](https://github.com/asmuelle/ssh-commander-core) for the protocol layer, [uniffi](https://mozilla.github.io/uniffi-rs/) for the FFI bridge. Stable internal package names and URLs retain `agent-ssh` for compatibility.
 
 
 ## Stack

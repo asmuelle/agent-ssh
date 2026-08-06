@@ -28,7 +28,7 @@ final class ShellIntegrationCommandCenter {
             do {
                 try liveActivityStore.upsert(.shellIntegration(command, connectionId: connectionId))
             } catch {
-                logger.warning("Failed to save shell Live Activity command: \(error.localizedDescription, privacy: .public)")
+                logger.warning("Failed to save shell Live Activity command: \(error.localizedDescription, privacy: .private(mask: .hash))")
             }
         }
     }
@@ -63,7 +63,7 @@ final class ShellIntegrationCommandCenter {
                 )
                 notificationCenter.add(request) { error in
                     if let error {
-                        logger.warning("Failed to deliver shell notification: \(error.localizedDescription, privacy: .public)")
+                        logger.warning("Failed to deliver shell notification: \(error.localizedDescription, privacy: .private(mask: .hash))")
                     }
                 }
             }
@@ -74,7 +74,7 @@ final class ShellIntegrationCommandCenter {
             case .notDetermined:
                 notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, error in
                     if let error {
-                        logger.warning("Failed to request shell notification authorization: \(error.localizedDescription, privacy: .public)")
+                        logger.warning("Failed to request shell notification authorization: \(error.localizedDescription, privacy: .private(mask: .hash))")
                     }
                     if granted {
                         schedule()

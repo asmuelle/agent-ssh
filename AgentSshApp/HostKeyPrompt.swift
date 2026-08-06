@@ -60,9 +60,9 @@ enum HostKeyPrompt {
 
         do {
             try await BridgeManager.shared.forgetHostKey(host: host, port: port)
-            logger.info("Forgot host-key entry for \(host, privacy: .public):\(port)")
+            logger.info("Forgot host-key entry for \(host, privacy: .private(mask: .hash)):\(port)")
         } catch {
-            logger.error("Failed to forget host key: \(error.localizedDescription, privacy: .public)")
+            logger.error("Failed to forget host key: \(error.localizedDescription, privacy: .private(mask: .hash))")
             // Even on failure we return .trust — the user said yes;
             // surfacing a second dialog about the storage write would
             // be confusing. The retry will fail again with the same

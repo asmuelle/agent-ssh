@@ -49,7 +49,8 @@ let package = Package(
     targets: [
         .target(
             name: "AgentSshMacOS",
-            path: "Sources/AgentSshMacOS"
+            path: "Sources/AgentSshMacOS",
+            resources: [.copy("PrivacyInfo.xcprivacy")]
         ),
         .testTarget(
             name: "AgentSshMacOSTests",

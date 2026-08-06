@@ -4,7 +4,7 @@
 
 Implement Read-only Server Doctor as a safe, evidence-linked diagnostic workflow for connected SSH hosts. The first release should collect bounded read-only server facts, redact sensitive content locally, ask an LLM for structured findings, validate the model output, and render a native report with evidence links.
 
-This plan turns the product spec in `read_only_server_doctor.md` into concrete work for the current Midnight SSH codebase.
+This plan turns the product spec in `read_only_server_doctor.md` into concrete work for the current agent-ssh codebase.
 
 ## Implementation Principles
 

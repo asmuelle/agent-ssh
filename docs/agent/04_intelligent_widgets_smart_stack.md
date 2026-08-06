@@ -167,7 +167,7 @@ struct ServerHealthWidgetView: View {
 > *"Server monitoring at a glance. Smart widgets powered by Apple Intelligence, built directly for your home screen."*
 
 ### Feature Showcase Scenario (App Store Video Storyboard)
-* **Visual**: A beautiful iOS 18 home screen with customized dark icons. A medium Midnight SSH widget sits at the top.
+* **Visual**: A beautiful iOS 18 home screen with customized dark icons. A medium agent-ssh widget sits at the top.
 * **Action**: Suddenly, a red alert glows on the widget. The text changes dynamically: `[k8s-master-01] Docker is out of memory. 4 pods evicted. Tap to triage.`
 * **Action**: The user long-presses the widget, showing that it’s part of their Apple Watch Smart Stack too. They tap it, opening the app straight into a read-only diagnostics checklist.
 * **Voiceover**: *"Stay on top of server health without opening the app. Smart widgets translate raw technical errors into clear, actionable summaries on your home screen."*
