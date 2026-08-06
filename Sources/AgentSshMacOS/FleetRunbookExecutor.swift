@@ -19,6 +19,7 @@ public struct FleetRunbookPlan: Sendable {
     public var command: String
     public var verificationCommand: String?
     public var rollbackCommand: String?
+    public var externalVerificationLabel: String?
     public var targets: [FleetRunTarget]
     public var canaryCount: Int
     public var maxConcurrency: Int
@@ -28,6 +29,7 @@ public struct FleetRunbookPlan: Sendable {
         command: String,
         verificationCommand: String? = nil,
         rollbackCommand: String? = nil,
+        externalVerificationLabel: String? = nil,
         targets: [FleetRunTarget],
         canaryCount: Int = 1,
         maxConcurrency: Int = 3
@@ -36,6 +38,7 @@ public struct FleetRunbookPlan: Sendable {
         self.command = command
         self.verificationCommand = verificationCommand?.nilIfBlank
         self.rollbackCommand = rollbackCommand?.nilIfBlank
+        self.externalVerificationLabel = externalVerificationLabel?.nilIfBlank
         self.targets = targets
         self.canaryCount = max(1, min(canaryCount, max(targets.count, 1)))
         self.maxConcurrency = max(1, maxConcurrency)
@@ -105,10 +108,21 @@ public enum FleetRunbookExecutor {
         _ target: FleetRunTarget,
         _ command: String
     ) async -> FleetCommandExecution
+    public typealias ExternalVerificationRunner = @Sendable (
+        _ target: FleetRunTarget
+    ) async -> FleetCommandExecution
 
     public static func execute(
         plan: FleetRunbookPlan,
         runner: @escaping CommandRunner
+    ) async -> FleetRunbookResult {
+        await execute(plan: plan, runner: runner, externalVerifier: nil)
+    }
+
+    public static func execute(
+        plan: FleetRunbookPlan,
+        runner: @escaping CommandRunner,
+        externalVerifier: ExternalVerificationRunner?
     ) async -> FleetRunbookResult {
         let startedAt = Date()
         guard !plan.targets.isEmpty else {
@@ -129,7 +143,12 @@ public enum FleetRunbookExecutor {
         // Canary targets are deliberately sequential. An operator should never
         // discover the same bad change on several hosts at once.
         for target in canaries {
-            let result = await executeTarget(target, plan: plan, runner: runner)
+            let result = await executeTarget(
+                target,
+                plan: plan,
+                runner: runner,
+                externalVerifier: externalVerifier
+            )
             results.append(result)
             if !result.state.succeeded {
                 results.append(contentsOf: rollout.map {
@@ -154,7 +173,12 @@ public enum FleetRunbookExecutor {
             let chunkResults = await withTaskGroup(of: FleetTargetRunResult.self) { group in
                 for target in chunk {
                     group.addTask {
-                        await executeTarget(target, plan: plan, runner: runner)
+                        await executeTarget(
+                            target,
+                            plan: plan,
+                            runner: runner,
+                            externalVerifier: externalVerifier
+                        )
                     }
                 }
                 var collected: [FleetTargetRunResult] = []
@@ -179,7 +203,8 @@ public enum FleetRunbookExecutor {
     private static func executeTarget(
         _ target: FleetRunTarget,
         plan: FleetRunbookPlan,
-        runner: @escaping CommandRunner
+        runner: @escaping CommandRunner,
+        externalVerifier: ExternalVerificationRunner?
     ) async -> FleetTargetRunResult {
         let command = await runner(target, plan.command)
         guard command.succeeded else {
@@ -191,7 +216,19 @@ public enum FleetRunbookExecutor {
             )
         }
 
-        guard let verificationCommand = plan.verificationCommand else {
+        let verification: FleetCommandExecution?
+        if let verificationCommand = plan.verificationCommand {
+            verification = await runner(target, verificationCommand)
+        } else if plan.externalVerificationLabel != nil {
+            verification = await externalVerifier?(target) ?? FleetCommandExecution(
+                exitCode: 78,
+                output: "External verification was configured but no verifier was available."
+            )
+        } else {
+            verification = nil
+        }
+
+        guard let verification else {
             return FleetTargetRunResult(
                 target: target,
                 state: .succeeded,
@@ -200,7 +237,6 @@ public enum FleetRunbookExecutor {
             )
         }
 
-        let verification = await runner(target, verificationCommand)
         guard verification.succeeded else {
             guard let rollbackCommand = plan.rollbackCommand else {
                 return FleetTargetRunResult(

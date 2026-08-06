@@ -29,6 +29,7 @@ struct ContentView: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @StateObject private var connectionStore = ConnectionStoreManager.shared
     @StateObject private var transfersStore = TransferQueueStore()
+    @StateObject private var actuatorMonitor = ActuatorFleetMonitor.shared
     @State private var selectedConnection: ConnectionProfile?
     /// What the detail column's main pane shows. `.server` is the
     /// default: the active workspace tab's terminal + files split.
@@ -66,7 +67,11 @@ struct ContentView: View {
         .environmentObject(transfersStore)
         .frame(minWidth: 900, minHeight: 600)
         .task {
+            actuatorMonitor.start(tabsStore: tabsStore)
             await runAutoConnect()
+        }
+        .onDisappear {
+            Task { await actuatorMonitor.stop() }
         }
         .sheet(isPresented: $showingCommandPalette) {
             CommandPaletteView(
