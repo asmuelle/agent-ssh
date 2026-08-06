@@ -154,11 +154,11 @@ final class BridgeManager {
 
         if networkResolution.usedHostOverride {
             logger.info(
-                "Using Tailnet host override \(networkResolution.connectHost, privacy: .public) for \(profile.host, privacy: .public)"
+                "Using Tailnet host override \(networkResolution.connectHost, privacy: .private(mask: .hash)) for \(profile.host, privacy: .private(mask: .hash))"
             )
         } else if networkResolution.isTailnetRoute {
             logger.info(
-                "Tailscale route resolved for \(profile.host, privacy: .public): \(networkResolution.tailnetAddress ?? profile.host, privacy: .public)"
+                "Tailscale route resolved for \(profile.host, privacy: .private(mask: .hash)): \(networkResolution.tailnetAddress ?? profile.host, privacy: .private(mask: .hash))"
             )
         }
 
@@ -184,10 +184,10 @@ final class BridgeManager {
             let connectionId: String = try await runOnControlQueue {
                 try rshellConnect(config: config)
             }
-            logger.log("Connected: \(connectionId, privacy: .public)")
+            logger.log("Connected: \(connectionId, privacy: .private(mask: .hash))")
             return connectionId
         } catch let err as ConnectError {
-            logger.error("Connect failed: \(String(describing: err), privacy: .public)")
+            logger.error("Connect failed: \(String(describing: err), privacy: .private(mask: .hash))")
             switch err {
             case .HostKeyMismatch(let detail):
                 throw BridgeError.hostKeyMismatch(
@@ -199,7 +199,7 @@ final class BridgeManager {
                 throw BridgeError.from(err)
             }
         } catch {
-            logger.error("Connect failed (unexpected): \(error.localizedDescription, privacy: .public)")
+            logger.error("Connect failed (unexpected): \(error.localizedDescription, privacy: .private(mask: .hash))")
             throw BridgeError.other(error.localizedDescription)
         }
     }
@@ -228,7 +228,7 @@ final class BridgeManager {
             _ = try await sftpListDir(connectionId: connectionId, path: ".")
             return true
         } catch {
-            logger.info("SFTP probe failed: \(error.localizedDescription, privacy: .public)")
+            logger.info("SFTP probe failed: \(error.localizedDescription, privacy: .private(mask: .hash))")
             return false
         }
     }
@@ -256,7 +256,7 @@ final class BridgeManager {
             )
         }
 
-        logger.log("PTY \(connectionId, privacy: .public) generation=\(decoded.generation)")
+        logger.log("PTY \(connectionId, privacy: .private(mask: .hash)) generation=\(decoded.generation)")
         return decoded.generation
     }
 

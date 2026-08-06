@@ -85,7 +85,7 @@ enum RemoteCopyCoordinator {
                 withIntermediateDirectories: true
             )
         } catch {
-            logger.error("Could not create relay temp dir: \(error.localizedDescription, privacy: .public)")
+            logger.error("Could not create relay temp dir: \(error.localizedDescription, privacy: .private(mask: .hash))")
             return
         }
 
@@ -258,7 +258,7 @@ enum RemoteCopyCoordinator {
         do {
             try FileManager.default.removeItem(at: wrapper)
         } catch {
-            logger.debug("Relay temp cleanup skipped: \(error.localizedDescription, privacy: .public)")
+            logger.debug("Relay temp cleanup skipped: \(error.localizedDescription, privacy: .private(mask: .hash))")
         }
     }
 }

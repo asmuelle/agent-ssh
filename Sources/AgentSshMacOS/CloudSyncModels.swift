@@ -488,7 +488,7 @@ public final class CloudSyncStore: @unchecked Sendable {
         fileName: String = SharedAppStorageConfiguration.cloudSyncSnapshotFileName,
         directoryURL: URL? = nil,
         fileManager: FileManager = .default,
-        ubiquitousStore: NSUbiquitousKeyValueStore? = .default,
+        ubiquitousStore: NSUbiquitousKeyValueStore? = FeatureFlags.cloudSync.isEnabled ? .default : nil,
         ubiquitousKey: String = "com.mc-ssh.agent-ssh.cloud-sync.snapshot"
     ) {
         self.localStore = SharedJSONFileStore(

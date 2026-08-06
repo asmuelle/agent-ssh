@@ -128,7 +128,7 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 | `xcrun: error: unable to find utility "xcodebuild"` | No Xcode / Xcode CLT not selected | `sudo xcode-select --switch /Applications/Xcode.app` | — |
 | `error: linking with cc failed` | Missing Rust target for Apple Silicon | `rustup target add aarch64-apple-darwin` | — |
 | `Code Sign error: No signing certificate` | No dev team set | `export APPLE_DEVELOPMENT_TEAM=<Team ID>` or use `just mac-ci-build` | CI builds should use `mac-ci-build` which skips signing |
-| `use of undeclared type 'MidnightSsh...'` in Swift | Bindings out of sync with FFI | `just mac-bindings` + rebuild | Never hand-add types to the generated Swift file |
+| `use of undeclared type 'AgentSsh...'` in Swift | Bindings out of sync with FFI | `just mac-bindings` + rebuild | Never hand-add types to the generated Swift file |
 | Cargo.toml version mismatch | Dependency drift after upstream release | Verify `ssh-commander-core` version in `Cargo.toml` matches what `src/` expects | If breaking changes, update `Cargo.toml` + fix call sites |
 
 ## Common pitfalls (read before debugging)

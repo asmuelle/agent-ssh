@@ -301,6 +301,9 @@ struct MobileProUpgradeView: View {
                 proFeature(feature.title, systemImage: feature.systemImage)
             }
             proFeature("One-time purchase — restores on iPhone & iPad", systemImage: "arrow.clockwise.icloud")
+            Text("Does not unlock the separately distributed Mac build.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

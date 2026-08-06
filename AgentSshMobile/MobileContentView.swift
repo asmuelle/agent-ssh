@@ -589,16 +589,18 @@ struct MobileContentView: View {
 
         Divider()
 
-        Button {
-            publishSyncSnapshot()
-        } label: {
-            Label("Publish Sync Snapshot", systemImage: "icloud.and.arrow.up")
-        }
+        if FeatureFlags.cloudSync.isEnabled {
+            Button {
+                publishSyncSnapshot()
+            } label: {
+                Label("Publish Sync Snapshot", systemImage: "icloud.and.arrow.up")
+            }
 
-        Button {
-            applySyncSnapshot()
-        } label: {
-            Label("Apply Latest Sync", systemImage: "icloud.and.arrow.down")
+            Button {
+                applySyncSnapshot()
+            } label: {
+                Label("Apply Latest Sync", systemImage: "icloud.and.arrow.down")
+            }
         }
 
         Button {

@@ -1,6 +1,6 @@
 ---
 version: alpha
-name: Midnight SSH
+name: agent-ssh
 description: Native macOS and iPadOS SSH workspace design system for dense operational tools.
 colors:
   primary: "#0B0F14"
@@ -221,7 +221,7 @@ components:
 
 This file follows the DESIGN.md format from https://github.com/google-labs-code/design.md: YAML front matter holds exact tokens, while the markdown sections explain how to apply them.
 
-Midnight SSH is a native Mac and iPad workspace for SSH, SFTP, Postgres, network tools, and host monitoring. The interface should feel like an operations console: dense, quiet, native, and trustworthy. It should prioritize readable terminal output, fast scanning of host state, and predictable split-pane workflows over decorative branding.
+agent-ssh is a native Mac and iPad workspace for SSH, SFTP, Postgres, network tools, and host monitoring. The interface should feel like an operations console: dense, quiet, native, and trustworthy. It should prioritize readable terminal output, fast scanning of host state, and predictable split-pane workflows over decorative branding.
 
 Design for repeated daily use by engineers and operators. Keep the first screen functional. Avoid marketing-style heroes, large illustration-led compositions, and visual flourishes that compete with terminals, file lists, database tables, or monitoring data.
 

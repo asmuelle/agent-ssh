@@ -131,7 +131,7 @@ graph TD
 > *"Your server health, one tap away. Lock screen quick actions and desktop controls powered by iOS 18."*
 
 ### Feature Showcase Scenario (App Store Video Storyboard)
-* **Visual**: A close-up of a lock screen on an iPhone 16 Pro. The bottom corner features a custom Midnight SSH server icon instead of the camera icon.
+* **Visual**: A close-up of a lock screen on an iPhone 16 Pro. The bottom corner features a custom agent-ssh server icon instead of the camera icon.
 * **Action**: The developer double-taps the lock screen icon.
 * **Outcome**: A small loading indicator spins, and in a second, the icon changes to a checkmark: `Clean`.
 * **Action**: They swipe down, showing the macOS/iOS Control Center with a larger status panel displaying *"0 Alerts"*.

@@ -137,7 +137,7 @@ sequenceDiagram
 
 ### Feature Showcase Scenario (App Store Video Storyboard)
 * **Visual**: A developer is away from their desk walking their dog, wearing an Apple Watch.
-* **Action**: They raise their wrist and say: *"Siri, check my servers in Midnight SSH."*
+* **Action**: They raise their wrist and say: *"Siri, check my servers in agent-ssh."*
 * **Animation**: Siri displays a native visual card with a red warning: `pg-prod-01 (Out of Memory warning: Postgres crashed)`.
 * **Action**: The developer taps the card. The phone opens directly to the **Server Doctor** showing the exact raw `dmesg` lines, the redacted evidence, and the safe recommended inspect commands.
 * **Voiceover**: *"Never be in the dark during an outage. Triage incidents in plain English directly from your wrist, without typing a single terminal command."*

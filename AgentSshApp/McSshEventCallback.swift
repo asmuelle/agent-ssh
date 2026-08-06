@@ -23,7 +23,7 @@ final class AgentSshEventCallback: FfiEventCallback {
                 )
 
             case "connection_status":
-                self.logger.log("connection_status \(event.connectionId, privacy: .public): \(event.payload, privacy: .public)")
+                self.logger.log("connection_status \(event.connectionId, privacy: .private(mask: .hash)): \(event.payload, privacy: .private(mask: .hash))")
                 AgentSshEventBus.shared.events.send(
                     .connectionStatus(connectionId: event.connectionId, payload: event.payload)
                 )

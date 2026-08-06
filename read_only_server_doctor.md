@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Read-only Server Doctor is a guided diagnostic layer for Midnight SSH that helps inexperienced server admins understand what is happening on a server without changing anything. It analyzes configuration files, logs, service status, runtime metrics, and recent activity, then presents a concise diagnosis with linked evidence and safe next steps.
+Read-only Server Doctor is a guided diagnostic layer for agent-ssh that helps inexperienced server admins understand what is happening on a server without changing anything. It analyzes configuration files, logs, service status, runtime metrics, and recent activity, then presents a concise diagnosis with linked evidence and safe next steps.
 
 The feature should feel like a native Apple system inspector, not a chatbot bolted onto an SSH client. The server remains the source of truth. The LLM acts as an interpreter that explains evidence, ranks likely causes, and teaches the user what to inspect next.
 
@@ -32,7 +32,7 @@ Secondary users are experienced admins who want faster triage. For them, Server 
 - Reduce the number of manual commands required for first-pass triage.
 - Make the app safer by separating diagnosis from mutation.
 - Link every conclusion to logs, config lines, service status, or metrics.
-- Turn existing Midnight SSH surfaces into a coherent diagnostic workflow.
+- Turn existing agent-ssh surfaces into a coherent diagnostic workflow.
 - Produce structured outputs that can later become safe fix plans or runbooks.
 - Preserve privacy through local redaction and user-visible collection previews.
 
@@ -47,7 +47,7 @@ Secondary users are experienced admins who want faster triage. For them, Server 
 
 ## Existing App Fit
 
-Midnight SSH already has many of the required pieces:
+agent-ssh already has many of the required pieces:
 
 - Terminal sessions through SwiftTerm.
 - Remote file browsing and config editing.
@@ -65,7 +65,7 @@ Read-only Server Doctor should orchestrate these existing surfaces instead of cr
 
 The feature opens as a host-level health inspector.
 
-The user selects a connected host and clicks `Doctor`. Midnight SSH shows a collection preview:
+The user selects a connected host and clicks `Doctor`. agent-ssh shows a collection preview:
 
 - What will be inspected.
 - Which commands will run.
@@ -375,7 +375,7 @@ Collect:
 - Listening ports.
 - Recent package activity.
 - Recent SSH authentication failures.
-- Midnight SSH activity context if available.
+- agent-ssh activity context if available.
 
 Findings:
 
@@ -585,7 +585,7 @@ For high-quality diagnostics, `Balanced` is the best default because paths, port
 
 The model receives:
 
-- Product context: Midnight SSH read-only diagnostic report.
+- Product context: agent-ssh read-only diagnostic report.
 - User skill level: inexperienced admin, concise explanations.
 - Host context: OS, service profile, command inventory.
 - Redacted evidence graph.
@@ -1088,7 +1088,7 @@ The best first implementation is:
 Diagnose Host -> collection preview -> collect broad host + nginx/systemd/disk -> redacted structured evidence -> LLM findings -> evidence-linked report.
 ```
 
-This slice proves the whole product loop while staying small enough to ship safely. It also uses existing Midnight SSH strengths: remote command execution, log viewing, file browsing, system monitor diagnostics, and safe config awareness.
+This slice proves the whole product loop while staying small enough to ship safely. It also uses existing agent-ssh strengths: remote command execution, log viewing, file browsing, system monitor diagnostics, and safe config awareness.
 
 ## Definition of Done
 

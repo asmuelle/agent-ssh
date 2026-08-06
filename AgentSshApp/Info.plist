@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>agent-ssh</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.agent-ssh.macos</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -29,6 +31,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>MSSHEnforceEntitlements</key>

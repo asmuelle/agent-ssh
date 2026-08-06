@@ -122,7 +122,7 @@ sequenceDiagram
 > *"Bring specialized Coder LLMs directly to your terminal. High-performance offline log triaging powered by Apple Silicon."*
 
 ### Feature Showcase Scenario (App Store Video Storyboard)
-* **Visual**: A developer’s macOS screen showing Midnight SSH, looking at a highly complex Kubernetes log file with thousands of lines.
+* **Visual**: A developer’s macOS screen showing agent-ssh, looking at a highly complex Kubernetes log file with thousands of lines.
 * **Action**: They click **Local MLX Doctor**, select the *Qwen-2.5-Coder* model from the dropdown, and press **Analyze**.
 * **Outcome**: A sidebar instantly streams a technical breakdown, highlighting a hidden race condition in the Go runtime. A status indicator shows: `Generated locally using MLX. Speed: 52 tokens/s. Memory: 1.1GB.`
 * **Voiceover**: *"Don't settle for generic AI. Load highly-specialized Coder models directly into your terminal environment, utilizing Apple Silicon's unified memory for blazing-fast local diagnostics."*

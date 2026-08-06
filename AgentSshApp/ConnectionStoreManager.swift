@@ -82,7 +82,7 @@ class ConnectionStoreManager: ObservableObject {
         if connections[idx].kind == kind { return }
         connections[idx].kind = kind
         save()
-        logger.info("Profile \(profileId, privacy: .public) kind → \(kind.rawValue, privacy: .public)")
+        logger.info("Profile \(profileId, privacy: .private(mask: .hash)) kind → \(kind.rawValue, privacy: .public)")
     }
 
     func monitoredSystemdServices(profileId: String?) -> [String] {
@@ -204,7 +204,7 @@ class ConnectionStoreManager: ObservableObject {
         )
         folders.append(folder)
         save()
-        logger.info("Created folder \(path, privacy: .public)")
+        logger.info("Created folder \(path, privacy: .private(mask: .hash))")
         return folder
     }
 
@@ -233,7 +233,7 @@ class ConnectionStoreManager: ObservableObject {
         folders[idx].name = trimmed
         folders[idx].path = newPath
         save()
-        logger.info("Renamed folder \(folder.path, privacy: .public) → \(newPath, privacy: .public)")
+        logger.info("Renamed folder \(folder.path, privacy: .private(mask: .hash)) → \(newPath, privacy: .private(mask: .hash))")
     }
 
     /// Move a folder to a new parent (or to root with `nil`). Refuses
@@ -265,7 +265,7 @@ class ConnectionStoreManager: ObservableObject {
         folders[idx].parentPath = newParent
         folders[idx].path = newPath
         save()
-        logger.info("Moved folder \(folder.path, privacy: .public) → \(newPath, privacy: .public)")
+        logger.info("Moved folder \(folder.path, privacy: .private(mask: .hash)) → \(newPath, privacy: .private(mask: .hash))")
     }
 
     /// Delete a folder. Children (sub-folders and profiles) move up
@@ -289,7 +289,7 @@ class ConnectionStoreManager: ObservableObject {
         }
         folders.removeAll { $0.id == id }
         save()
-        logger.info("Deleted folder \(folder.path, privacy: .public); children re-parented")
+        logger.info("Deleted folder \(folder.path, privacy: .private(mask: .hash)); children re-parented")
     }
 
     /// Move a profile into a folder by path (`nil` = root). The folder

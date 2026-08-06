@@ -6,6 +6,8 @@
     <string>en</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleDisplayName</key>
+    <string>agent-ssh</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -20,7 +22,7 @@
     <array>
         <dict>
             <key>CFBundleURLName</key>
-            <string>com.mc-ssh.mobile</string>
+            <string>com.agent-ssh.mobile</string>
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>agent-ssh</string>
@@ -29,12 +31,17 @@
     </array>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSFaceIDUsageDescription</key>
     <string>Unlock saved SSH credentials.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>agent-ssh connects to SSH and SFTP servers on your local network when you choose a saved host.</string>
     <key>NSSupportsLiveActivities</key>
     <true/>
     <key>NSUserActivityTypes</key>
     <array>
+        <string>com.agent-ssh.mobile.route</string>
         <string>com.mc-ssh.agent-ssh.route</string>
     </array>
     <key>UILaunchScreen</key>

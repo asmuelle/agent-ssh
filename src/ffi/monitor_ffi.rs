@@ -10,6 +10,27 @@ use super::*;
 
 use crate::monitor::{self, OsKind};
 
+/// Runs a monitoring command under the shared [`COMMAND_TIMEOUT`]. Monitor
+/// polls are periodic, so a connection that silently drops packets (no TCP RST)
+/// would otherwise hang a native thread on every poll and pile up blocked
+/// threads — the same hazard the doctor/security-patch collectors already guard
+/// against. Bounds the round-trip and maps a timeout to `MonitorError::Other`.
+async fn exec_monitor(
+    client: &std::sync::Arc<tokio::sync::RwLock<ssh_commander_core::ssh::SshClient>>,
+    cmd: &str,
+) -> Result<String, MonitorError> {
+    let guard = client.read().await;
+    match tokio::time::timeout(COMMAND_TIMEOUT, guard.execute_command(cmd)).await {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(e)) => Err(MonitorError::Other {
+            detail: sanitize_error(e),
+        }),
+        Err(_) => Err(MonitorError::Other {
+            detail: format!("command timed out after {}s", COMMAND_TIMEOUT.as_secs()),
+        }),
+    }
+}
+
 /// One row in the disk-usage table.
 #[derive(uniffi::Record, Clone)]
 pub struct FfiDiskMount {
@@ -79,15 +100,7 @@ pub fn rshell_get_system_stats(connection_id: String) -> Result<FfiSystemStats, 
         let os = match monitor::cached(&connection_id) {
             Some(os) => os,
             None => {
-                let uname = {
-                    let guard = client.read().await;
-                    guard
-                        .execute_command("uname -s")
-                        .await
-                        .map_err(|e| MonitorError::Other {
-                            detail: sanitize_error(e),
-                        })?
-                };
+                let uname = exec_monitor(&client, "uname -s").await?;
                 let detected = monitor::classify_uname(&uname);
                 monitor::store(&connection_id, detected.clone());
                 detected
@@ -96,27 +109,11 @@ pub fn rshell_get_system_stats(connection_id: String) -> Result<FfiSystemStats, 
 
         match os {
             OsKind::Linux => {
-                let output = {
-                    let guard = client.read().await;
-                    guard
-                        .execute_command(monitor::linux::STATS_COMMAND)
-                        .await
-                        .map_err(|e| MonitorError::Other {
-                            detail: sanitize_error(e),
-                        })?
-                };
+                let output = exec_monitor(&client, monitor::linux::STATS_COMMAND).await?;
                 parse_linux_stats(&output).map_err(|e| MonitorError::ParseError { detail: e })
             }
             OsKind::Darwin => {
-                let output = {
-                    let guard = client.read().await;
-                    guard
-                        .execute_command(monitor::darwin::STATS_COMMAND)
-                        .await
-                        .map_err(|e| MonitorError::Other {
-                            detail: sanitize_error(e),
-                        })?
-                };
+                let output = exec_monitor(&client, monitor::darwin::STATS_COMMAND).await?;
                 parse_darwin_stats(&output).map_err(|e| MonitorError::ParseError { detail: e })
             }
             OsKind::Other(name) => Err(MonitorError::Unsupported { os: name }),
@@ -298,15 +295,7 @@ pub fn rshell_get_processes(connection_id: String) -> Result<Vec<FfiProcess>, Mo
         let os = match monitor::cached(&connection_id) {
             Some(os) => os,
             None => {
-                let uname = {
-                    let guard = client.read().await;
-                    guard
-                        .execute_command("uname -s")
-                        .await
-                        .map_err(|e| MonitorError::Other {
-                            detail: sanitize_error(e),
-                        })?
-                };
+                let uname = exec_monitor(&client, "uname -s").await?;
                 let detected = monitor::classify_uname(&uname);
                 monitor::store(&connection_id, detected.clone());
                 detected
@@ -319,15 +308,7 @@ pub fn rshell_get_processes(connection_id: String) -> Result<Vec<FfiProcess>, Mo
             OsKind::Other(name) => return Err(MonitorError::Unsupported { os: name }),
         };
 
-        let output = {
-            let guard = client.read().await;
-            guard
-                .execute_command(cmd)
-                .await
-                .map_err(|e| MonitorError::Other {
-                    detail: sanitize_error(e),
-                })?
-        };
+        let output = exec_monitor(&client, cmd).await?;
 
         let rows = match os {
             OsKind::Linux => monitor::linux::parse_processes(&output),
@@ -377,12 +358,20 @@ pub fn rshell_signal_process(
         // are portable across BSD/Linux and read better in logs.
         let cmd = format!("kill -{} {}", signal.as_kill_arg(), pid);
         let guard = client.read().await;
-        let output = guard
-            .execute_command_full(&cmd)
-            .await
-            .map_err(|e| MonitorError::Other {
-                detail: sanitize_error(e),
-            })?;
+        let output =
+            match tokio::time::timeout(COMMAND_TIMEOUT, guard.execute_command_full(&cmd)).await {
+                Ok(Ok(output)) => output,
+                Ok(Err(e)) => {
+                    return Err(MonitorError::Other {
+                        detail: sanitize_error(e),
+                    });
+                }
+                Err(_) => {
+                    return Err(MonitorError::Other {
+                        detail: format!("kill timed out after {}s", COMMAND_TIMEOUT.as_secs()),
+                    });
+                }
+            };
         if output.is_success() {
             Ok(())
         } else {

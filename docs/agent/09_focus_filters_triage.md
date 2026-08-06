@@ -91,7 +91,7 @@ graph TD
 
 ## Native User Experience
 
-1. **Focus Integration in Settings**: When configuring a native Focus Mode (such as "Personal") in the system Settings app, the user scrolls to **Focus Filters** -> **Add Filter** -> **Midnight SSH**. They are greeted by a beautiful native sheet allowing them to configure the severity threshold and server scope.
+1. **Focus Integration in Settings**: When configuring a native Focus Mode (such as "Personal") in the system Settings app, the user scrolls to **Focus Filters** -> **Add Filter** -> **agent-ssh**. They are greeted by a beautiful native sheet allowing them to configure the severity threshold and server scope.
 2. **Dynamic App Dashboard**: Opening `agent-ssh` while in a specific focus mode adjusts the visual presentation. The host sidebar displays a subtle badge: *“Focus Filter Active: Showing Production Critical”*, instantly decluttering their workspace.
 
 ---
@@ -110,7 +110,7 @@ graph TD
 
 ### Feature Showcase Scenario (App Store Video Storyboard)
 * **Visual**: A developer finishing their workday, walking out of the office. They tap the Control Center and switch from **Work** Focus to **Personal** Focus.
-* **Action**: In the system Settings under Focus Filters, we see **Midnight SSH** set to *“Critical Only, Staging Excluded”*.
+* **Action**: In the system Settings under Focus Filters, we see **agent-ssh** set to *“Critical Only, Staging Excluded”*.
 * **Outcome**: A minor memory warning occurs on the staging proxy server. The developer's phone remains silent. Later, a severe database lock occurs on the production primary, triggering a loud, critical vibration immediately.
 * **Voiceover**: *"Outages don't respect office hours, but your peace of mind should. Set context-aware focus filters that screen out non-essential server alerts while prioritizing critical events when you're off-duty."*
 
