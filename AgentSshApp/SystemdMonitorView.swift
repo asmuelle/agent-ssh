@@ -354,10 +354,20 @@ struct SystemdMonitorView: View {
     /// badge: the tab then shows only classifier-matched error/warning
     /// lines until dismissed. Reset on selection change.
     @State var unitLogsIssueFocus = false
+    /// Journal rows whose over-long messages the user expanded past
+    /// the default line cap. Keyed by entry id; reset on selection
+    /// change.
+    @State var expandedJournalEntryIds: Set<Int> = []
     @State var showsRawProperties = false
     @State var serviceScope: ServiceScope = .all
 
     static let journalTailOptions: [Int] = [100, 200, 500, 1000, 2000]
+    /// Wrapped journal messages cap at this many lines; longer entries
+    /// get an expand affordance so one pathological message (key blob,
+    /// stack dump) can't swallow the pane.
+    static let journalMessageLineCap = 5
+    /// Characters above which a message is considered expandable.
+    static let journalMessageExpandThreshold = 240
 
     enum JournalPriority: String, CaseIterable, Identifiable {
         case all = "All"
@@ -660,6 +670,7 @@ struct SystemdMonitorView: View {
         selectedUnit = unit
         if changed {
             unitLogsIssueFocus = false
+            expandedJournalEntryIds = []
         }
         if resetDetailTab, changed, let unit {
             unitDetailTab = preferredDetailTab(for: unit)
