@@ -37,6 +37,9 @@ struct ContentView: View {
     @State private var showingCommandPalette = false
     @State private var serverDoctorTarget: ServerDoctorTarget?
     @State private var didRunAutoConnect = false
+    /// Startup auto-connect targeted several hosts: land on the fleet
+    /// dashboard as soon as two of them are actually connected.
+    @State private var pendingAutoConnectDashboard = false
 
     var body: some View {
         HSplitView {
@@ -69,6 +72,12 @@ struct ContentView: View {
         .task {
             actuatorMonitor.start(tabsStore: tabsStore)
             await runAutoConnect()
+        }
+        .onChange(of: tabsStore.connectedSSHTabs.count) { count in
+            if pendingAutoConnectDashboard, count >= 2 {
+                pendingAutoConnectDashboard = false
+                workspaceMode = .dashboard
+            }
         }
         .onDisappear {
             Task { await actuatorMonitor.stop() }
@@ -179,15 +188,39 @@ struct ContentView: View {
     /// Connect every profile marked "Connect at launch" — once per app
     /// run, and only profiles whose stored credentials allow a silent
     /// connect, so startup never opens a wall of password prompts.
+    ///
+    /// Connects run in parallel: a serial loop would let one slow or
+    /// unreachable host block every server behind it (the "only one
+    /// connected on startup" failure). A multi-host startup lands on
+    /// the fleet dashboard — switched reactively as soon as two hosts
+    /// are up (see the onChange in `body`), so a hanging connect can't
+    /// delay the overview either.
     @MainActor
     private func runAutoConnect() async {
         guard !didRunAutoConnect else { return }
         didRunAutoConnect = true
 
-        for profile in connectionStore.connections where profile.autoConnect {
-            guard canConnectSilently(profile) else { continue }
-            await tabsStore.openConnection(profile)
+        let profiles = connectionStore.connections.filter {
+            $0.autoConnect && canConnectSilently($0)
         }
+        guard !profiles.isEmpty else { return }
+
+        if profiles.count >= 2 {
+            pendingAutoConnectDashboard = true
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for profile in profiles {
+                group.addTask { @MainActor in
+                    await tabsStore.openConnection(profile)
+                }
+            }
+        }
+
+        if pendingAutoConnectDashboard, tabsStore.connectedSSHTabs.count >= 2 {
+            workspaceMode = .dashboard
+        }
+        pendingAutoConnectDashboard = false
     }
 
     private func canConnectSilently(_ profile: ConnectionProfile) -> Bool {
