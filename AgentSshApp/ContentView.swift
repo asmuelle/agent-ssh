@@ -70,6 +70,12 @@ struct ContentView: View {
         .environmentObject(transfersStore)
         .frame(minWidth: 900, minHeight: 600)
         .task {
+            // The unit-test host launches the full app. Auto-connect
+            // would then dial real servers and touch the Keychain from
+            // an ad-hoc-signed binary — the permission dialog blocks
+            // the test runner before it can attach. Keep the test host
+            // inert.
+            guard !ProcessInfo.isRunningTests else { return }
             actuatorMonitor.start(tabsStore: tabsStore)
             await runAutoConnect()
         }
@@ -280,6 +286,15 @@ struct ContentView: View {
         if let url = activity.webpageURL {
             handleDeepLink(url)
         }
+    }
+}
+
+extension ProcessInfo {
+    /// True when the process is a unit-test host rather than a real
+    /// app launch.
+    static var isRunningTests: Bool {
+        processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
     }
 }
 

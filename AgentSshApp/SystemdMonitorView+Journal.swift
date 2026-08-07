@@ -97,6 +97,12 @@ extension SystemdMonitorView {
         JournalIssueClassifier.counts(in: rawUnitJournalLines)
     }
 
+    /// The unit's journal lines the classifier flags as errors or
+    /// warnings — what the Logs tab shows while issue focus is on.
+    var issueOnlyUnitJournalLines: [String] {
+        filteredUnitJournalLines.filter { JournalIssueClassifier.classify($0) != nil }
+    }
+
     var priorityFilteredEmptyMessage: String {
         switch journalPriority {
         case .all: return "journalctl returned nothing for this scope."

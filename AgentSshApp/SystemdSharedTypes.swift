@@ -11,9 +11,24 @@ struct SystemdUnit: Identifiable, Hashable {
     let sub: String
     let unitFileState: String
     let description: String
+    /// Journal error/warning entry counts for the last hour, derived
+    /// from journald priorities (err+ / warning) in one pass over the
+    /// host journal. Zero until the counts fetch merges them in.
+    var journalErrors: Int = 0
+    var journalWarnings: Int = 0
 
     var id: String { name }
     var statusSortKey: String { "\(active) \(sub)" }
+
+    var journalIssueCounts: JournalIssueCounts {
+        JournalIssueCounts(errors: journalErrors, warnings: journalWarnings)
+    }
+
+    /// Errors dominate warnings in the column sort regardless of
+    /// magnitude — one error outranks any pile of warnings.
+    var journalIssueSortKey: Int {
+        journalErrors * 100_000 + journalWarnings
+    }
 
     var statusSortRank: Int {
         if isFailed { return 0 }

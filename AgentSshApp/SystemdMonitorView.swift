@@ -83,6 +83,23 @@ func systemdTimerDurationMultiplier(_ rawUnit: String) -> Int64 {
     return 1
 }
 
+/// Parses the "unit \t errors \t warnings" lines the units script's
+/// journal-counts section emits (one journald pass, reduced server-side).
+func parseSystemdJournalCounts(_ output: String) -> [String: JournalIssueCounts] {
+    output
+        .split(whereSeparator: \.isNewline)
+        .reduce(into: [:]) { result, line in
+            let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard parts.count >= 3,
+                  let errors = Int(parts[1].trimmingCharacters(in: .whitespaces)),
+                  let warnings = Int(parts[2].trimmingCharacters(in: .whitespaces))
+            else { return }
+            let unit = String(parts[0]).trimmingCharacters(in: .whitespaces)
+            guard !unit.isEmpty else { return }
+            result[unit] = JournalIssueCounts(errors: errors, warnings: warnings)
+        }
+}
+
 func parseSystemdUnitLine(_ line: String, unitFileStates: [String: String] = [:]) -> SystemdUnit? {
     let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
@@ -333,6 +350,10 @@ struct SystemdMonitorView: View {
     @State var journalTail: Int = 200
     @State var pendingAction: UnitAction?
     @State var unitDetailTab: UnitDetailTab = .overview
+    /// Set when the user arrives at the Logs tab via an Errors-column
+    /// badge: the tab then shows only classifier-matched error/warning
+    /// lines until dismissed. Reset on selection change.
+    @State var unitLogsIssueFocus = false
     @State var showsRawProperties = false
     @State var serviceScope: ServiceScope = .all
 
@@ -568,7 +589,10 @@ struct SystemdMonitorView: View {
             case .all:
                 break
             case .problems:
-                base = base.filter(\.hasOperationalProblem)
+                // Operational problems plus units whose journal shows
+                // errors — a running service spewing errors is a
+                // problem even though systemd calls it healthy.
+                base = base.filter { $0.hasOperationalProblem || $0.journalErrors > 0 }
             case .active:
                 base = base.filter(\.isActive)
             case .enabled:
@@ -631,6 +655,9 @@ struct SystemdMonitorView: View {
     func selectUnit(_ unit: SystemdUnit?, resetDetailTab: Bool = true) {
         let changed = selectedUnit?.id != unit?.id
         selectedUnit = unit
+        if changed {
+            unitLogsIssueFocus = false
+        }
         if resetDetailTab, changed, let unit {
             unitDetailTab = preferredDetailTab(for: unit)
         }
