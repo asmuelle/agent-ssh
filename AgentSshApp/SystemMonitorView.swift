@@ -45,6 +45,17 @@ struct DashboardHostMetrics: Equatable {
     var disks: [FfiDiskMount] = []
 }
 
+/// Log health of one user-monitored systemd unit, sampled from its
+/// recent journal by the hygiene probe. Uses the same server-side
+/// classifier as `MonitoredSystemdServicesPane`, so the counts on a
+/// fleet-row chip match the badges inside the expanded Services pane.
+struct HygieneServiceLogHealth: Equatable {
+    let unit: String
+    let activeState: String
+    let journalErrors: Int
+    let journalWarnings: Int
+}
+
 /// Result of the slow "hygiene" probe: service, container, and journal
 /// problems that the 3-second stats poll can't see.
 struct HygieneSnapshot: Equatable {
@@ -55,6 +66,9 @@ struct HygieneSnapshot: Equatable {
     /// Classified journal issue counts for the last 15 minutes.
     let journalErrors: Int
     let journalWarnings: Int
+    /// Per-monitored-unit journal health (empty when the profile
+    /// monitors no services).
+    var serviceLogs: [HygieneServiceLogHealth] = []
 }
 
 struct DashboardHealthSnapshot: Identifiable, Equatable {
@@ -140,6 +154,11 @@ struct SystemMonitorView: View {
     /// Journal errors in the probe window below this stay off the
     /// dashboard — a lone repeated line shouldn't paint the fleet.
     static let journalErrorThreshold = 3
+    /// Monitored-service log thresholds: any error surfaces a warning
+    /// chip; this many escalate to critical. Warnings alone need a
+    /// real pile before they surface — chatty services are common.
+    static let serviceLogErrorsCritical = 25
+    static let serviceLogWarningsThreshold = 50
     /// 60 × 3s = 3 minutes of trailing history per chart.
     static let maxHistory = 60
 

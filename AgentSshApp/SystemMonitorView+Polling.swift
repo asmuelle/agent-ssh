@@ -55,6 +55,49 @@ extension SystemMonitorView {
         defer { publishDashboardHealthSnapshot() }
 
         let separator = "__AGENT_SSH_HYGIENE_SEP__"
+
+        // Per-monitored-unit log sampling. Same 160-line window and the
+        // same awk classifier as `MonitoredSystemdServicesPane`, so a
+        // chip's count matches the badge inside the expanded pane.
+        let monitoredUnits = profile?.monitoredSystemdServices ?? []
+        let serviceLogSection: String
+        if monitoredUnits.isEmpty {
+            serviceLogSection = ""
+        } else {
+            let units = monitoredUnits.map(RemoteCommandRunner.shellQuote).joined(separator: " ")
+            serviceLogSection = """
+            if command -v systemctl >/dev/null 2>&1; then
+              for unit in \(units); do
+                active=$(systemctl show "$unit" --no-pager -p ActiveState 2>/dev/null | awk -F= '$1=="ActiveState"{print $2; exit}')
+                journal_errors=0
+                journal_warnings=0
+                if command -v journalctl >/dev/null 2>&1; then
+                  journal_sample=$(journalctl -u "$unit" -n 160 --no-pager -o short-iso 2>/dev/null || sudo -n journalctl -u "$unit" -n 160 --no-pager -o short-iso 2>/dev/null || true)
+                  journal_counts=$(printf '%s\\n' "$journal_sample" | awk '
+                    {
+                      message=$0
+                      if ($1 ~ /[0-9]/ && $1 ~ /[-:]/) {
+                        sub(/^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+/, "", message)
+                      }
+                      line=tolower(message)
+                      if (line ~ /(^|[^[:alnum:]_])(error|errors|fatal|panic|crit|critical|emerg|alert|denied|fail|failed|failure)([^[:alnum:]_]|$)/) {
+                        errors++
+                      } else if (line ~ /(^|[^[:alnum:]_])(warn|warning|deprecated|timeout|timed[[:space:]]*out|retry|retrying|deferred|refused|rejected)([^[:alnum:]_]|$)/) {
+                        warnings++
+                      }
+                    }
+                    END { printf "%d %d", errors + 0, warnings + 0 }
+                  ')
+                  set -- $journal_counts
+                  journal_errors=${1:-0}
+                  journal_warnings=${2:-0}
+                fi
+                printf '%s\\t%s\\t%s\\t%s\\n' "$unit" "${active:-unknown}" "$journal_errors" "$journal_warnings"
+              done
+            fi
+            """
+        }
+
         let script = """
         systemctl list-units --state=failed --plain --no-legend --no-pager 2>/dev/null | head -5
         echo \(separator)
@@ -64,6 +107,8 @@ extension SystemMonitorView {
         fi
         echo \(separator)
         journalctl -p warning --since '-15 min' --no-pager -q -n 200 2>/dev/null
+        echo \(separator)
+        \(serviceLogSection)
         """
 
         guard let result = try? await RemoteCommandRunner.runShell(
@@ -85,6 +130,7 @@ extension SystemMonitorView {
         let failedSection = sections.indices.contains(0) ? sections[0] : ""
         let dockerSection = sections.indices.contains(1) ? sections[1] : ""
         let journalSection = sections.indices.contains(2) ? sections[2] : ""
+        let serviceLogSection = sections.indices.contains(3) ? sections[3] : ""
 
         // `systemctl list-units --plain --no-legend`: unit name is the
         // first column; ● markers are already suppressed by --plain.
@@ -120,11 +166,31 @@ extension SystemMonitorView {
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         let counts = JournalIssueClassifier.counts(in: journalLines)
 
+        // "unit \t activeState \t errors \t warnings" per monitored unit.
+        let serviceLogs = serviceLogSection
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line -> HygieneServiceLogHealth? in
+                let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
+                guard parts.count >= 4,
+                      let errors = Int(parts[2].trimmingCharacters(in: .whitespaces)),
+                      let warnings = Int(parts[3].trimmingCharacters(in: .whitespaces))
+                else { return nil }
+                let unit = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                guard !unit.isEmpty else { return nil }
+                return HygieneServiceLogHealth(
+                    unit: unit,
+                    activeState: String(parts[1]).trimmingCharacters(in: .whitespaces),
+                    journalErrors: errors,
+                    journalWarnings: warnings
+                )
+            }
+
         return HygieneSnapshot(
             failedUnits: failedUnits,
             dockerProblems: dockerProblems,
             journalErrors: counts.errors,
-            journalWarnings: counts.warnings
+            journalWarnings: counts.warnings,
+            serviceLogs: serviceLogs
         )
     }
 

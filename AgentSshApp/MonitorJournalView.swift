@@ -200,7 +200,7 @@ struct FleetJournalSheet: View {
                         .padding(12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 } else {
-                    MonitorJournalLogView(rawLines: rawLines)
+                    MonitorJournalLogView(rawLines: rawLines, focusOnIssues: true)
                         .padding(12)
                 }
             }
@@ -244,11 +244,27 @@ struct FleetJournalSheet: View {
 struct MonitorJournalLogView: View {
     let rawLines: [String]
     var fallbackHints: [String] = []
+    /// Open pre-filtered to errors and warnings so the problem is on
+    /// screen immediately — the reason a user opens a journal from a
+    /// problem chip. Falls back to all severities on appear when the
+    /// sample contains no issue lines, so the view never opens empty.
+    var focusOnIssues = false
 
     @State private var searchText = ""
-    @State private var enabledSeverities: Set<MonitorJournalSeverity> = Set(MonitorJournalSeverity.allCases)
+    @State private var enabledSeverities: Set<MonitorJournalSeverity>
     @State private var pinnedIDs: Set<Int> = []
     @State private var jumpCursor: Int?
+
+    init(rawLines: [String], fallbackHints: [String] = [], focusOnIssues: Bool = false) {
+        self.rawLines = rawLines
+        self.fallbackHints = fallbackHints
+        self.focusOnIssues = focusOnIssues
+        _enabledSeverities = State(
+            initialValue: focusOnIssues
+                ? [.error, .warn]
+                : Set(MonitorJournalSeverity.allCases)
+        )
+    }
 
     private var lines: [MonitorJournalLine] { MonitorJournalLine.parseAll(rawLines) }
 
@@ -313,6 +329,14 @@ struct MonitorJournalLogView: View {
             .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .onAppear {
+            // Issue focus with nothing to focus on would open an empty
+            // pane — fall back to showing everything.
+            if focusOnIssues,
+               !lines.contains(where: { $0.severity == .error || $0.severity == .warn }) {
+                enabledSeverities = Set(MonitorJournalSeverity.allCases)
+            }
+        }
     }
 
     // MARK: Header
