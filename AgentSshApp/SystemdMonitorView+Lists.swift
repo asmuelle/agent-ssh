@@ -36,24 +36,6 @@ extension SystemdMonitorView {
             }
             .width(min: 210, ideal: 320, max: 440)
 
-            TableColumn("Status", value: \.statusSortKey) { unit in
-                HStack(spacing: 4) {
-                    statusBadge(
-                        unit.active,
-                        color: systemdStateColor(unit.active, unit: unit),
-                        emphasized: unit.hasOperationalProblem
-                    )
-                    if !unit.sub.isEmpty && unit.sub != unit.active {
-                        statusBadge(
-                            unit.sub,
-                            color: systemdStateColor(unit.sub, unit: unit),
-                            emphasized: unit.hasOperationalProblem
-                        )
-                    }
-                }
-            }
-            .width(min: 120, ideal: 150, max: 210)
-
             TableColumn("Errors", value: \.journalIssueSortKey) { unit in
                 if unit.journalIssueCounts.hasIssues {
                     Button {
@@ -78,6 +60,24 @@ extension SystemdMonitorView {
                 }
             }
             .width(min: 76, ideal: 96, max: 140)
+
+            TableColumn("Status", value: \.statusSortKey) { unit in
+                HStack(spacing: 4) {
+                    statusBadge(
+                        unit.active,
+                        color: systemdStateColor(unit.active, unit: unit),
+                        emphasized: unit.hasOperationalProblem
+                    )
+                    if !unit.sub.isEmpty && unit.sub != unit.active {
+                        statusBadge(
+                            unit.sub,
+                            color: systemdStateColor(unit.sub, unit: unit),
+                            emphasized: unit.hasOperationalProblem
+                        )
+                    }
+                }
+            }
+            .width(min: 120, ideal: 150, max: 210)
 
             TableColumn("Enabled", value: \.unitFileState) { unit in
                 statusBadge(

@@ -380,6 +380,9 @@ struct SystemdMonitorView: View {
     }
 
     @State var unitSortOrder: [KeyPathComparator<SystemdUnit>] = [
+        // Loudest first: most journal errors on top, then operational
+        // state (failed > transitional > active), then name.
+        .init(\.journalIssueSortKey, order: .reverse),
         .init(\.statusSortRank),
         .init(\.name)
     ]
