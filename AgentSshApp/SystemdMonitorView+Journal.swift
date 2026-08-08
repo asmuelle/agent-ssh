@@ -97,6 +97,12 @@ extension SystemdMonitorView {
         JournalIssueClassifier.counts(in: rawUnitJournalLines)
     }
 
+    /// The unit's journal lines the classifier flags as errors or
+    /// warnings — what the Logs tab shows while issue focus is on.
+    var issueOnlyUnitJournalLines: [String] {
+        filteredUnitJournalLines.filter { JournalIssueClassifier.classify($0) != nil }
+    }
+
     var priorityFilteredEmptyMessage: String {
         switch journalPriority {
         case .all: return "journalctl returned nothing for this scope."
@@ -109,28 +115,145 @@ extension SystemdMonitorView {
         journalEntriesList(lines: filteredJournalLines, autoScroll: liveJournal)
     }
 
+    // MARK: - Journal display model
+
+    /// One rendered journal row. Consecutive lines with the same
+    /// process and message are coalesced into a single entry with a
+    /// repeat count — 42 identical sshd failures read as one fact,
+    /// not a wall.
+    struct JournalDisplayEntry: Identifiable {
+        let id: Int
+        let firstTimestamp: String
+        var lastTimestamp: String
+        let host: String
+        let process: String
+        let message: String
+        let severity: JournalSeverity
+        let rawLine: String
+        var repeatCount: Int = 1
+
+        var day: String {
+            String(firstTimestamp.prefix(10))
+        }
+
+        /// "19:43:45" — the date lives in the day divider and the
+        /// tooltip, not on every row.
+        var timeOfDay: String {
+            guard let tIndex = firstTimestamp.firstIndex(of: "T") else {
+                return firstTimestamp
+            }
+            return String(firstTimestamp[firstTimestamp.index(after: tIndex)...].prefix(8))
+        }
+    }
+
+    enum JournalDisplayItem: Identifiable {
+        case day(String)
+        case entry(JournalDisplayEntry)
+
+        var id: String {
+            switch self {
+            case .day(let day): return "day:\(day)"
+            case .entry(let entry): return "entry:\(entry.id)"
+            }
+        }
+    }
+
+    func journalDisplayItems(lines: [String]) -> [JournalDisplayItem] {
+        var items: [JournalDisplayItem] = []
+        var pending: JournalDisplayEntry?
+        var lastDay = ""
+
+        func flush() {
+            if let entry = pending {
+                items.append(.entry(entry))
+                pending = nil
+            }
+        }
+
+        for (index, line) in lines.enumerated() {
+            let parts = splitJournalLine(line)
+            if var entry = pending,
+               !parts.message.isEmpty,
+               entry.process == parts.process,
+               entry.message == parts.message {
+                entry.repeatCount += 1
+                entry.lastTimestamp = parts.timestamp
+                pending = entry
+                continue
+            }
+            flush()
+            if parts.timestamp.count >= 10 {
+                let day = String(parts.timestamp.prefix(10))
+                if day != lastDay {
+                    items.append(.day(day))
+                    lastDay = day
+                }
+            }
+            pending = JournalDisplayEntry(
+                id: index,
+                firstTimestamp: parts.timestamp,
+                lastTimestamp: parts.timestamp,
+                host: parts.host,
+                process: parts.process,
+                message: parts.message,
+                severity: journalSeverity(line),
+                rawLine: line
+            )
+        }
+        flush()
+        return items
+    }
+
+    // MARK: - Journal rendering
+
     func journalEntriesList(lines: [String], autoScroll: Bool) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView(journalScrollAxes) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    journalColumnHeader
-                    ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                        journalLineRow(line)
-                            .id(index)
+        let items = journalDisplayItems(lines: lines)
+        let host = items.compactMap { item -> String? in
+            if case .entry(let entry) = item, !entry.host.isEmpty { return entry.host }
+            return nil
+        }.first
+        let entryCount = items.reduce(0) { count, item in
+            if case .entry = item { return count + 1 }
+            return count
+        }
+        let coalescedGroups = items.reduce(0) { count, item in
+            if case .entry(let entry) = item, entry.repeatCount > 1 { return count + 1 }
+            return count
+        }
+
+        return VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView(journalScrollAxes) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        journalColumnHeader(host: host)
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            switch item {
+                            case .day(let day):
+                                journalDayDivider(day)
+                            case .entry(let entry):
+                                journalEntryRow(entry, striped: index.isMultiple(of: 2))
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .frame(
+                        minWidth: wrapJournalLines ? 0 : 1180,
+                        maxWidth: wrapJournalLines ? .infinity : nil,
+                        alignment: .leading
+                    )
+                }
+                .onChange(of: lines.count) { _ in
+                    if autoScroll, let last = items.last {
+                        proxy.scrollTo(last.id, anchor: .bottom)
                     }
                 }
-                .padding(.vertical, 4)
-                .frame(
-                    minWidth: wrapJournalLines ? 0 : 1180,
-                    maxWidth: wrapJournalLines ? .infinity : nil,
-                    alignment: .leading
-                )
             }
-            .onChange(of: lines.count) { count in
-                if autoScroll {
-                    proxy.scrollTo(max(count - 1, 0), anchor: .bottom)
-                }
-            }
+            Divider()
+            journalFooter(
+                entryCount: entryCount,
+                coalescedGroups: coalescedGroups,
+                lineCount: lines.count
+            )
         }
         .background(Color(NSColor.textBackgroundColor))
     }
@@ -139,18 +262,24 @@ extension SystemdMonitorView {
         wrapJournalLines ? .vertical : [.vertical, .horizontal]
     }
 
-    var journalColumnHeader: some View {
+    func journalColumnHeader(host: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Color.clear
                 .frame(width: 3)
             Text("Time")
-                .frame(width: 188, alignment: .leading)
-            Text("Host")
-                .frame(width: 74, alignment: .leading)
+                .frame(width: 64, alignment: .leading)
             Text("Process")
                 .frame(width: 142, alignment: .leading)
             Text("Message")
                 .frame(maxWidth: wrapJournalLines ? .infinity : nil, alignment: .leading)
+            // The host never varies within one server's journal —
+            // shown once here instead of 74pt on every row.
+            if let host {
+                Spacer(minLength: 8)
+                Text(host)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+            }
         }
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -159,51 +288,124 @@ extension SystemdMonitorView {
         .background(Color(NSColor.controlBackgroundColor))
     }
 
-    func journalLineRow(_ line: String) -> some View {
-        let severityLevel = journalSeverity(line)
-        let indicatorColor = severityLevel.accentColor
-        let foregroundColor = severityLevel.foreground
-        let backgroundColor = severityLevel.background
-        let parts = splitJournalLine(line)
-        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+    func journalDayDivider(_ day: String) -> some View {
+        HStack(spacing: 8) {
+            Text(day)
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
             Rectangle()
-                .fill(indicatorColor)
+                .fill(Color.secondary.opacity(0.2))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+    }
+
+    func journalEntryRow(_ entry: JournalDisplayEntry, striped: Bool) -> some View {
+        let isExpandable = wrapJournalLines
+            && entry.message.count > Self.journalMessageExpandThreshold
+        let isExpanded = expandedJournalEntryIds.contains(entry.id)
+
+        return HStack(alignment: .top, spacing: 6) {
+            Rectangle()
+                .fill(entry.severity.accentColor)
                 .frame(width: 3)
-            Text(parts.timestamp)
+            Text(entry.timeOfDay)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .frame(width: 188, alignment: .leading)
-                .textSelection(.enabled)
-                .help(parts.timestamp)
-            Text(parts.host)
-                .font(.caption2.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(width: 74, alignment: .leading)
-                .textSelection(.enabled)
-                .help(parts.host)
-            Text(parts.process)
+                .frame(width: 64, alignment: .leading)
+                .help(journalTimestampHelp(entry))
+            Text(entry.process)
                 .font(.caption2.monospaced())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(width: 142, alignment: .leading)
-                .textSelection(.enabled)
-                .help(parts.process)
-            Text(JournalSyntaxHighlighting.highlighted(message: parts.message))
-                .font(.caption.monospaced())
-                .foregroundStyle(foregroundColor)
-                .textSelection(.enabled)
-                .lineLimit(wrapJournalLines ? nil : 1)
-                .truncationMode(.tail)
-                .frame(maxWidth: wrapJournalLines ? .infinity : nil, alignment: .leading)
-                .fixedSize(horizontal: !wrapJournalLines, vertical: wrapJournalLines)
+                .help(entry.process)
+            HStack(alignment: .top, spacing: 6) {
+                if entry.repeatCount > 1 {
+                    Text("×\(entry.repeatCount)")
+                        .font(.caption2.weight(.bold).monospacedDigit())
+                        .foregroundStyle(entry.severity.foreground)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(
+                            (entry.severity.accentColor == .clear
+                                ? Color.secondary
+                                : entry.severity.accentColor).opacity(0.15),
+                            in: Capsule()
+                        )
+                        .help(journalTimestampHelp(entry))
+                }
+                Text(JournalSyntaxHighlighting.highlighted(message: entry.message))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(entry.severity.foreground)
+                    .textSelection(.enabled)
+                    .lineLimit(
+                        isExpanded ? nil : (wrapJournalLines ? Self.journalMessageLineCap : 1)
+                    )
+                    .truncationMode(.tail)
+                    .frame(maxWidth: wrapJournalLines ? .infinity : nil, alignment: .leading)
+                    .fixedSize(horizontal: !wrapJournalLines, vertical: wrapJournalLines)
+                if isExpandable {
+                    Button {
+                        if isExpanded {
+                            expandedJournalEntryIds.remove(entry.id)
+                        } else {
+                            expandedJournalEntryIds.insert(entry.id)
+                        }
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "ellipsis")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isExpanded ? "Collapse entry" : "Show full entry")
+                }
+            }
+            .frame(maxWidth: wrapJournalLines ? .infinity : nil, alignment: .leading)
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, 2)
         .padding(.horizontal, 8)
-        .background(backgroundColor)
+        // Alternating stripes carry the row rhythm; severity lives in
+        // the accent bar and text color, not a full-row wash — 42 red
+        // rows in a block were unreadable.
+        .background(
+            striped
+                ? Color.clear
+                : Color(NSColor.controlBackgroundColor).opacity(0.45)
+        )
+        .contextMenu {
+            Button("Copy Message") { copyJournalText(entry.message) }
+            Button("Copy Entry") { copyJournalText(entry.rawLine) }
+        }
+    }
+
+    func journalTimestampHelp(_ entry: JournalDisplayEntry) -> String {
+        entry.repeatCount > 1
+            ? "Repeated \(entry.repeatCount)× · \(entry.firstTimestamp) – \(entry.lastTimestamp)"
+            : entry.firstTimestamp
+    }
+
+    func journalFooter(entryCount: Int, coalescedGroups: Int, lineCount: Int) -> some View {
+        HStack(spacing: 6) {
+            Text("\(lineCount) line\(lineCount == 1 ? "" : "s")")
+            if coalescedGroups > 0 {
+                Text("· \(entryCount) shown · \(coalescedGroups) repeated group\(coalescedGroups == 1 ? "" : "s") coalesced")
+            }
+            Spacer()
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color(NSColor.controlBackgroundColor))
+    }
+
+    func copyJournalText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     struct JournalLineParts {

@@ -36,6 +36,31 @@ extension SystemdMonitorView {
             }
             .width(min: 210, ideal: 320, max: 440)
 
+            TableColumn("Errors", value: \.journalIssueSortKey) { unit in
+                if unit.journalIssueCounts.hasIssues {
+                    Button {
+                        selectUnit(unit, resetDetailTab: false)
+                        unitDetailTab = .logs
+                        unitLogsIssueFocus = true
+                    } label: {
+                        JournalIssueBadges(
+                            counts: unit.journalIssueCounts,
+                            compact: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(
+                        "\(unit.journalErrors) errors · \(unit.journalWarnings) warnings"
+                            + " in the last hour — click to open the entries"
+                    )
+                } else {
+                    Text("–")
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
+                }
+            }
+            .width(min: 76, ideal: 96, max: 140)
+
             TableColumn("Status", value: \.statusSortKey) { unit in
                 HStack(spacing: 4) {
                     statusBadge(
@@ -192,14 +217,37 @@ extension SystemdMonitorView {
         case .overview:
             unitOverview(unit)
         case .logs:
-            if filteredUnitJournalLines.isEmpty {
-                placeholderView(
-                    icon: "doc.text",
-                    title: "No unit logs",
-                    message: "journalctl returned no recent entries for this unit."
-                )
-            } else {
-                journalEntriesList(lines: filteredUnitJournalLines, autoScroll: false)
+            let issueLines = issueOnlyUnitJournalLines
+            let isFocused = unitLogsIssueFocus && !issueLines.isEmpty
+            let displayLines = isFocused ? issueLines : filteredUnitJournalLines
+
+            VStack(alignment: .leading, spacing: 6) {
+                if isFocused {
+                    HStack(spacing: 8) {
+                        Label(
+                            "\(issueLines.count) error/warning entr\(issueLines.count == 1 ? "y" : "ies")",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        Spacer()
+                        Button("Show all entries") {
+                            unitLogsIssueFocus = false
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 6)
+                }
+                if displayLines.isEmpty {
+                    placeholderView(
+                        icon: "doc.text",
+                        title: "No unit logs",
+                        message: "journalctl returned no recent entries for this unit."
+                    )
+                } else {
+                    journalEntriesList(lines: displayLines, autoScroll: false)
+                }
             }
         case .dependencies:
             detailScrollBlock(value: dependencies.isEmpty ? "-" : dependencies)

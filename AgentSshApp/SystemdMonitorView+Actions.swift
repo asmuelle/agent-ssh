@@ -133,13 +133,47 @@ extension SystemdMonitorView {
         printf '%s\\n' "$out"
         echo '---UNIT_FILES---'
         printf '%s\\n' "$files"
+        echo '---JOURNAL_COUNTS---'
+        if command -v journalctl >/dev/null 2>&1; then
+          { journalctl -p warning --since '-1 hour' -n 5000 -o json --output-fields=_SYSTEMD_UNIT,PRIORITY --no-pager -q 2>/dev/null \
+            || sudo -n journalctl -p warning --since '-1 hour' -n 5000 -o json --output-fields=_SYSTEMD_UNIT,PRIORITY --no-pager -q 2>/dev/null \
+            || true; } \
+          | awk -F'"' '
+            {
+              unit=""; prio=""
+              for (i = 1; i < NF; i++) {
+                if ($i == "_SYSTEMD_UNIT") unit = $(i+2)
+                else if ($i == "PRIORITY") {
+                  if ($(i+1) ~ /^:[0-9]/) { p = $(i+1); gsub(/[^0-9]/, "", p); prio = p }
+                  else prio = $(i+2)
+                }
+              }
+              if (unit == "") next
+              if (prio != "" && prio + 0 <= 3) err[unit]++
+              else warn[unit]++
+            }
+            END {
+              for (u in err) { printf "%s\\t%d\\t%d\\n", u, err[u], warn[u] + 0; delete warn[u] }
+              for (u in warn) printf "%s\\t0\\t%d\\n", u, warn[u]
+            }'
+        fi
         """
         do {
             let output = try await RemoteCommandRunner.runChecked(connectionId: connectionId, script: script)
             let unitOutput = output.section(after: "---UNITS---", before: "---UNIT_FILES---")
-            let fileOutput = output.section(after: "---UNIT_FILES---", before: nil)
+            let fileOutput = output.section(after: "---UNIT_FILES---", before: "---JOURNAL_COUNTS---")
+            let countsOutput = output.section(after: "---JOURNAL_COUNTS---", before: nil)
             let fileStates = parseSystemdUnitFileStates(fileOutput)
-            let parsed = unitOutput.lines().compactMap { parseSystemdUnitLine($0, unitFileStates: fileStates) }
+            let journalCounts = parseSystemdJournalCounts(countsOutput)
+            let parsed = unitOutput.lines()
+                .compactMap { parseSystemdUnitLine($0, unitFileStates: fileStates) }
+                .map { unit -> SystemdUnit in
+                    guard let counts = journalCounts[unit.name] else { return unit }
+                    var enriched = unit
+                    enriched.journalErrors = counts.errors
+                    enriched.journalWarnings = counts.warnings
+                    return enriched
+                }
             units = parsed
             if let selectedUnit,
                let refreshedSelection = parsed.first(where: { $0.id == selectedUnit.id }) {
