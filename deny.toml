@@ -11,12 +11,12 @@ ignore = [
     # RUSTSEC-2026-0153/0154 russh advisories but surfaces this one). Low
     # practical risk for an interactive SSH client.
     # TRACKED: drop when the rsa crate ships a constant-time fix.
-    { id = "RUSTSEC-2023-0071", reason = "no fix available; transitive via russh 0.61 / ssh-key; review-by 2026-08-13" },
+    { id = "RUSTSEC-2023-0071", reason = "no fix available; transitive via russh 0.61 / ssh-key; review-by 2026-11-27" },
 
     # Unmaintained / unsound (not exploitable here). All transitive via
     # ssh-commander-core; revisit when its dependency tree is next overhauled.
-    { id = "RUSTSEC-2025-0052", reason = "async-std discontinued — transitive via ssh-commander-core/suppaftp; review-by 2026-08-13" },
-    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — transitive proc-macro, build-time only; review-by 2026-08-13" },
+    { id = "RUSTSEC-2025-0052", reason = "async-std discontinued — transitive via ssh-commander-core/suppaftp; review-by 2026-11-27" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — transitive proc-macro, build-time only; review-by 2026-11-27" },
 ]
 
 [licenses]
