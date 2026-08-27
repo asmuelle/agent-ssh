@@ -111,7 +111,10 @@ public struct AttentionItem: Codable, Equatable, Identifiable, Sendable {
     /// When this cause first appeared. Preserved across re-ingestion so
     /// hysteresis and "since …" narration work.
     public var firstSeen: Date
-    /// When the producing source last confirmed the cause still exists.
+    /// When the ingestion pipeline last wrote this item — the store
+    /// stamps it at every ingest, so it measures pipeline liveness, not
+    /// when the producer's underlying scan ran (that lives with the
+    /// producer, e.g. `generatedAt` / `scannedAt` on the summary stores).
     public var lastObserved: Date
 
     public var id: String { "\(profileId):\(sourceKind.rawValue):\(sourceId)" }
