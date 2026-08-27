@@ -13,6 +13,7 @@ public enum SharedAppStorageConfiguration {
     public static let serverDoctorSummariesFileName = "server-doctor-summaries.json"
     public static let operationalAuditFileName = "operational-audit.json"
     public static let fleetHealthFileName = "fleet-health.json"
+    public static let attentionInboxFileName = "attention-inbox.json"
     public static let actuatorConfigurationFileName = "actuator-configuration.json"
     public static let offlineCacheDirectoryName = "offline-sftp-cache"
     public static let shortcutDownloadsDirectoryName = "shortcut-downloads"
