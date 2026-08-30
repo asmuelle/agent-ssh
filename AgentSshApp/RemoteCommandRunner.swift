@@ -78,7 +78,7 @@ enum RemoteCommandRunner {
     }
 
     static func shellQuote(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+        ShellQuoting.singleQuoted(value)
     }
 
     static func copy(_ text: String) {
