@@ -64,7 +64,7 @@ final class TerminalTabsStore: ObservableObject {
         switch event {
         case .terminalTitleChanged(let connectionId, let title):
             guard !title.isEmpty else { return }
-            setTitle(title, forConnectionId: connectionId)
+            setRemoteTitle(title, forConnectionId: connectionId)
 
         case .connectionStatus(let connectionId, let payload):
             setStatus(
@@ -77,13 +77,17 @@ final class TerminalTabsStore: ObservableObject {
         }
     }
 
-    /// Update the displayed title for a tab matched by its connection id.
-    func setTitle(_ title: String, forConnectionId connectionId: String) {
+    /// Record the shell-reported title (OSC 0/2, typically
+    /// `user@host: cwd`) for a tab matched by its connection id. This
+    /// never replaces the tab label — the label stays the connection
+    /// name the user chose, which is what identifies the tab in a
+    /// strip full of `root@…` shells — it only feeds the tooltip.
+    func setRemoteTitle(_ title: String, forConnectionId connectionId: String) {
         guard let idx = tabs.firstIndex(where: { $0.connectionId == connectionId })
         else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        tabs[idx].title = trimmed
+        tabs[idx].remoteTitle = trimmed
     }
 
     /// Update the connection status for a tab.

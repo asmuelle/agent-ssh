@@ -64,6 +64,11 @@ struct ConnectionWorkspaceStrip: View {
             statuses: Dictionary(
                 uniqueKeysWithValues: tabsStore.tabs.map { ($0.id, $0.status) }
             ),
+            tooltips: Dictionary(
+                uniqueKeysWithValues: tabsStore.tabs.compactMap { tab in
+                    tab.remoteTitle.map { (tab.id, $0) }
+                }
+            ),
             mode: $mode,
             // In server mode the segment is a status ("you are on
             // ud-orbit"); in every other mode it's a destination, and
@@ -274,7 +279,13 @@ struct TerminalTab: Identifiable {
     /// this tab. `var` so reconnect can update it without rebuilding
     /// the SwiftTerm view.
     var ptyGeneration: UInt64
+    /// Tab label. The connection name from the saved profile (plus a
+    /// kind suffix when the session fell back to SFTP) — deliberately
+    /// not the shell's own title, see `remoteTitle`.
     var title: String
+    /// Last title the remote shell announced via OSC (`root@host: ~`).
+    /// Tooltip only.
+    var remoteTitle: String?
     var order: Int
     /// When non-nil, overrides the global `@AppStorage("terminalTheme")`.
     var themeOverride: String?
