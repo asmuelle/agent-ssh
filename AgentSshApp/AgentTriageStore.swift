@@ -54,7 +54,9 @@ struct TriageIssue: Identifiable, Equatable {
 // MARK: - Store
 
 /// Aggregates raw health signals into confirmed, snooze-aware triage
-/// issues for the Agent view and the workspace-strip badge.
+/// issues and forwards them to the persistent attention inbox, which is
+/// what the Agent view and the workspace-strip badge now render. Its own
+/// query surface below has no remaining callers.
 ///
 /// Candidates are keyed by stable issue id (`<tabId>:<signal>`), so
 /// `firstSeen` survives every poll and snoozes survive reconnects
@@ -65,9 +67,10 @@ final class AgentTriageStore: ObservableObject {
 
     @Published private(set) var candidates: [String: TriageIssue] = [:]
     @Published private(set) var snoozedUntil: [String: Date] = [:]
-    /// Confirmed, unsnoozed issue count — drives the strip badge.
-    /// Refreshed on every ingest/sync, so it lags a confirmation
-    /// boundary by at most one poll interval.
+    /// Confirmed, unsnoozed issue count. The strip badge and the Agent
+    /// panel both read the persistent inbox now, so nothing in the app
+    /// consumes this: it survives only as this store's own view of what
+    /// it forwarded, alongside the query API below.
     @Published private(set) var confirmedCount = 0
 
     /// Mirrors every ingest/sync into the persistent attention inbox.

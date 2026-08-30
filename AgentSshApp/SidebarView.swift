@@ -1199,10 +1199,10 @@ struct ConnectionRow<Actions: View>: View {
     private var consolidatedHealth: (symbol: String, color: Color, help: String, accessibilityLabel: String)? {
         var candidates: [(rank: Int, source: SidebarHealthSource)] = []
         if let securitySummary, securitySummary.shouldShowSidebarSecurityBadge {
-            candidates.append((securitySummary.severity.rank, .security(securitySummary)))
+            candidates.append((securitySummary.severity.attentionRank, .security(securitySummary)))
         }
         if let doctorSummary, doctorSummary.showsSidebarBadge {
-            candidates.append((doctorSummary.overallSeverity.rank, .doctor(doctorSummary)))
+            candidates.append((doctorSummary.overallSeverity.attentionRank, .doctor(doctorSummary)))
         }
         guard let worst = candidates.max(by: { $0.rank < $1.rank }) else { return nil }
 
@@ -1221,34 +1221,6 @@ struct ConnectionRow<Actions: View>: View {
 private enum SidebarHealthSource {
     case security(SecurityPatchHostSummary)
     case doctor(ServerDoctorHostSummary)
-}
-
-/// Shared severity ranking so the Security Patch and Server Doctor ramps
-/// compare on one scale. Both enums are already `Comparable`; this exposes
-/// their private `rank` for the cross-type comparison above without
-/// changing their public API.
-private extension SecurityPatchSeverity {
-    var rank: Int {
-        switch self {
-        case .critical: return 4
-        case .high: return 3
-        case .warning: return 2
-        case .info: return 1
-        case .unknown: return 0
-        }
-    }
-}
-
-private extension ServerDoctorSeverity {
-    var rank: Int {
-        switch self {
-        case .critical: return 4
-        case .high: return 3
-        case .warning: return 2
-        case .info: return 1
-        case .unknown: return 0
-        }
-    }
 }
 
 private extension TerminalConnectionStatus {
