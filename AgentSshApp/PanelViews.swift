@@ -25,7 +25,10 @@ struct SidebarPanel: View {
 struct ConnectionWorkspaceStrip: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @Binding var mode: WorkspaceMode
-    @ObservedObject private var triage = AgentTriageStore.shared
+    /// The strip badge counts the same list the Agent panel renders — the
+    /// persistent inbox, not the in-memory triage store — so the number on
+    /// the tab can never disagree with what opening it shows.
+    @ObservedObject private var inbox = AttentionInboxIngest.shared
 
     private var connectedSSHTabs: [TerminalTab] {
         tabsStore.connectedSSHTabs
@@ -79,7 +82,7 @@ struct ConnectionWorkspaceStrip: View {
             dashboardAvailable: connectedSSHTabs.count >= 2,
             agentAvailable: !tabsStore.tabs.isEmpty,
             filesAvailable: connectedFileTabCount >= 1,
-            agentIssueCount: triage.confirmedCount
+            agentIssueCount: inbox.snapshot.activeItems(now: Date()).count
         )
     }
 }

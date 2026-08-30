@@ -181,10 +181,10 @@ public struct AttentionItem: Codable, Equatable, Identifiable, Sendable {
 
 // MARK: - Severity mapping
 
-/// The cross-source severity rank the sidebar's consolidated badge
-/// currently duplicates as private extensions in `SidebarView`. It lives
-/// here so the inbox and the sidebar rank findings on one scale; the
-/// sidebar switches to these when the inbox UI wiring lands.
+/// The one cross-source severity rank: the inbox and the sidebar's
+/// consolidated badge both compare Security Patch and Server Doctor
+/// verdicts on this scale, so a host can never be ranked one way in the
+/// sidebar and another in the inbox.
 ///
 /// Tier mapping rationale: `critical` is reserved by both producers for
 /// actively-broken or actively-exploited findings (CISA KEV matches
