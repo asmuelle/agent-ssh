@@ -57,6 +57,16 @@ class ConnectionStoreManager: ObservableObject {
         connections.removeAll { $0.id == profile.id }
         deleteCredentials(for: profile)
         save()
+        purgeHealthState(for: profile)
+    }
+
+    /// A deleted profile must not haunt proactive surfaces: drop its scan
+    /// summaries first (so inbox reconciles cannot re-assert it), then
+    /// prune its attention items and their snoozes/resolutions.
+    private func purgeHealthState(for profile: ConnectionProfile) {
+        try? ServerDoctorSummaryStore().remove(profileId: profile.id)
+        SecurityPatchMonitorSummaryStore.shared.remove(profileId: profile.id)
+        try? AttentionInboxStore.shared.prune(keepingProfileIds: connections.map(\.id))
     }
 
     func connection(withId id: String) -> ConnectionProfile? {

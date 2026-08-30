@@ -117,6 +117,9 @@ final class ServerDoctorStore: ObservableObject {
             narratedOnDevice: narration.onDevice
         )
         try? ServerDoctorSummaryStore().upsert(summary)
+        // A fresh diagnosis is news — reconcile the attention inbox now
+        // rather than waiting for the next throttled sweep.
+        AttentionInboxIngest.shared.syncScanSummaries()
     }
 
     func resetToPreview() {
