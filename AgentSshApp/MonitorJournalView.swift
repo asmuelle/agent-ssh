@@ -59,6 +59,12 @@ struct MonitorJournalLine: Identifiable {
     let severity: MonitorJournalSeverity
     let raw: String
 
+    /// `prefix` with the emitting PID removed (`web-1 sshd[1234]` →
+    /// `web-1 sshd`). journald stamps every forked worker with its own
+    /// PID, so grouping on the raw prefix leaves repeated failed logins
+    /// as a wall of one-line groups.
+    var groupKey: String { journalProcessGroupKey(prefix) }
+
     static func parseAll(_ rawLines: [String]) -> [MonitorJournalLine] {
         rawLines.enumerated().map { idx, raw in parse(raw: raw, id: idx) }
     }
@@ -152,6 +158,59 @@ struct MonitorJournalLine: Identifiable {
         guard let match = regex.firstMatch(in: message, range: range),
               let r = Range(match.range, in: message) else { return nil }
         return String(message[r])
+    }
+}
+
+/// A run of consecutive journal lines that are the same log statement
+/// fired with different parameters — same severity, prefix, and
+/// fingerprint template. Rendered as one row with a repeat badge; the
+/// varying parameters (connection ids, timestamps, …) live in an
+/// expandable occurrence list instead of repeating the full message.
+struct MonitorJournalGroup: Identifiable {
+    let lines: [MonitorJournalLine]
+
+    var id: Int { lines[0].id }
+    var first: MonitorJournalLine { lines[0] }
+    var count: Int { lines.count }
+
+    /// Capture-slot indices whose values differ across the run — the
+    /// only parameters worth listing per occurrence.
+    var variedCaptureIndices: [Int] {
+        JournalMessageFingerprinting.variedCaptureIndices(
+            of: lines.map { JournalMessageFingerprinting.fingerprint($0.message) }
+        )
+    }
+
+    /// The varying parameter values of `line`, for the occurrence list.
+    func variedCaptures(of line: MonitorJournalLine, at indices: [Int]) -> [String] {
+        let captures = JournalMessageFingerprinting.fingerprint(line.message).captures
+        return indices.compactMap { captures.indices.contains($0) ? captures[$0] : nil }
+    }
+
+    var timeRange: String? {
+        guard count > 1, let firstTime = first.timestamp, let lastTime = lines[count - 1].timestamp else {
+            return nil
+        }
+        return "\(firstTime) – \(lastTime)"
+    }
+
+    static func groupConsecutive(_ lines: [MonitorJournalLine]) -> [MonitorJournalGroup] {
+        var groups: [MonitorJournalGroup] = []
+        var run: [MonitorJournalLine] = []
+        for line in lines {
+            if let last = run.last,
+               last.severity == line.severity,
+               last.groupKey == line.groupKey,
+               JournalMessageFingerprinting.fingerprint(last.message).template
+                   == JournalMessageFingerprinting.fingerprint(line.message).template {
+                run.append(line)
+                continue
+            }
+            if !run.isEmpty { groups.append(MonitorJournalGroup(lines: run)) }
+            run = [line]
+        }
+        if !run.isEmpty { groups.append(MonitorJournalGroup(lines: run)) }
+        return groups
     }
 }
 
@@ -254,6 +313,7 @@ struct MonitorJournalLogView: View {
     @State private var enabledSeverities: Set<MonitorJournalSeverity>
     @State private var pinnedIDs: Set<Int> = []
     @State private var jumpCursor: Int?
+    @State private var expandedGroupIDs: Set<Int> = []
 
     init(rawLines: [String], fallbackHints: [String] = [], focusOnIssues: Bool = false) {
         self.rawLines = rawLines
@@ -283,13 +343,17 @@ struct MonitorJournalLogView: View {
         }
     }
 
+    private var groups: [MonitorJournalGroup] {
+        MonitorJournalGroup.groupConsecutive(filtered)
+    }
+
     private var pinnedLines: [MonitorJournalLine] {
         lines.filter { pinnedIDs.contains($0.id) }
     }
 
     private var issueIDs: [Int] {
-        filtered
-            .filter { $0.severity == .error || $0.severity == .warn }
+        groups
+            .filter { $0.first.severity == .error || $0.first.severity == .warn }
             .map(\.id)
     }
 
@@ -307,10 +371,10 @@ struct MonitorJournalLogView: View {
                                 if !pinnedLines.isEmpty {
                                     pinnedSection
                                 }
-                                ForEach(Array(filtered.enumerated()), id: \.element.id) { index, line in
-                                    row(line, isPinned: pinnedIDs.contains(line.id))
-                                        .id(line.id)
-                                    if index < filtered.count - 1 {
+                                ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                                    row(group.first, isPinned: pinnedIDs.contains(group.first.id), group: group)
+                                        .id(group.id)
+                                    if index < groups.count - 1 {
                                         Divider().opacity(0.18)
                                     }
                                 }
@@ -337,6 +401,14 @@ struct MonitorJournalLogView: View {
                 enabledSeverities = Set(MonitorJournalSeverity.allCases)
             }
         }
+        .onChange(of: rawLines) { _ in
+            // Line ids are positions in `rawLines`, so a refetch
+            // renumbers every line: a pin or an expanded group kept
+            // across it would address whatever now sits at that index.
+            pinnedIDs.removeAll()
+            expandedGroupIDs.removeAll()
+            jumpCursor = nil
+        }
     }
 
     // MARK: Header
@@ -346,13 +418,20 @@ struct MonitorJournalLogView: View {
             Text("Recent Journal")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text("(\(filtered.count) of \(lines.count))")
+            Text(headerCountText)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.tertiary)
             Spacer(minLength: 8)
             issueNavigator
             exportMenu
         }
+    }
+
+    private var headerCountText: String {
+        let base = "(\(filtered.count) of \(lines.count)"
+        let groupCount = groups.count
+        guard groupCount < filtered.count else { return base + ")" }
+        return base + " · \(groupCount) rows)"
     }
 
     @ViewBuilder
@@ -570,7 +649,13 @@ struct MonitorJournalLogView: View {
 
     // MARK: Row
 
-    private func row(_ line: MonitorJournalLine, isPinned: Bool) -> some View {
+    private func row(
+        _ line: MonitorJournalLine, isPinned: Bool, group: MonitorJournalGroup? = nil
+    ) -> some View {
+        let repeatCount = group?.count ?? 1
+        let isExpanded = group.map { expandedGroupIDs.contains($0.id) } ?? false
+
+        return VStack(alignment: .leading, spacing: 0) {
         HStack(alignment: .top, spacing: 8) {
             Button {
                 togglePin(line.id)
@@ -606,13 +691,47 @@ struct MonitorJournalLogView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Text(highlightedMessage(line.message))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(messageColor(for: line.severity))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .top, spacing: 6) {
+                    if repeatCount > 1 {
+                        Text("×\(repeatCount)")
+                            .font(.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(line.severity.color)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(line.severity.color.opacity(0.14), in: Capsule())
+                            .help("Repeated \(repeatCount)× with varying parameters")
+                    }
+                    Text(highlightedMessage(line.message))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(messageColor(for: line.severity))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             Spacer(minLength: 0)
+            if let group, repeatCount > 1 {
+                Button {
+                    toggleGroupExpansion(group.id)
+                } label: {
+                    HStack(spacing: 4) {
+                        if let range = group.timeRange {
+                            Text(range)
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                        }
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 3)
+                .help(isExpanded ? "Hide occurrences" : "Show each occurrence")
+            }
+        }
+        if let group, repeatCount > 1, isExpanded {
+            occurrenceList(group)
+        }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -623,6 +742,11 @@ struct MonitorJournalLogView: View {
             }
             Button("Copy line") {
                 RemoteCommandRunner.copy(line.raw)
+            }
+            if let group, group.count > 1 {
+                Button("Copy all \(group.count) occurrences") {
+                    RemoteCommandRunner.copy(group.lines.map(\.raw).joined(separator: "\n"))
+                }
             }
             if let pretty = JournalSyntaxHighlighting.prettyPrintedJSON(in: line.message) {
                 Button("Copy as pretty JSON") {
@@ -639,6 +763,45 @@ struct MonitorJournalLogView: View {
                     RemoteCommandRunner.copy(timestamp)
                 }
             }
+        }
+    }
+
+    /// The expanded view of a repeat group: one compact line per
+    /// occurrence showing its timestamp and only the parameter values
+    /// that actually vary — never the full message again.
+    private func occurrenceList(_ group: MonitorJournalGroup) -> some View {
+        let variedIndices = group.variedCaptureIndices
+        return VStack(alignment: .leading, spacing: 1) {
+            ForEach(group.lines) { line in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(line.timestamp ?? "–")
+                        .font(.system(.caption2, design: .monospaced).monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 56, alignment: .leading)
+                    let varied = group.variedCaptures(of: line, at: variedIndices)
+                    Text(varied.isEmpty ? "identical" : varied.joined(separator: " · "))
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(varied.isEmpty ? .tertiary : .secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .padding(.leading, 96)
+        .padding(.top, 3)
+        .padding(.bottom, 1)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.18))
+                .frame(width: 1)
+                .padding(.leading, 90)
+        }
+    }
+
+    private func toggleGroupExpansion(_ id: Int) {
+        if expandedGroupIDs.contains(id) {
+            expandedGroupIDs.remove(id)
+        } else {
+            expandedGroupIDs.insert(id)
         }
     }
 
