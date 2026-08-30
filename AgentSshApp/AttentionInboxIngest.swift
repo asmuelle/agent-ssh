@@ -23,9 +23,22 @@ import Foundation
 /// `lastObserved` within the fleet-health 5 min staleness contract. With
 /// no connected host nothing polls, nothing rewrites, and items going
 /// stale is the honest signal that nothing is checking.
+///
+/// It is also the inbox's read side for SwiftUI: it owns every write, so
+/// it republishes one `AttentionInboxSnapshot` after each one. The panel
+/// observes that instead of re-reading the app-group file on its own
+/// render loop.
 @MainActor
-final class AttentionInboxIngest {
+final class AttentionInboxIngest: ObservableObject {
     static let shared = AttentionInboxIngest()
+
+    /// The current inbox, republished after every write. Views filter it
+    /// by `now` in memory; no file read happens per frame.
+    @Published private(set) var snapshot = AttentionInboxSnapshot()
+    /// Per profile, when a producer last reported on it. Drives the
+    /// evidence-backed empty state ("all 4 hosts checked 3 minutes ago"),
+    /// which must distinguish "nothing wrong" from "nothing checked".
+    @Published private(set) var lastCheckedAt: [String: Date] = [:]
 
     /// How long an unchanged slice may go without a refreshing write.
     private static let unchangedRewriteInterval: TimeInterval = 60
@@ -36,6 +49,7 @@ final class AttentionInboxIngest {
     private let inbox: AttentionInboxStore
     private let doctorSummaries: ServerDoctorSummaryStore
     private let patchSummaries: @MainActor () -> [SecurityPatchHostSummary]
+    private let deliverEscalations: @MainActor ([AttentionEscalationAlert]) -> Void
 
     private var tabProfiles: [UUID: (profileId: String, hostName: String)] = [:]
     private var sliceSignatures: [String: (signature: Int, writtenAt: Date)] = [:]
@@ -44,17 +58,131 @@ final class AttentionInboxIngest {
     /// connection/scan slices between tab-status changes.
     private var lastTabs: [TerminalTab] = []
     private var lastEventSliceRefresh: Date?
+    /// Set by a successful write; cleared by the entry point that
+    /// republishes. Batching means one file re-read per producer call,
+    /// not one per slice.
+    private var snapshotIsStale = false
+    /// Tier each item had at the last republish, so escalation is judged
+    /// on the edge rather than on the level.
+    private var previousTiers: [String: AttentionTier] = [:]
+    private var lastAlertedAt: [String: Date] = [:]
 
     init(
         inbox: AttentionInboxStore = .shared,
         doctorSummaries: ServerDoctorSummaryStore = ServerDoctorSummaryStore(),
         patchSummaries: @escaping @MainActor () -> [SecurityPatchHostSummary] = {
             Array(SecurityPatchMonitorSummaryStore.shared.summaries.values)
+        },
+        deliverEscalations: @escaping @MainActor ([AttentionEscalationAlert]) -> Void = {
+            MonitoringAlertNotificationCenter.shared.deliverEscalations($0)
         }
     ) {
         self.inbox = inbox
         self.doctorSummaries = doctorSummaries
         self.patchSummaries = patchSummaries
+        self.deliverEscalations = deliverEscalations
+        snapshot = inbox.snapshot()
+        // Seed from what is already persisted so a relaunch does not
+        // re-announce problems the user has already been told about.
+        previousTiers = Self.tiers(of: snapshot, now: Date())
+    }
+
+    // MARK: Read side
+
+    /// Re-read the persisted inbox, republish it to observers, and let
+    /// anything that just escalated interrupt the user.
+    private func refreshSnapshot(now: Date = Date()) {
+        snapshotIsStale = false
+        snapshot = inbox.snapshot()
+        notifyEscalations(now: now)
+    }
+
+    /// Only a *rise* into the interrupting tier is news. Items the user
+    /// snoozed or resolved are excluded, because being interrupted by
+    /// something you just dismissed is how a feed loses its credibility.
+    private func notifyEscalations(now: Date) {
+        let visible = snapshot.activeItems(now: now)
+        let alerts = AttentionEscalationEvaluator.decide(
+            previousTiers: previousTiers,
+            current: visible,
+            now: now,
+            lastAlertedAt: lastAlertedAt
+        )
+        previousTiers = Self.tiers(of: snapshot, now: now)
+        guard !alerts.isEmpty else { return }
+        for alert in alerts {
+            lastAlertedAt[alert.itemId] = now
+        }
+        deliverEscalations(alerts)
+    }
+
+    /// Tiers of every item that has cleared its confirmation window —
+    /// snoozed and resolved ones included, so un-snoozing something does
+    /// not read as a fresh escalation.
+    ///
+    /// Unconfirmed items are deliberately held out. They were never
+    /// offered to `decide`, so recording their tier would retire the
+    /// escalation edge before it could ever fire: a metric that debuts
+    /// straight at act-now (a disk already at 97% when you connect) would
+    /// be silently swallowed, because by the time its 12 s hysteresis
+    /// elapsed the baseline would already say act-now.
+    private static func tiers(
+        of snapshot: AttentionInboxSnapshot,
+        now: Date
+    ) -> [String: AttentionTier] {
+        Dictionary(
+            snapshot.items
+                .filter { $0.isConfirmed(now: now) }
+                .map { ($0.id, $0.tier) },
+            uniquingKeysWith: { _, newest in newest }
+        )
+    }
+
+    private func refreshSnapshotIfStale(now: Date = Date()) {
+        guard snapshotIsStale else { return }
+        refreshSnapshot(now: now)
+    }
+
+    /// Hide an item until `date`. Snoozes are per item and survive
+    /// restarts; an escalation past the snoozed tier wakes it anyway.
+    func snooze(_ id: String, until date: Date) {
+        try? inbox.snooze(id, until: date)
+        refreshSnapshot()
+    }
+
+    func unsnooze(_ id: String) {
+        try? inbox.unsnooze(id)
+        refreshSnapshot()
+    }
+
+    /// Mark an item handled. It stays hidden while the condition persists
+    /// and reappears if it clears and returns, or escalates past the tier
+    /// it was resolved at.
+    func resolve(_ id: String, now: Date = Date()) {
+        try? inbox.resolve(id, now: now)
+        refreshSnapshot()
+    }
+
+    /// Record that the user looked — resets the "N new" watermark.
+    func markSeen(now: Date = Date()) {
+        try? inbox.markSeen(now: now)
+        refreshSnapshot()
+    }
+
+    /// Undo a "Mark handled". The store keeps the item, so this restores
+    /// it to the active list exactly as it was.
+    func unresolve(_ id: String) {
+        try? inbox.unresolve(id)
+        refreshSnapshot()
+    }
+
+    /// Drop everything belonging to profiles that no longer exist. Routed
+    /// through here rather than straight to the store because the panel
+    /// renders the published snapshot: a prune behind this instance's
+    /// back would leave a deleted host on screen until the next write.
+    func prune(keepingProfileIds: [String]) {
+        try? inbox.prune(keepingProfileIds: keepingProfileIds)
+        refreshSnapshot()
     }
 
     // MARK: Triage pipeline (metrics, advisories)
@@ -72,6 +200,11 @@ final class AttentionInboxIngest {
 
         guard let (profileId, hostName) = tabProfiles[tabId] else { return }
 
+        // A poll landed for this host — the evidence behind "checked N
+        // minutes ago", and the only thing separating a quiet inbox from
+        // an unwatched one.
+        lastCheckedAt[profileId] = now
+
         for kind: TriageIssue.Kind in [.metric, .advisory] {
             let items = issues
                 .filter { $0.kind == kind }
@@ -83,6 +216,7 @@ final class AttentionInboxIngest {
                 now: now
             )
         }
+        refreshSnapshotIfStale(now: now)
     }
 
     // MARK: Tabs (connection state, profile mapping, launch sweep)
@@ -99,6 +233,7 @@ final class AttentionInboxIngest {
         lastTabs = tabs
         syncConnections(tabs, now: now)
         syncScanSummariesIfDue(now: now)
+        refreshSnapshotIfStale(now: now)
     }
 
     private func refreshEventDrivenSlicesIfDue(now: Date) {
@@ -117,13 +252,14 @@ final class AttentionInboxIngest {
     /// one is worth a look; a profile with any connected or connecting
     /// tab is reachable, so a single stale tab is not a host problem.
     private func syncConnections(_ tabs: [TerminalTab], now: Date) {
+        refreshSnapshotIfStale(now: now)
         var tabsByProfile: [String: [TerminalTab]] = [:]
         for tab in tabs {
             tabsByProfile[tab.profile.id, default: []].append(tab)
         }
 
         let previousProfiles = Set(
-            inbox.allItems()
+            snapshot.items
                 .filter { $0.sourceKind == .connection }
                 .map(\.profileId)
         )
@@ -205,6 +341,7 @@ final class AttentionInboxIngest {
             ),
             now: now
         )
+        refreshSnapshotIfStale(now: now)
     }
 
     private func reconcile(
@@ -212,8 +349,9 @@ final class AttentionInboxIngest {
         itemsByProfile: [String: [AttentionItem]],
         now: Date
     ) {
+        refreshSnapshotIfStale(now: now)
         let previousProfiles = Set(
-            inbox.allItems()
+            snapshot.items
                 .filter { $0.sourceKind == source }
                 .map(\.profileId)
         )
@@ -284,6 +422,7 @@ final class AttentionInboxIngest {
         do {
             try inbox.ingest(items, source: source, profileId: profileId, now: now)
             sliceSignatures[sliceKey] = (signature, now)
+            snapshotIsStale = true
         } catch {
             // Leave the recorded signature stale so the next producer
             // call retries; the on-disk inbox is never the only copy of

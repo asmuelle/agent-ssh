@@ -113,9 +113,14 @@ public struct AttentionItem: Codable, Equatable, Identifiable, Sendable {
     public var firstSeen: Date
     /// When the ingestion pipeline last wrote this item — the store
     /// stamps it at every ingest, so it measures pipeline liveness, not
-    /// when the producer's underlying scan ran (that lives with the
-    /// producer, e.g. `generatedAt` / `scannedAt` on the summary stores).
+    /// when this host was actually examined.
     public var lastObserved: Date
+    /// When the producing source itself last looked at this host, when it
+    /// knows (a scan's `generatedAt` / `scannedAt`). This is what an
+    /// honest "last checked" reads from: the pipeline rewrites every
+    /// slice on a timer, so `lastObserved` stays fresh even for a finding
+    /// about a host nothing has contacted in days.
+    public var producerObservedAt: Date?
 
     public var id: String { "\(profileId):\(sourceKind.rawValue):\(sourceId)" }
 
@@ -132,7 +137,8 @@ public struct AttentionItem: Codable, Equatable, Identifiable, Sendable {
         avoid: [String] = [],
         evidence: [String] = [],
         firstSeen: Date = Date(),
-        lastObserved: Date = Date()
+        lastObserved: Date = Date(),
+        producerObservedAt: Date? = nil
     ) {
         self.profileId = profileId
         self.sourceKind = sourceKind
@@ -147,6 +153,7 @@ public struct AttentionItem: Codable, Equatable, Identifiable, Sendable {
         self.evidence = evidence
         self.firstSeen = firstSeen
         self.lastObserved = lastObserved
+        self.producerObservedAt = producerObservedAt
     }
 
     /// Whether the item has persisted long enough to surface.
@@ -154,13 +161,21 @@ public struct AttentionItem: Codable, Equatable, Identifiable, Sendable {
         now.timeIntervalSince(firstSeen) >= sourceKind.confirmationDelay
     }
 
+    /// When this host was last actually examined, as best anyone knows:
+    /// the producer's own timestamp where it has one, else the pipeline's.
+    public var lastCheckedAt: Date {
+        producerObservedAt ?? lastObserved
+    }
+
     /// Honest staleness for items about hosts nobody is connected to,
-    /// on the same contract as `FleetHostHealthRecord`.
+    /// on the same contract as `FleetHostHealthRecord`. Judged on
+    /// `lastCheckedAt`, so a rewritten slice cannot make an old scan look
+    /// like a fresh one.
     public func freshness(
         now: Date = Date(),
         staleAfter: TimeInterval = 5 * 60
     ) -> FleetObservationFreshness {
-        now.timeIntervalSince(lastObserved) > staleAfter ? .stale : .fresh
+        now.timeIntervalSince(lastCheckedAt) > staleAfter ? .stale : .fresh
     }
 }
 

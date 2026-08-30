@@ -33,7 +33,8 @@ public extension ServerDoctorHostSummary {
             title: topFindingTitle ?? "Server Doctor found issues",
             detail: headline,
             safeNextSteps: ["Open the Server Doctor report for the findings and safe next steps."],
-            firstSeen: generatedAt
+            firstSeen: generatedAt,
+            producerObservedAt: generatedAt
         )]
     }
 }
@@ -79,7 +80,8 @@ public extension SecurityPatchHostSummary {
             title: badge == .unknown && severity != .unknown ? summary : badge.displayName,
             detail: summary,
             safeNextSteps: ["Open the Security tab for the scan evidence and per-package details."],
-            firstSeen: scannedAt
+            firstSeen: scannedAt,
+            producerObservedAt: scannedAt
         )]
     }
 }

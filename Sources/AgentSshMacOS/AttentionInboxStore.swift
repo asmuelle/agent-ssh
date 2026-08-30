@@ -165,6 +165,20 @@ public final class AttentionInboxStore: @unchecked Sendable {
 
     // MARK: Queries
 
+    /// One immutable read of the whole inbox. The UI renders from this so
+    /// a one-second render loop asks its questions in memory instead of
+    /// re-reading the file for each one.
+    public func snapshot() -> AttentionInboxSnapshot {
+        let index = loadIndex()
+        return AttentionInboxSnapshot(
+            items: index.items,
+            snoozedUntil: index.snoozedUntil,
+            resolutions: index.resolutions,
+            reactivatedAt: index.reactivatedAt,
+            lastSeenAt: index.lastSeenAt
+        )
+    }
+
     /// Everything persisted, regardless of visibility. For debugging and
     /// adapters; the UI wants `activeItems`.
     public func allItems() -> [AttentionItem] {
@@ -175,53 +189,24 @@ public final class AttentionInboxStore: @unchecked Sendable {
     /// urgent tier first, oldest first within a tier, so the list does
     /// not reshuffle under the user's cursor.
     public func activeItems(now: Date = Date()) -> [AttentionItem] {
-        let index = loadIndex()
-        return index.items
-            .filter {
-                $0.isConfirmed(now: now)
-                    && !Self.isSnoozed($0.id, in: index, now: now)
-                    && index.resolutions[$0.id] == nil
-            }
-            .sorted(by: Self.displayOrder)
+        snapshot().activeItems(now: now)
     }
 
     public func snoozedItems(now: Date = Date()) -> [AttentionItem] {
-        let index = loadIndex()
-        return index.items
-            .filter {
-                $0.isConfirmed(now: now)
-                    && Self.isSnoozed($0.id, in: index, now: now)
-                    && index.resolutions[$0.id] == nil
-            }
-            .sorted(by: Self.displayOrder)
+        snapshot().snoozedItems(now: now)
     }
 
     public func resolvedItems() -> [AttentionItem] {
-        let index = loadIndex()
-        return index.items
-            .filter { index.resolutions[$0.id] != nil }
-            .sorted(by: Self.displayOrder)
+        snapshot().resolvedItems()
     }
 
     public func isSnoozed(_ id: String, now: Date = Date()) -> Bool {
-        Self.isSnoozed(id, in: loadIndex(), now: now)
+        snapshot().isSnoozed(id, now: now)
     }
 
     /// Active items that became *visible* after the user last looked.
-    /// Visibility, not ingestion, is what the watermark compares against:
-    /// the user cannot have seen an item that was still inside its
-    /// confirmation window when they looked, and an item that escalation
-    /// woke from a resolution or snooze became visible at that moment.
     public func newItems(now: Date = Date()) -> [AttentionItem] {
-        let index = loadIndex()
-        guard let lastSeenAt = index.lastSeenAt else {
-            return activeItems(now: now)
-        }
-        return activeItems(now: now).filter {
-            let confirmedAt = $0.firstSeen.addingTimeInterval($0.sourceKind.confirmationDelay)
-            let visibleSince = max(confirmedAt, index.reactivatedAt[$0.id] ?? .distantPast)
-            return visibleSince > lastSeenAt
-        }
+        snapshot().newItems(now: now)
     }
 
     // MARK: Lifecycle
@@ -273,24 +258,5 @@ public final class AttentionInboxStore: @unchecked Sendable {
             change(&index)
             try backing.save(index)
         }
-    }
-
-    private static func isSnoozed(
-        _ id: String,
-        in index: AttentionInboxIndex,
-        now: Date
-    ) -> Bool {
-        guard let until = index.snoozedUntil[id] else { return false }
-        return until > now
-    }
-
-    private static func displayOrder(_ lhs: AttentionItem, _ rhs: AttentionItem) -> Bool {
-        if lhs.tier != rhs.tier {
-            return lhs.tier > rhs.tier
-        }
-        if lhs.firstSeen != rhs.firstSeen {
-            return lhs.firstSeen < rhs.firstSeen
-        }
-        return lhs.id < rhs.id
     }
 }

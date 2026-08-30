@@ -137,4 +137,24 @@ struct AttentionItemTests {
         let decoded = try decoder.decode(AttentionItem.self, from: encoder.encode(item))
         #expect(decoded == item)
     }
+
+    /// The pipeline rewrites every slice on a timer, so `lastObserved`
+    /// alone would report a week-old scan as freshly checked.
+    @Test("Freshness follows the producer's own observation, not the pipeline write")
+    func freshnessPrefersProducerTime() {
+        let scanned = Date(timeIntervalSince1970: 0)
+        var item = makeItem(firstSeen: scanned)
+        item.producerObservedAt = scanned
+        item.lastObserved = scanned.addingTimeInterval(7 * 24 * 60 * 60)
+
+        let now = item.lastObserved
+        #expect(item.lastCheckedAt == scanned)
+        #expect(item.freshness(now: now) == .stale)
+    }
+
+    @Test("Without a producer time, the pipeline write is the best available answer")
+    func freshnessFallsBackToPipelineTime() {
+        let item = makeItem(firstSeen: Date(timeIntervalSince1970: 1_000))
+        #expect(item.lastCheckedAt == item.lastObserved)
+    }
 }
