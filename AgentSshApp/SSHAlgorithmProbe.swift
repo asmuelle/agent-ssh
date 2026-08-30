@@ -323,8 +323,16 @@ final class SSHAlgorithmProbeCache: ObservableObject {
         case failed(String)
     }
 
+    /// Shortest gap between two probes of the same host. A connect (or a
+    /// reconnect storm) may ask for a refresh as often as it likes; only
+    /// the first ask per window reaches the wire, so the cache stays
+    /// fail2ban-friendly no matter how often callers knock.
+    nonisolated static let refreshInterval: TimeInterval = 15 * 60
+
     @Published private(set) var states: [String: State] = [:]
     private var inFlight: Set<String> = []
+    /// When each host's last probe was *started*, for `refreshIfStale`.
+    private var lastProbedAt: [String: Date] = [:]
 
     static func key(host: String, port: UInt16) -> String {
         "\(host):\(port)"
@@ -336,12 +344,17 @@ final class SSHAlgorithmProbeCache: ObservableObject {
 
     /// Probe unless a result (or attempt) already exists. `force`
     /// re-probes, for the retry affordance after a failure.
+    ///
+    /// A probe already in flight always wins: `force` cannot start a
+    /// second concurrent connect to the same host, and the in-flight one
+    /// is about to publish a fresh result anyway.
     func probeIfNeeded(host: String, port: UInt16, force: Bool = false) {
         let key = Self.key(host: host, port: port)
-        if !force, states[key] != nil || inFlight.contains(key) { return }
+        if !force, states[key] != nil { return }
         guard !inFlight.contains(key) else { return }
 
         inFlight.insert(key)
+        lastProbedAt[key] = Date()
         states[key] = .loading
 
         // Explicit `@MainActor` so the post-`await` continuation that mutates
@@ -357,5 +370,37 @@ final class SSHAlgorithmProbeCache: ObservableObject {
             }
             self?.inFlight.remove(key)
         }
+    }
+
+    /// Re-probe only if this host has not been probed within
+    /// `refreshInterval`. Used on connect, where the algorithm list may
+    /// have changed since the session's first probe but the connect
+    /// itself is not evidence that it did — an unconditional re-probe
+    /// there turns a reconnect loop into one pre-auth handshake per
+    /// attempt, which is exactly what the session cache exists to avoid.
+    func refreshIfStale(
+        host: String,
+        port: UInt16,
+        minimumInterval: TimeInterval = SSHAlgorithmProbeCache.refreshInterval,
+        now: Date = Date()
+    ) {
+        let key = Self.key(host: host, port: port)
+        guard Self.shouldRefresh(
+            lastProbedAt: lastProbedAt[key],
+            now: now,
+            minimumInterval: minimumInterval
+        ) else { return }
+        probeIfNeeded(host: host, port: port, force: true)
+    }
+
+    /// The refresh-window decision, split out so it can be tested without
+    /// opening a socket. A host never probed this session always refreshes.
+    nonisolated static func shouldRefresh(
+        lastProbedAt: Date?,
+        now: Date,
+        minimumInterval: TimeInterval
+    ) -> Bool {
+        guard let lastProbedAt else { return true }
+        return now.timeIntervalSince(lastProbedAt) >= minimumInterval
     }
 }

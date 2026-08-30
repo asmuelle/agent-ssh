@@ -349,6 +349,18 @@ final class TerminalTabsStore: ObservableObject {
             }
         }
 
+        // The KEXINIT probe is cached per host:port for the whole app
+        // session, so a server hardened between connects would keep
+        // showing its old (often orange) algorithm list forever. A
+        // successful connect is a good moment to re-read — but only
+        // behind the cache's refresh window: forcing it here would put a
+        // pre-auth handshake on every reconnect attempt, and a flapping
+        // host is precisely when fail2ban is watching.
+        SSHAlgorithmProbeCache.shared.refreshIfStale(
+            host: profile.host,
+            port: profile.port
+        )
+
         if let tabId, let idx = tabs.firstIndex(where: { $0.id == tabId }) {
             // Reconnect: update existing tab in place.
             tabs[idx].ptyGeneration = generation

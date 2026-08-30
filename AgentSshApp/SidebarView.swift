@@ -808,6 +808,8 @@ private struct ConnectionDetailsPanel: View {
 private struct SSHAlgorithmsSection: View {
     let profile: ConnectionProfile
     @ObservedObject private var cache = SSHAlgorithmProbeCache.shared
+    /// Non-nil while the explainer sheet for a clicked orange row is up.
+    @State private var advice: SSHWeakAlgorithmAdvice?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -863,11 +865,13 @@ private struct SSHAlgorithmsSection: View {
                     algorithmGroup(
                         "Key Exchange",
                         algorithms.kexAlgorithms,
+                        category: .kex,
                         isWeak: SSHAlgorithmStrength.isWeakKex
                     )
                     algorithmGroup(
                         "MACs",
                         algorithms.macs,
+                        category: .mac,
                         isWeak: SSHAlgorithmStrength.isWeakMac
                     )
                 }
@@ -875,6 +879,21 @@ private struct SSHAlgorithmsSection: View {
         }
         .task(id: SSHAlgorithmProbeCache.key(host: profile.host, port: profile.port)) {
             cache.probeIfNeeded(host: profile.host, port: profile.port)
+        }
+        .sheet(item: $advice) { advice in
+            SSHWeakAlgorithmSheet(
+                advice: advice,
+                host: profile.host,
+                onRecheck: {
+                    cache.probeIfNeeded(
+                        host: profile.host,
+                        port: profile.port,
+                        force: true
+                    )
+                    self.advice = nil
+                },
+                onDismiss: { self.advice = nil }
+            )
         }
     }
 
@@ -901,6 +920,7 @@ private struct SSHAlgorithmsSection: View {
     private func algorithmGroup(
         _ label: String,
         _ algorithms: [String],
+        category: SSHWeakAlgorithmAdvice.Category,
         isWeak: @escaping (String) -> Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -909,25 +929,20 @@ private struct SSHAlgorithmsSection: View {
                 .foregroundStyle(.secondary)
 
             ForEach(algorithms, id: \.self) { algorithm in
-                let weak = isWeak(algorithm)
-                HStack(spacing: 5) {
-                    Text(algorithm)
-                        .font(MidnightMacDesign.FontToken.metadataMono)
-                        .foregroundStyle(weak ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    if weak {
-                        Text("weak")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(
-                                Capsule().fill(Color.orange.opacity(0.12))
-                            )
-                            .help("Deprecated or weakened algorithm — consider disabling it in sshd_config")
+                if isWeak(algorithm) {
+                    Button {
+                        advice = SSHWeakAlgorithmAdvice.advice(
+                            for: algorithm,
+                            category: category
+                        )
+                    } label: {
+                        algorithmRow(algorithm, isWeak: true)
                     }
+                    .buttonStyle(.plain)
+                    .help("\(algorithm) is deprecated or weakened — click for why, and how to disable it")
+                    .accessibilityHint("Opens an explanation and the sshd_config fix")
+                } else {
+                    algorithmRow(algorithm, isWeak: false)
                 }
             }
 
@@ -937,6 +952,32 @@ private struct SSHAlgorithmsSection: View {
                     .foregroundStyle(.tertiary)
             }
         }
+    }
+
+    private func algorithmRow(_ algorithm: String, isWeak: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text(algorithm)
+                .font(MidnightMacDesign.FontToken.metadataMono)
+                .foregroundStyle(isWeak ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            if isWeak {
+                Text("weak")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        Capsule().fill(Color.orange.opacity(0.12))
+                    )
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.orange.opacity(0.7))
+            }
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
     }
 }
 
