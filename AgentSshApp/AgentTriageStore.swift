@@ -61,7 +61,7 @@ struct TriageIssue: Identifiable, Equatable {
 /// (tab ids are stable across reconnects).
 @MainActor
 final class AgentTriageStore: ObservableObject {
-    static let shared = AgentTriageStore()
+    static let shared = AgentTriageStore(inboxIngest: .shared)
 
     @Published private(set) var candidates: [String: TriageIssue] = [:]
     @Published private(set) var snoozedUntil: [String: Date] = [:]
@@ -70,9 +70,15 @@ final class AgentTriageStore: ObservableObject {
     /// boundary by at most one poll interval.
     @Published private(set) var confirmedCount = 0
 
+    /// Mirrors every ingest/sync into the persistent attention inbox.
+    /// Optional so isolated test instances stay side-effect free.
+    let inboxIngest: AttentionInboxIngest?
+
     /// Use `shared` in app code. Non-private so tests can build
     /// isolated instances.
-    init() {}
+    init(inboxIngest: AttentionInboxIngest? = nil) {
+        self.inboxIngest = inboxIngest
+    }
 
     // MARK: Ingestion
 
@@ -117,6 +123,12 @@ final class AgentTriageStore: ObservableObject {
 
         candidates = next
         recount(now: now)
+
+        inboxIngest?.recordTriage(
+            next.values.filter { $0.tabId == tabId && $0.kind != .connection },
+            tabId: tabId,
+            now: now
+        )
     }
 
     /// Sync connection-status issues from the live tab list, and prune
@@ -162,6 +174,8 @@ final class AgentTriageStore: ObservableObject {
         candidates = next
         snoozedUntil = snoozedUntil.filter { id, _ in next[id] != nil }
         recount(now: now)
+
+        inboxIngest?.syncTabs(tabs, now: now)
     }
 
     // MARK: Queries
