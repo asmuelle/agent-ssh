@@ -99,6 +99,59 @@ final class MonitoringAlertNotificationCenter: NSObject {
         }
     }
 
+    /// Deliver attention-inbox escalations. Shares the monitoring
+    /// category (same "Open agent-ssh" action) and the same authorization
+    /// handling, but carries the inbox's own copy: the evaluator has
+    /// already decided these are worth interrupting for.
+    func deliverEscalations(_ alerts: [AttentionEscalationAlert]) {
+        guard !alerts.isEmpty else { return }
+
+        notificationCenter.getNotificationSettings { [weak self] settings in
+            guard let self else { return }
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                self.scheduleEscalations(alerts)
+            case .notDetermined:
+                self.requestAuthorization { granted in
+                    guard granted else { return }
+                    self.scheduleEscalations(alerts)
+                }
+            case .denied:
+                self.logger.info("Attention escalations are disabled by the user")
+            @unknown default:
+                self.logger.info("Attention escalations have an unknown authorization state")
+            }
+        }
+    }
+
+    private func scheduleEscalations(_ alerts: [AttentionEscalationAlert]) {
+        for alert in alerts {
+            let content = UNMutableNotificationContent()
+            content.title = alert.title
+            content.body = alert.body
+            content.sound = .default
+            content.categoryIdentifier = Self.monitoringFailureCategoryIdentifier
+            // One thread per host keeps a noisy server's banners together.
+            content.threadIdentifier = "attention-inbox:\(alert.profileId)"
+            content.userInfo = ["attentionItemId": alert.itemId]
+
+            // The identifier is stable per item, so re-alerting the same
+            // problem replaces its banner instead of stacking another.
+            let request = UNNotificationRequest(
+                identifier: alert.notificationIdentifier,
+                content: content,
+                trigger: nil
+            )
+            notificationCenter.add(request) { [weak self] error in
+                if let error {
+                    self?.logger.warning(
+                        "Failed to schedule attention escalation: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            }
+        }
+    }
+
     private static let monitoringFailureCategoryIdentifier = "monitoring-failure"
 
     /// Append the most recent Server Doctor headline for the affected host, so a

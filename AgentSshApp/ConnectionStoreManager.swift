@@ -66,7 +66,7 @@ class ConnectionStoreManager: ObservableObject {
     private func purgeHealthState(for profile: ConnectionProfile) {
         try? ServerDoctorSummaryStore().remove(profileId: profile.id)
         SecurityPatchMonitorSummaryStore.shared.remove(profileId: profile.id)
-        try? AttentionInboxStore.shared.prune(keepingProfileIds: connections.map(\.id))
+        AttentionInboxIngest.shared.prune(keepingProfileIds: connections.map(\.id))
     }
 
     func connection(withId id: String) -> ConnectionProfile? {

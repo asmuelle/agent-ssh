@@ -13,11 +13,16 @@ struct AttentionInboxIngestTests {
         var summaries: [SecurityPatchHostSummary] = []
     }
 
+    private final class EscalationBox {
+        var delivered: [AttentionEscalationAlert] = []
+    }
+
     private let t0 = Date(timeIntervalSince1970: 3_000_000)
     private let directory: URL
     private let inbox: AttentionInboxStore
     private let doctorStore: ServerDoctorSummaryStore
     private let patchBox = PatchSummariesBox()
+    private let escalationBox = EscalationBox()
     private let ingest: AttentionInboxIngest
 
     init() throws {
@@ -27,10 +32,12 @@ struct AttentionInboxIngestTests {
         inbox = AttentionInboxStore(directoryURL: directory)
         doctorStore = ServerDoctorSummaryStore(directoryURL: directory)
         let box = patchBox
+        let escalations = escalationBox
         ingest = AttentionInboxIngest(
             inbox: inbox,
             doctorSummaries: doctorStore,
-            patchSummaries: { box.summaries }
+            patchSummaries: { box.summaries },
+            deliverEscalations: { escalations.delivered.append(contentsOf: $0) }
         )
     }
 
@@ -275,5 +282,122 @@ struct AttentionInboxIngestTests {
 
         store.syncTabs([makeTab(id: tab.id, status: .disconnected)], now: t0.addingTimeInterval(20))
         #expect(inbox.allItems().map(\.id) == ["profile-1:connection:status"])
+    }
+
+    // MARK: Published read side
+
+    @Test("The published snapshot tracks writes, so the panel needs no file read")
+    func snapshotRepublishedOnWrite() {
+        let tabId = UUID()
+        ingest.syncTabs([makeTab(id: tabId)], now: t0)
+        #expect(ingest.snapshot.items.isEmpty)
+
+        ingest.recordTriage([triageIssue(tabId: tabId)], tabId: tabId, now: t0)
+        #expect(ingest.snapshot.items.map(\.sourceId) == ["cpu"])
+
+        ingest.recordTriage([], tabId: tabId, now: t0.addingTimeInterval(10))
+        #expect(ingest.snapshot.items.isEmpty)
+    }
+
+    @Test("A poll records when the host was last checked — the evidence behind a quiet inbox")
+    func lastCheckedRecorded() {
+        let tabId = UUID()
+        ingest.syncTabs([makeTab(id: tabId)], now: t0)
+        #expect(ingest.lastCheckedAt["profile-1"] == nil)
+
+        ingest.recordTriage([], tabId: tabId, now: t0.addingTimeInterval(30))
+        #expect(ingest.lastCheckedAt["profile-1"] == t0.addingTimeInterval(30))
+    }
+
+    @Test("User actions on the inbox republish immediately")
+    func userActionsRepublish() {
+        let tabId = UUID()
+        ingest.syncTabs([makeTab(id: tabId)], now: t0)
+        ingest.recordTriage([triageIssue(tabId: tabId)], tabId: tabId, now: t0)
+        let id = "profile-1:metric:cpu"
+
+        ingest.resolve(id, now: t0.addingTimeInterval(20))
+        #expect(ingest.snapshot.activeItems(now: t0.addingTimeInterval(30)).isEmpty)
+
+        ingest.markSeen(now: t0.addingTimeInterval(40))
+        #expect(ingest.snapshot.lastSeenAt == t0.addingTimeInterval(40))
+    }
+
+    // MARK: Escalation notifications
+
+    @Test("A doctor verdict arriving at act-now interrupts once, not on every refresh")
+    func escalationNotifiesOnce() throws {
+        try doctorStore.upsert(ServerDoctorHostSummary(
+            profileId: "profile-1",
+            hostLabel: "web-01",
+            headline: "Disk is full; two services stopped.",
+            overallSeverity: .critical,
+            topFindingTitle: "Disk full",
+            findingCount: 2,
+            generatedAt: t0,
+            narratedOnDevice: false
+        ))
+        ingest.syncScanSummaries(now: t0)
+        #expect(escalationBox.delivered.map(\.hostName) == ["web-01"])
+
+        // Same verdict re-observed: already announced, stays quiet.
+        ingest.syncScanSummaries(now: t0.addingTimeInterval(120))
+        #expect(escalationBox.delivered.count == 1)
+    }
+
+    @Test("A dropped connection does not interrupt — the monitor alert path already does")
+    func connectionDoesNotDoubleNotify() {
+        ingest.syncTabs([makeTab(status: .error)], now: t0)
+        #expect(ingest.snapshot.items.map(\.sourceKind) == [.connection])
+        #expect(escalationBox.delivered.isEmpty)
+    }
+
+    /// Regression: the escalation baseline used to be recorded from every
+    /// persisted item, including ones still inside their hysteresis
+    /// window. A metric that debuts straight at act-now — a disk already
+    /// at 97% when you connect — was therefore marked "already known"
+    /// before it was ever eligible to alert, and never notified at all.
+    @Test("A metric that debuts at act-now still alerts once its hysteresis elapses")
+    func metricDebutingAtActNowStillAlerts() {
+        let tabId = UUID()
+        ingest.syncTabs([makeTab(id: tabId)], now: t0)
+
+        // Inside the 12 s confirmation window: not yet loud anywhere.
+        ingest.recordTriage([triageIssue(tabId: tabId)], tabId: tabId, now: t0)
+        #expect(escalationBox.delivered.isEmpty)
+
+        // Past it, the same unchanged finding must interrupt exactly once.
+        let confirmed = t0.addingTimeInterval(70)
+        ingest.recordTriage([triageIssue(tabId: tabId)], tabId: tabId, now: confirmed)
+        #expect(escalationBox.delivered.map(\.itemId) == ["profile-1:metric:cpu"])
+
+        ingest.recordTriage([triageIssue(tabId: tabId)], tabId: tabId, now: confirmed.addingTimeInterval(70))
+        #expect(escalationBox.delivered.count == 1)
+    }
+
+    @Test("Pruning through the ingest republishes, so a deleted host leaves the panel")
+    func pruneRepublishes() {
+        let tabId = UUID()
+        ingest.syncTabs([makeTab(id: tabId)], now: t0)
+        ingest.recordTriage([triageIssue(tabId: tabId)], tabId: tabId, now: t0)
+        #expect(ingest.snapshot.items.count == 1)
+
+        ingest.prune(keepingProfileIds: [])
+        #expect(ingest.snapshot.items.isEmpty)
+    }
+
+    @Test("Undo restores a handled item to the active list")
+    func unresolveRestores() {
+        let tabId = UUID()
+        ingest.syncTabs([makeTab(id: tabId)], now: t0)
+        ingest.recordTriage([triageIssue(tabId: tabId)], tabId: tabId, now: t0)
+        let id = "profile-1:metric:cpu"
+        let later = t0.addingTimeInterval(30)
+
+        ingest.resolve(id, now: later)
+        #expect(ingest.snapshot.activeItems(now: later).isEmpty)
+
+        ingest.unresolve(id)
+        #expect(ingest.snapshot.activeItems(now: later).map(\.id) == [id])
     }
 }
