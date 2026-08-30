@@ -75,7 +75,12 @@ public enum CommandSlotKind: String, CaseIterable, Sendable {
             guard value.unicodeScalars.allSatisfy({ !isBlank($0) }) else { return nil }
 
         case .absolutePath:
-            guard value.hasPrefix("/"), !value.hasSuffix("/") else { return nil }
+            guard value.hasPrefix("/") else { return nil }
+            // `/` is the one path that is both absolute and
+            // trailing-slashed, and it is the commonest target of all.
+            // Exempted by exact match rather than by dropping the
+            // canonical-form rule, as with `-.mount` above.
+            guard value == "/" || !value.hasSuffix("/") else { return nil }
             // `..` anywhere means the rendered target is not the path the
             // catalog entry believes it is describing.
             let segments = value.split(separator: "/", omittingEmptySubsequences: true)
@@ -92,9 +97,24 @@ public enum CommandSlotKind: String, CaseIterable, Sendable {
         case .packageName:
             // dpkg/rpm shapes: `libssl3:amd64`, `containerd.io`, `g++-12`.
             // `/` and `=` are excluded because apt reads them as a local
-            // .deb path and a version pin respectively, and `.*` because
-            // apt matches package names as regexes.
+            // .deb path and a version pin.
+            //
+            // The last character matters as much as the first: apt-get
+            // reads a trailing `-` on an operand as *remove this* and a
+            // trailing `+` as *install this*, whichever verb the template
+            // wrote. `--` does not help — that is getopt's marker, while
+            // this is apt's own operand grammar, applied afterwards. So
+            // `apt-get install -- 'openssh-server-'` uninstalls the SSH
+            // server.
+            //
+            // This does NOT make an apt operand fully safe: when no
+            // package matches exactly, apt applies the operand as an
+            // unanchored regex, and `.` has to stay legal mid-name for
+            // `containerd.io`. A template that installs or removes
+            // packages must additionally require the value to be one the
+            // scan actually observed.
             guard let first = value.unicodeScalars.first, isASCIILowerAlnum(first) else { return nil }
+            guard let last = value.unicodeScalars.last, isASCIIAlnum(last) else { return nil }
             guard value.unicodeScalars.allSatisfy({ isPackageScalar($0) }) else { return nil }
 
         case .sshdConfigToken:
@@ -115,7 +135,21 @@ public enum CommandSlotKind: String, CaseIterable, Sendable {
     // refuse.
 
     private func isForbiddenEverywhere(_ s: Unicode.Scalar) -> Bool {
-        s.value < 0x20 || s.value == 0x7F || (0x80...0x9F).contains(s.value) || s == "\u{FFFD}"
+        if s.value < 0x20 || s.value == 0x7F || (0x80...0x9F).contains(s.value) { return true }
+        if s == "\u{FFFD}" { return true }
+        // Bidi overrides and Unicode separators let a value render in the
+        // confirmation dialog as something other than what will run — the
+        // user consents to one command and a different one executes.
+        switch s.value {
+        case 0x200E, 0x200F,           // LRM, RLM
+             0x202A...0x202E,          // LRE, RLE, PDF, LRO, RLO
+             0x2066...0x2069,          // isolates
+             0x2028, 0x2029,           // line / paragraph separator
+             0x00A0, 0x1680, 0x2000...0x200D, 0x205F, 0x3000, 0xFEFF:
+            return true
+        default:
+            return false
+        }
     }
 
     private func isBlank(_ s: Unicode.Scalar) -> Bool {

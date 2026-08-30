@@ -35,8 +35,10 @@ public enum CommandRisk: String, Codable, Sendable, CaseIterable, Comparable {
 /// itself assembled at runtime and becomes a second, unvalidated slot —
 /// the shape `"systemctl \(verb) \(quote(unit))"` looks parameterized but
 /// lets `verb` carry anything. Here a literal is a `StaticString`, which
-/// cannot be produced from a runtime value, so every literal is provably
-/// author-written and a slot cannot syntactically hide inside one.
+/// no ordinary code path can produce from a runtime value — only a
+/// deliberate reach for underscored stdlib builtins — so in practice
+/// every literal is author-written and a slot cannot syntactically hide
+/// inside one.
 public struct CommandTemplate: Sendable {
     public struct Slot: Sendable, Equatable {
         public let name: String
@@ -77,7 +79,11 @@ public struct CommandTemplate: Sendable {
     /// argued in the catalog rather than assumed by the test.
     public let endOfOptionsUnsupportedReason: String?
 
-    public init(
+    /// Deliberately not `public`: a template is a vetted artefact, and
+    /// app code minting its own would make the catalog a habit rather
+    /// than the allowlist. Only this module — i.e. the catalog — builds
+    /// templates.
+    init(
         id: String,
         segments: [Segment],
         risk: CommandRisk,
@@ -101,6 +107,7 @@ public struct CommandTemplate: Sendable {
 /// and far better than a command nobody vetted.
 public struct CommandTemplateError: Error, Equatable {
     public enum Reason: Equatable, Sendable {
+        case unknownTemplate(String)
         case unknownSlot(String)
         case missingValue(String)
         case rejectedValue(slot: String, kind: CommandSlotKind)
@@ -110,6 +117,7 @@ public struct CommandTemplateError: Error, Equatable {
 
     public var slotName: String {
         switch reason {
+        case .unknownTemplate: return ""
         case .unknownSlot(let name), .missingValue(let name): return name
         case .rejectedValue(let slot, _): return slot
         }
@@ -118,6 +126,8 @@ public struct CommandTemplateError: Error, Equatable {
     /// Plain-language, for a user who is being told their fix cannot run.
     public var explanation: String {
         switch reason {
+        case .unknownTemplate(let id):
+            return "There is no vetted fix called “\(id)”, so nothing was run."
         case .unknownSlot(let name):
             return "This fix was given a value called “\(name)” that its command does not have a place for."
         case .missingValue(let name):
@@ -130,7 +140,23 @@ public struct CommandTemplateError: Error, Equatable {
 
 /// The only way to obtain a `RenderedCommand`.
 public enum CommandTemplateRenderer {
+    /// The public way to build a command: by catalog id. Membership of
+    /// the allowlist is a precondition of rendering rather than a habit,
+    /// so an unknown id fails closed instead of falling back to anything.
     public static func render(
+        templateId: String,
+        values: [String: String]
+    ) throws -> RenderedCommand {
+        guard let template = CommandTemplateCatalog.template(id: templateId) else {
+            throw CommandTemplateError(reason: .unknownTemplate(templateId))
+        }
+        return try render(template, values: values)
+    }
+
+    /// Module-internal so the catalog's own invariant tests can drive a
+    /// template directly. App code goes through the id-keyed entry point
+    /// above, which is why that one is the public surface.
+    static func render(
         _ template: CommandTemplate,
         values: [String: String]
     ) throws -> RenderedCommand {

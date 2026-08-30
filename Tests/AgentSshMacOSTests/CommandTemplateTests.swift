@@ -135,6 +135,60 @@ struct CommandTemplateCatalogTests {
         }
     }
 
+    @Test("Every template's command name is on an explicit allowlist of vetted binaries")
+    func commandNameIsAllowlisted() {
+        // No interpreters, on purpose. `sh -c <slot>`, `perl -e <slot>`,
+        // `awk <slot>` and `find … -exec <slot>` each turn a validated
+        // single word back into code, and neither the per-literal ban
+        // list nor the end-of-options rule can see it: `-c` legitimately
+        // takes its slot as an option argument, so the correct annotation
+        // is also the evasion.
+        let allowed: Set<String> = ["systemctl", "journalctl", "df"]
+        for template in CommandTemplateCatalog.all {
+            guard case .literal(let name) = template.segments.first else { continue }
+            #expect(allowed.contains(name.description),
+                    "template \(template.id) runs unvetted binary '\(name.description)'")
+        }
+    }
+
+    @Test("No slot is the argument of an option that takes code")
+    func slotsAreNotCodeArguments() {
+        // Survives the allowlist growing: the danger is the flag, not the
+        // binary. Kept alongside the allowlist rather than instead of it.
+        let codeFlags: Set<String> = [
+            "-c", "-e", "--eval", "-exec", "-execdir", "--command", "-command",
+            "--expression", "-i", "--filter", "-f",
+        ]
+        for template in CommandTemplateCatalog.all {
+            var previous: String?
+            for segment in template.segments {
+                switch segment {
+                case .literal(let literal):
+                    previous = literal.description
+                case .slot(let slot):
+                    #expect(!codeFlags.contains(previous ?? ""),
+                            "template \(template.id) binds slot '\(slot.name)' to code flag '\(previous ?? "")'")
+                    previous = nil
+                }
+            }
+        }
+    }
+
+    @Test("Rendering by id fails closed on an id the catalog does not contain")
+    func renderByIdFailsClosed() {
+        #expect(throws: CommandTemplateError.self) {
+            _ = try CommandTemplateRenderer.render(templateId: "shell.exec", values: [:])
+        }
+    }
+
+    @Test("Rendering by id produces the catalog entry's own command")
+    func renderByIdUsesCatalogEntry() throws {
+        let rendered = try CommandTemplateRenderer.render(
+            templateId: "systemd.restart", values: ["unit": "nginx.service"]
+        )
+        #expect(rendered.command == "systemctl restart -- 'nginx.service'")
+    }
+
     @Test("Every catalog template renders with a plausible value for its slots")
     func catalogTemplatesRender() throws {
         let sample: [CommandSlotKind: String] = [

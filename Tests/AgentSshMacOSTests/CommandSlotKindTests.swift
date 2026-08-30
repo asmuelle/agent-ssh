@@ -121,6 +121,33 @@ struct CommandSlotKindTests {
         #expect(CommandSlotKind.packageName.validate(name) == nil)
     }
 
+    @Test("Package operands whose trailing character flips apt's verb are rejected", arguments: [
+        "openssh-server-", "openssh-server+", "tzdata-",
+    ])
+    func aptOperandModifiersRejected(name: String) {
+        // apt-get reads a trailing `-` as *remove this* and `+` as
+        // *install this*, whichever verb the template wrote, and `--`
+        // does not stop it — that is getopt's marker, this is apt's own
+        // operand grammar applied afterwards.
+        #expect(CommandSlotKind.packageName.validate(name) == nil)
+    }
+
+    // MARK: Display integrity
+
+    @Test("Bidi overrides and Unicode separators are rejected everywhere", arguments: CommandSlotKind.allCases)
+    func bidiAndSeparatorsRejected(kind: CommandSlotKind) {
+        // A value that renders in the confirmation dialog as something
+        // other than what runs defeats consent, whatever the shell does.
+        for payload in ["/etc\u{202E}gnp.conf", "a\u{200E}b", "a\u{2028}b", "a\u{00A0}b", "a\u{FEFF}b"] {
+            #expect(kind.validate(payload) == nil, "\(kind) accepted a display-spoofing scalar")
+        }
+    }
+
+    @Test("The root filesystem is a valid path — the commonest target of all")
+    func rootPathAccepted() {
+        #expect(CommandSlotKind.absolutePath.validate("/") == "/")
+    }
+
     // MARK: sshd_config tokens
 
     @Test("Real SSH algorithm names are accepted", arguments: [
