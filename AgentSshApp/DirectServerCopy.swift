@@ -220,7 +220,7 @@ enum DirectCopyShell {
 
     /// POSIX single-quote escaping: `'` → `'\''`.
     static func quote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        ShellQuoting.singleQuoted(value)
     }
 
     /// Quotes a path for sftp's own batch-line lexer (distinct from the

@@ -218,7 +218,7 @@ struct MobileDiskAnalyzerView: View {
     }
 
     private func shellQuote(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "'\"'\"'"))'"
+        ShellQuoting.singleQuoted(value)
     }
 }
 
