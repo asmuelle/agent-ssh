@@ -117,20 +117,59 @@ extension SystemdMonitorView {
 
     // MARK: - Journal display model
 
-    /// One rendered journal row. Consecutive lines with the same
-    /// process and message are coalesced into a single entry with a
-    /// repeat count — 42 identical sshd failures read as one fact,
-    /// not a wall.
+    /// One rendered journal row. Consecutive lines from the same
+    /// process whose messages share a fingerprint template — the same
+    /// log statement fired with different parameters (connection ids,
+    /// counters, timestamps) — are coalesced into a single entry with a
+    /// repeat count. 42 near-identical sshd failures read as one fact,
+    /// not a wall; the varying parameters live in `occurrences`.
     struct JournalDisplayEntry: Identifiable {
-        let id: Int
+        struct Occurrence {
+            let timestamp: String
+            let captures: [String]
+            /// The line's own `name[pid]`. A forked daemon groups across
+            /// PIDs, so the expanded list names the one each line came from.
+            let process: String
+        }
+
+        /// Stable across filtering: derived from the group's own content,
+        /// not its position. A positional id meant that typing in the
+        /// search box left an unrelated row expanded.
+        let id: String
         let firstTimestamp: String
         var lastTimestamp: String
         let host: String
         let process: String
+        /// `sshd[1234]` reduced to `sshd`. journald tags each line with
+        /// the emitting PID, and a daemon that forks per connection emits
+        /// every line under a different one — grouping on the raw field
+        /// would give a wall of one-line "groups" for exactly the
+        /// repetitive logs this collapsing exists to tame.
+        let processGroupKey: String
         let message: String
         let severity: JournalSeverity
         let rawLine: String
-        var repeatCount: Int = 1
+        let template: String
+        var occurrences: [Occurrence]
+
+        var repeatCount: Int { occurrences.count }
+
+        /// Names the process without claiming a PID the group does not
+        /// share. Several PIDs collapsed together → show the bare name.
+        var displayProcess: String {
+            Set(occurrences.map(\.process)).count > 1 ? processGroupKey : process
+        }
+
+        /// Capture-slot indices whose values differ across the run —
+        /// what the expanded occurrence list shows per line.
+        var variedCaptureIndices: [Int] {
+            guard let first = occurrences.first else { return [] }
+            return first.captures.indices.filter { index in
+                occurrences.contains {
+                    $0.captures.indices.contains(index) && $0.captures[index] != first.captures[index]
+                }
+            }
+        }
 
         var day: String {
             String(firstTimestamp.prefix(10))
@@ -170,14 +209,26 @@ extension SystemdMonitorView {
             }
         }
 
-        for (index, line) in lines.enumerated() {
+        var usedIds: Set<String> = []
+
+        for line in lines {
             let parts = splitJournalLine(line)
+            let severity = journalSeverity(line)
+            let fingerprint = JournalMessageFingerprinting.fingerprint(parts.message)
+            let groupKey = journalProcessGroupKey(parts.process)
             if var entry = pending,
                !parts.message.isEmpty,
-               entry.process == parts.process,
-               entry.message == parts.message {
-                entry.repeatCount += 1
+               entry.processGroupKey == groupKey,
+               entry.severity == severity,
+               entry.template == fingerprint.template {
                 entry.lastTimestamp = parts.timestamp
+                entry.occurrences.append(
+                    .init(
+                        timestamp: parts.timestamp,
+                        captures: fingerprint.captures,
+                        process: parts.process
+                    )
+                )
                 pending = entry
                 continue
             }
@@ -189,15 +240,33 @@ extension SystemdMonitorView {
                     lastDay = day
                 }
             }
+            // Content-derived so the id survives a filter change. A
+            // collision needs an identical group at the same second under
+            // the same process — the ordinal only breaks that tie.
+            var id = "\(parts.timestamp)|\(groupKey)|\(fingerprint.template)"
+            if usedIds.contains(id) {
+                var ordinal = 2
+                while usedIds.contains("\(id)#\(ordinal)") { ordinal += 1 }
+                id = "\(id)#\(ordinal)"
+            }
+            usedIds.insert(id)
+
             pending = JournalDisplayEntry(
-                id: index,
+                id: id,
                 firstTimestamp: parts.timestamp,
                 lastTimestamp: parts.timestamp,
                 host: parts.host,
                 process: parts.process,
+                processGroupKey: groupKey,
                 message: parts.message,
-                severity: journalSeverity(line),
-                rawLine: line
+                severity: severity,
+                rawLine: line,
+                template: fingerprint.template,
+                occurrences: [.init(
+                    timestamp: parts.timestamp,
+                    captures: fingerprint.captures,
+                    process: parts.process
+                )]
             )
         }
         flush()
@@ -305,8 +374,10 @@ extension SystemdMonitorView {
         let isExpandable = wrapJournalLines
             && entry.message.count > Self.journalMessageExpandThreshold
         let isExpanded = expandedJournalEntryIds.contains(entry.id)
+        let isGroupExpanded = expandedJournalGroupIds.contains(entry.id)
 
-        return HStack(alignment: .top, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .top, spacing: 6) {
             Rectangle()
                 .fill(entry.severity.accentColor)
                 .frame(width: 3)
@@ -316,17 +387,28 @@ extension SystemdMonitorView {
                 .lineLimit(1)
                 .frame(width: 64, alignment: .leading)
                 .help(journalTimestampHelp(entry))
-            Text(entry.process)
+            Text(entry.displayProcess)
                 .font(.caption2.monospaced())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(width: 142, alignment: .leading)
-                .help(entry.process)
+                .help(entry.displayProcess)
             HStack(alignment: .top, spacing: 6) {
                 if entry.repeatCount > 1 {
-                    Text("×\(entry.repeatCount)")
-                        .font(.caption2.weight(.bold).monospacedDigit())
+                    Button {
+                        if isGroupExpanded {
+                            expandedJournalGroupIds.remove(entry.id)
+                        } else {
+                            expandedJournalGroupIds.insert(entry.id)
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text("×\(entry.repeatCount)")
+                                .font(.caption2.weight(.bold).monospacedDigit())
+                            Image(systemName: isGroupExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 7, weight: .semibold))
+                        }
                         .foregroundStyle(entry.severity.foreground)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -336,7 +418,9 @@ extension SystemdMonitorView {
                                 : entry.severity.accentColor).opacity(0.15),
                             in: Capsule()
                         )
-                        .help(journalTimestampHelp(entry))
+                    }
+                    .buttonStyle(.plain)
+                    .help(journalTimestampHelp(entry) + " — click to list each occurrence")
                 }
                 Text(JournalSyntaxHighlighting.highlighted(message: entry.message))
                     .font(.caption.monospaced())
@@ -366,6 +450,10 @@ extension SystemdMonitorView {
             }
             .frame(maxWidth: wrapJournalLines ? .infinity : nil, alignment: .leading)
         }
+        if entry.repeatCount > 1, isGroupExpanded {
+            journalOccurrenceList(entry)
+        }
+        }
         .padding(.vertical, 2)
         .padding(.horizontal, 8)
         // Alternating stripes carry the row rhythm; severity lives in
@@ -380,6 +468,46 @@ extension SystemdMonitorView {
             Button("Copy Message") { copyJournalText(entry.message) }
             Button("Copy Entry") { copyJournalText(entry.rawLine) }
         }
+    }
+
+    /// The expanded view of a coalesced run: one compact line per
+    /// occurrence, showing its time and only the parameter values that
+    /// vary across the run — the message itself is already on the
+    /// parent row.
+    func journalOccurrenceList(_ entry: JournalDisplayEntry) -> some View {
+        let variedIndices = entry.variedCaptureIndices
+        return VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(entry.occurrences.enumerated()), id: \.offset) { _, occurrence in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(timeOfDay(occurrence.timestamp))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 64, alignment: .leading)
+                        .help(occurrence.timestamp)
+                    let varied = variedIndices.compactMap { index in
+                        occurrence.captures.indices.contains(index) ? occurrence.captures[index] : nil
+                    }
+                    Text(varied.isEmpty ? "identical" : varied.joined(separator: " · "))
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(varied.isEmpty ? .tertiary : .secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .padding(.leading, 73)
+        .padding(.top, 3)
+        .padding(.bottom, 1)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.18))
+                .frame(width: 1)
+                .padding(.leading, 67)
+        }
+    }
+
+    func timeOfDay(_ timestamp: String) -> String {
+        guard let tIndex = timestamp.firstIndex(of: "T") else { return timestamp }
+        return String(timestamp[timestamp.index(after: tIndex)...].prefix(8))
     }
 
     func journalTimestampHelp(_ entry: JournalDisplayEntry) -> String {

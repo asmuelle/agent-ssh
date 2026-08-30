@@ -357,7 +357,10 @@ struct SystemdMonitorView: View {
     /// Journal rows whose over-long messages the user expanded past
     /// the default line cap. Keyed by entry id; reset on selection
     /// change.
-    @State var expandedJournalEntryIds: Set<Int> = []
+    @State var expandedJournalEntryIds: Set<String> = []
+    /// Coalesced repeat-groups whose per-occurrence list is open.
+    /// Keyed by entry id; reset on selection change.
+    @State var expandedJournalGroupIds: Set<String> = []
     @State var showsRawProperties = false
     @State var serviceScope: ServiceScope = .all
 
@@ -671,6 +674,7 @@ struct SystemdMonitorView: View {
         if changed {
             unitLogsIssueFocus = false
             expandedJournalEntryIds = []
+            expandedJournalGroupIds = []
         }
         if resetDetailTab, changed, let unit {
             unitDetailTab = preferredDetailTab(for: unit)

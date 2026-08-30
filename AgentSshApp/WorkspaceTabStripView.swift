@@ -27,6 +27,9 @@ struct WorkspaceTabStripView: View {
     var themeOverrides: [UUID: String] = [:]
     /// Live connection state per tab id, for the status symbol prefix.
     var statuses: [UUID: TerminalConnectionStatus] = [:]
+    /// Optional hover text per tab id — the shell-reported title, so the
+    /// label can stay the connection name without losing `user@host: cwd`.
+    var tooltips: [UUID: String] = [:]
 
     @Binding var mode: WorkspaceMode
     /// Name of the active host, shown on the Server segment so the
@@ -50,6 +53,7 @@ struct WorkspaceTabStripView: View {
                                 isActive: tab.id == activeTabId,
                                 currentThemeOverride: themeOverrides[tab.id],
                                 status: statuses[tab.id] ?? .connected,
+                                tooltip: tooltips[tab.id],
                                 onSelect: { activeTabId = tab.id },
                                 onClose: { onClose(tab) },
                                 onSetTheme: onSetTheme.map { setter in
@@ -203,6 +207,7 @@ struct WorkspaceTabItemView: View {
     let isActive: Bool
     var currentThemeOverride: String? = nil
     var status: TerminalConnectionStatus = .connected
+    var tooltip: String? = nil
     let onSelect: () -> Void
     let onClose: () -> Void
     var onSetTheme: ((String?) -> Void)? = nil
@@ -220,6 +225,7 @@ struct WorkspaceTabItemView: View {
             Text(tab.title)
                 .font(MidnightMacDesign.FontToken.subheadline)
                 .lineLimit(1)
+                .help(tooltip ?? tab.title)
 
             Button(action: onClose) {
                 Image(systemName: "xmark")

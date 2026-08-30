@@ -64,7 +64,7 @@ final class TerminalTabsStore: ObservableObject {
         switch event {
         case .terminalTitleChanged(let connectionId, let title):
             guard !title.isEmpty else { return }
-            setTitle(title, forConnectionId: connectionId)
+            setRemoteTitle(title, forConnectionId: connectionId)
 
         case .connectionStatus(let connectionId, let payload):
             setStatus(
@@ -77,13 +77,17 @@ final class TerminalTabsStore: ObservableObject {
         }
     }
 
-    /// Update the displayed title for a tab matched by its connection id.
-    func setTitle(_ title: String, forConnectionId connectionId: String) {
+    /// Record the shell-reported title (OSC 0/2, typically
+    /// `user@host: cwd`) for a tab matched by its connection id. This
+    /// never replaces the tab label — the label stays the connection
+    /// name the user chose, which is what identifies the tab in a
+    /// strip full of `root@…` shells — it only feeds the tooltip.
+    func setRemoteTitle(_ title: String, forConnectionId connectionId: String) {
         guard let idx = tabs.firstIndex(where: { $0.connectionId == connectionId })
         else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        tabs[idx].title = trimmed
+        tabs[idx].remoteTitle = trimmed
     }
 
     /// Update the connection status for a tab.
@@ -344,6 +348,18 @@ final class TerminalTabsStore: ObservableObject {
                 }
             }
         }
+
+        // The KEXINIT probe is cached per host:port for the whole app
+        // session, so a server hardened between connects would keep
+        // showing its old (often orange) algorithm list forever. A
+        // successful connect is a good moment to re-read — but only
+        // behind the cache's refresh window: forcing it here would put a
+        // pre-auth handshake on every reconnect attempt, and a flapping
+        // host is precisely when fail2ban is watching.
+        SSHAlgorithmProbeCache.shared.refreshIfStale(
+            host: profile.host,
+            port: profile.port
+        )
 
         if let tabId, let idx = tabs.firstIndex(where: { $0.id == tabId }) {
             // Reconnect: update existing tab in place.

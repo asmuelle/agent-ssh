@@ -158,3 +158,45 @@ struct SSHAlgorithmStrengthTests {
         #expect(SSHAlgorithmStrength.isWeakMac(testCase.name) == testCase.weak)
     }
 }
+
+/// The probe cache's refresh window. The session cache exists to keep
+/// pre-auth connects rare (fail2ban-friendly), so connect-time
+/// refreshes must be rate-limited rather than forced.
+struct SSHAlgorithmProbeCacheRefreshTests {
+    @Test("a host never probed this session always refreshes")
+    func neverProbedAlwaysRefreshes() {
+        #expect(SSHAlgorithmProbeCache.shouldRefresh(
+            lastProbedAt: nil,
+            now: Date(timeIntervalSince1970: 1_000),
+            minimumInterval: 900
+        ))
+    }
+
+    @Test("a probe inside the window is suppressed, at the boundary it runs")
+    func refreshWindowBoundary() {
+        let probedAt = Date(timeIntervalSince1970: 1_000)
+        #expect(!SSHAlgorithmProbeCache.shouldRefresh(
+            lastProbedAt: probedAt,
+            now: probedAt.addingTimeInterval(899),
+            minimumInterval: 900
+        ))
+        #expect(SSHAlgorithmProbeCache.shouldRefresh(
+            lastProbedAt: probedAt,
+            now: probedAt.addingTimeInterval(900),
+            minimumInterval: 900
+        ))
+    }
+
+    @Test("a reconnect storm inside the window never reaches the wire")
+    func reconnectStormSuppressed() {
+        let probedAt = Date(timeIntervalSince1970: 1_000)
+        let attempts = (1...20).map { probedAt.addingTimeInterval(Double($0) * 2) }
+        #expect(attempts.allSatisfy {
+            !SSHAlgorithmProbeCache.shouldRefresh(
+                lastProbedAt: probedAt,
+                now: $0,
+                minimumInterval: SSHAlgorithmProbeCache.refreshInterval
+            )
+        })
+    }
+}
