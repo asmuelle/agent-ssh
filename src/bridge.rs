@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
@@ -18,6 +19,20 @@ const RUNTIME_WORKER_THREADS: usize = 2;
 pub struct MacOsBridge {
     pub runtime: Runtime,
     pub connection_manager: Arc<ConnectionManager>,
+    /// Host keys that were trusted-on-first-use *during* a connect in this
+    /// process, keyed by connection id. `rshell_connect` fills it, the UI
+    /// drains it with `rshell_take_first_connection` to show the fingerprint
+    /// and let the user reject the host before anything else runs.
+    pub first_connections: std::sync::Mutex<HashMap<String, FirstConnection>>,
+}
+
+/// A host key that `rshell_connect` auto-trusted because the store had no
+/// entry for it yet.
+#[derive(Clone, Debug)]
+pub struct FirstConnection {
+    pub host: String,
+    pub port: u16,
+    pub fingerprint: String,
 }
 
 impl MacOsBridge {
@@ -56,6 +71,7 @@ impl MacOsBridge {
         let bridge = MacOsBridge {
             runtime,
             connection_manager: Arc::new(ConnectionManager::new()),
+            first_connections: std::sync::Mutex::new(HashMap::new()),
         };
 
         // `set` only fails if another thread won the init race; in that case a

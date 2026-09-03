@@ -1664,6 +1664,79 @@ public func FfiConverterTypeFfiFileEntry_lower(_ value: FfiFileEntry) -> RustBuf
 }
 
 
+/**
+ * A host key that the most recent connect trusted for the first time.
+ */
+public struct FfiFirstConnection: Equatable, Hashable {
+    /**
+     * Host as passed to the connect call (after any Tailscale resolution).
+     */
+    public var host: String
+    public var port: UInt16
+    /**
+     * OpenSSH-style `SHA256:<base64 without padding>` fingerprint.
+     */
+    public var fingerprint: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Host as passed to the connect call (after any Tailscale resolution).
+         */host: String, port: UInt16, 
+        /**
+         * OpenSSH-style `SHA256:<base64 without padding>` fingerprint.
+         */fingerprint: String) {
+        self.host = host
+        self.port = port
+        self.fingerprint = fingerprint
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiFirstConnection: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiFirstConnection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiFirstConnection {
+        return
+            try FfiFirstConnection(
+                host: FfiConverterString.read(from: &buf), 
+                port: FfiConverterUInt16.read(from: &buf), 
+                fingerprint: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiFirstConnection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.host, into: &buf)
+        FfiConverterUInt16.write(value.port, into: &buf)
+        FfiConverterString.write(value.fingerprint, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiFirstConnection_lift(_ buf: RustBuffer) throws -> FfiFirstConnection {
+    return try FfiConverterTypeFfiFirstConnection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiFirstConnection_lower(_ value: FfiFirstConnection) -> RustBuffer {
+    return FfiConverterTypeFfiFirstConnection.lower(value)
+}
+
+
 public struct FfiGitStatus: Equatable, Hashable {
     public var repoPath: String
     public var branch: String?
@@ -6530,6 +6603,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiFirstConnection: FfiConverterRustBuffer {
+    typealias SwiftType = FfiFirstConnection?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiFirstConnection.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiFirstConnection.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiPgTunnel: FfiConverterRustBuffer {
     typealias SwiftType = FfiPgTunnel?
 
@@ -7393,6 +7490,31 @@ public func rshellDoctorPreview(request: FfiDoctorCollectRequest)throws  -> FfiD
     )
 })
 }
+/**
+ * Whether the host-key store already has an entry for `(host, port)`.
+ */
+public func rshellHostKeyIsKnown(host: String, port: UInt16) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_agent_ssh_fn_func_rshell_host_key_is_known(
+        FfiConverterString.lower(host),
+        FfiConverterUInt16.lower(port),uniffiCallStatus
+    )
+})
+}
+/**
+ * Return and clear the first-connection record for `connection_id`, if the
+ * connect that produced this id pinned a previously unknown host key.
+ * Returns `None` when the host was already trusted.
+ */
+public func rshellTakeFirstConnection(connectionId: String) -> FfiFirstConnection?  {
+    return try!  FfiConverterOptionTypeFfiFirstConnection.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_agent_ssh_fn_func_rshell_take_first_connection(
+        FfiConverterString.lower(connectionId),uniffiCallStatus
+    )
+})
+}
 public func rshellKeychainDelete(kind: FfiCredentialKind, account: String) -> FfiResult  {
     return try!  FfiConverterTypeFfiResult_lift(try! rustCall() {
         uniffiCallStatus in
@@ -8077,6 +8199,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_agent_ssh_checksum_func_rshell_doctor_preview() != 9114) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_agent_ssh_checksum_func_rshell_host_key_is_known() != 46925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_agent_ssh_checksum_func_rshell_take_first_connection() != 31285) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_agent_ssh_checksum_func_rshell_keychain_delete() != 13027) {

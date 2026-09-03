@@ -27,6 +27,10 @@ final class MobileTerminalPreferences: ObservableObject {
     @Published var copyOnSelect: Bool {
         didSet { defaults.set(copyOnSelect, forKey: Keys.copyOnSelect) }
     }
+    /// OSC 52: remote programs may write the local clipboard. Off by default.
+    @Published var allowRemoteClipboardWrite: Bool {
+        didSet { defaults.set(allowRemoteClipboardWrite, forKey: Keys.allowRemoteClipboardWrite) }
+    }
     @Published var accessoryKeyIds: [String] {
         didSet {
             if let data = try? JSONEncoder().encode(accessoryKeyIds) {
@@ -58,6 +62,7 @@ final class MobileTerminalPreferences: ObservableObject {
         self.mouseReporting = defaults.object(forKey: Keys.mouseReporting) as? Bool ?? true
         self.optionAsMeta = defaults.object(forKey: Keys.optionAsMeta) as? Bool ?? true
         self.copyOnSelect = defaults.object(forKey: Keys.copyOnSelect) as? Bool ?? false
+        self.allowRemoteClipboardWrite = defaults.object(forKey: Keys.allowRemoteClipboardWrite) as? Bool ?? false
         if let data = defaults.data(forKey: Keys.accessoryKeyIds),
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             self.accessoryKeyIds = decoded
@@ -74,6 +79,7 @@ final class MobileTerminalPreferences: ObservableObject {
         static let mouseReporting = "mobileTerminalMouseReporting"
         static let optionAsMeta = "mobileTerminalOptionAsMeta"
         static let copyOnSelect = "mobileTerminalCopyOnSelect"
+        static let allowRemoteClipboardWrite = "mobileTerminalAllowRemoteClipboardWrite"
         static let accessoryKeyIds = "mobileTerminalAccessoryKeyIds"
     }
 }

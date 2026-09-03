@@ -12,6 +12,8 @@ struct MobileTerminalView: UIViewRepresentable {
     let mouseReporting: Bool
     let optionAsMeta: Bool
     let copyOnSelect: Bool
+    /// OSC 52 opt-in; see `Coordinator.clipboardCopy`.
+    var allowRemoteClipboardWrite: Bool = false
     var onOutput: ((String) -> Void)?
     var onCurrentDirectoryChange: ((String?) -> Void)?
     @Binding var commandRequest: MobileTerminalViewCommand?
@@ -22,6 +24,7 @@ struct MobileTerminalView: UIViewRepresentable {
 
         term.terminalDelegate = context.coordinator
         context.coordinator.term = term
+        context.coordinator.allowRemoteClipboardWrite = allowRemoteClipboardWrite
 
         MobileTerminalSessionManager.shared.registerSession(
             connectionId: connectionId,
@@ -42,6 +45,7 @@ struct MobileTerminalView: UIViewRepresentable {
 
     func updateUIView(_ uiView: SwiftTerm.TerminalView, context: Context) {
         applyAppearance(to: uiView)
+        context.coordinator.allowRemoteClipboardWrite = allowRemoteClipboardWrite
         context.coordinator.handle(commandRequest, in: uiView)
     }
 
@@ -86,6 +90,10 @@ struct MobileTerminalView: UIViewRepresentable {
         let ptyGeneration: UInt64
         let onCurrentDirectoryChange: ((String?) -> Void)?
         weak var term: SwiftTerm.TerminalView?
+        var allowRemoteClipboardWrite = false
+
+        /// Upper bound for an OSC 52 payload placed on the pasteboard.
+        static let remoteClipboardByteLimit = 64 * 1024
 
         private var lastCols = 0
         private var lastRows = 0
@@ -176,7 +184,15 @@ struct MobileTerminalView: UIViewRepresentable {
         }
 
         func clipboardCopy(source: SwiftTerm.TerminalView, content: Data) {
-            guard let string = String(data: content, encoding: .utf8) else { return }
+            // OSC 52 — the remote side asked to write the local clipboard.
+            // Opt-in only, bounded, and only for the terminal the user is
+            // actually typing into, so a background pane cannot stage a
+            // payload for a later paste.
+            guard allowRemoteClipboardWrite,
+                  content.count <= Self.remoteClipboardByteLimit,
+                  source.isFirstResponder,
+                  let string = String(data: content, encoding: .utf8)
+            else { return }
             UIPasteboard.general.string = string
         }
 

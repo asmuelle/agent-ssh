@@ -292,6 +292,27 @@ final class TerminalTabsStore: ObservableObject {
             }
             connectionId = resolvedId
 
+            // First contact with this host: the core pinned its key on trust.
+            // Show the fingerprint before anything runs over the session, and
+            // undo the pin if the user does not recognise it.
+            if let first = await BridgeManager.shared.takeFirstConnection(connectionId: resolvedId) {
+                let outcome = await HostKeyPrompt.presentFirstConnection(
+                    host: first.host,
+                    port: first.port,
+                    fingerprint: first.fingerprint
+                )
+                if outcome == .cancel {
+                    logger.notice("User rejected first-connection host key for \(first.host, privacy: .private(mask: .hash)):\(first.port)")
+                    BridgeManager.shared.disconnect(connectionId: resolvedId)
+                    try? await BridgeManager.shared.forgetHostKey(host: first.host, port: first.port)
+                    let message = "Disconnected: the host key for \(profile.host):\(profile.port) was not verified."
+                    lastError = message
+                    logConnectFailure(profile: profile, message: message)
+                    if let tabId { markTabError(tabId) }
+                    return
+                }
+            }
+
             // Persist freshly-prompted credentials that just worked.
             if let pw = credential.password {
                 resolver.persistPasswordIfPrompted(

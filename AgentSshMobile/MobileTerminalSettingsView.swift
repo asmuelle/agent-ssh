@@ -54,6 +54,14 @@ struct MobileTerminalSettingsView: View {
                     Toggle("Option as Meta", isOn: $preferences.optionAsMeta)
                 }
 
+                Section {
+                    Toggle("Remote clipboard writes (OSC 52)", isOn: $preferences.allowRemoteClipboardWrite)
+                } header: {
+                    Text("Security")
+                } footer: {
+                    Text("Off by default. When on, the server can replace your clipboard while a terminal is open. A hostile host could stage a command you later paste.")
+                }
+
                 Section("Accessory Bar") {
                     ForEach(MobileTerminalAccessoryKeyDefinition.all) { definition in
                         Toggle(definition.title, isOn: accessoryKeyBinding(definition.id))

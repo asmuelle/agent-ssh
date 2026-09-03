@@ -55,6 +55,10 @@ struct TerminalView: NSViewRepresentable {
     @AppStorage("terminalMouseReporting") private var terminalMouseReporting = true
     @AppStorage("terminalOptionAsMeta") private var terminalOptionAsMeta = true
     @AppStorage("terminalCopyOnSelect") private var terminalCopyOnSelect = false
+    /// OSC 52 lets the *remote* side write the local clipboard. Off by
+    /// default: a hostile host, MOTD, or shared tmux can stage a payload the
+    /// user later pastes into a shell. See `Coordinator.clipboardCopy`.
+    @AppStorage("terminalAllowRemoteClipboardWrite") private var terminalAllowRemoteClipboardWrite = false
 
     private var effectiveTheme: String { themeOverride ?? globalTheme }
 
@@ -138,6 +142,7 @@ struct TerminalView: NSViewRepresentable {
         term.allowMouseReporting = terminalMouseReporting
         term.optionAsMetaKey = terminalOptionAsMeta
         (term as? AgentSshTerminalView)?.copyOnSelect = terminalCopyOnSelect
+        (term as? AgentSshTerminalView)?.allowRemoteClipboardWrite = terminalAllowRemoteClipboardWrite
     }
 
     func makeCoordinator() -> Coordinator {
@@ -229,12 +234,26 @@ struct TerminalView: NSViewRepresentable {
         }
 
         func clipboardCopy(source: SwiftTerm.TerminalView, content: Data) {
-            // OSC 52 — application requested data on clipboard.
-            guard let str = String(data: content, encoding: .utf8) else { return }
+            // OSC 52 — the remote application asked to write the clipboard.
+            // Only honoured when the user opted in, the payload is small, and
+            // this terminal is the focused view of the key window, so output
+            // scrolling past in a background tab can never plant a payload.
+            guard (source as? AgentSshTerminalView)?.allowRemoteClipboardWrite == true,
+                  content.count <= Self.remoteClipboardByteLimit,
+                  let window = source.window,
+                  window.isKeyWindow,
+                  window.firstResponder === source,
+                  let str = String(data: content, encoding: .utf8)
+            else { return }
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(str, forType: .string)
         }
+
+        /// Upper bound for an OSC 52 payload we are willing to place on the
+        /// pasteboard. Legitimate uses (copying a line or a short block) are
+        /// far below this; anything larger is not something a user meant.
+        static let remoteClipboardByteLimit = 64 * 1024
 
         func rangeChanged(source: SwiftTerm.TerminalView, startY: Int, endY: Int) {
             // Visual updates for accessibility — no-op for now.
@@ -245,6 +264,7 @@ struct TerminalView: NSViewRepresentable {
 
 private final class AgentSshTerminalView: SwiftTerm.TerminalView {
     var copyOnSelect = false
+    var allowRemoteClipboardWrite = false
 
     override func selectionChanged(source: SwiftTerm.Terminal) {
         super.selectionChanged(source: source)

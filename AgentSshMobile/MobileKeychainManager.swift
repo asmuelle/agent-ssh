@@ -152,9 +152,15 @@ final class MobileKeychainManager: ObservableObject {
         var error: NSError?
 
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            vaultUnlocked = true
-            unlockedUntil = Date().addingTimeInterval(60)
-            return true
+            // Fail closed. Without a device passcode there is no way to obtain
+            // an informed unlock, and silently granting a trust window here
+            // would hand stored SSH passwords to anyone holding the iPad.
+            // This mirrors the macOS `MCPSecurityGate` policy.
+            vaultUnlocked = false
+            unlockedUntil = nil
+            lastError = "Set a device passcode to unlock saved credentials. "
+                + (error?.localizedDescription ?? "Device authentication is unavailable.")
+            return false
         }
 
         do {

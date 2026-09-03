@@ -341,7 +341,9 @@ mod connection;
 mod sftp;
 pub(crate) use sftp::*;
 
+mod host_keys_ffi;
 mod monitor_ffi;
+pub use host_keys_ffi::*;
 
 mod postgres;
 pub(crate) use postgres::*;

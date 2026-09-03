@@ -33,6 +33,10 @@ enum MobileSessionStatus: Equatable {
 @MainActor
 final class MobileSessionStore: ObservableObject {
     @Published private var statuses: [String: MobileSessionStatus] = [:]
+    /// Set when a connect pinned a host key the store had never seen. The
+    /// root view presents it; `confirmPendingHostKey` / `rejectPendingHostKey`
+    /// resolve it.
+    @Published private(set) var pendingHostKeyConfirmation: MobilePendingHostKeyConfirmation?
 
     func status(for profile: MobileConnectionProfile) -> MobileSessionStatus {
         statuses[profile.id] ?? .disconnected
@@ -93,22 +97,23 @@ final class MobileSessionStore: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 switch result {
-                case .success(let connectionId):
-                    self.statuses[profile.id] = .connected(connectionId: connectionId)
-                    MobileWidgetSnapshotCenter.shared.publish(
-                        profile: profile,
-                        status: .connected(connectionId: connectionId),
-                        connectionId: connectionId
-                    )
-                    MobileActivityLogStore.shared.record(
-                        title: "Connected",
-                        detail: "\(profile.username)@\(profile.host):\(profile.port)",
-                        profileId: profile.id,
-                        connectionId: connectionId,
-                        systemImage: profile.kind.supportsTerminal ? "terminal" : "folder",
-                        severity: .ok
-                    )
-                    onSuccess()
+                case .success(let outcome):
+                    if let firstConnection = outcome.firstConnection {
+                        // The core pinned a never-seen host key. Hold the
+                        // session in `.connecting` until the user has compared
+                        // the fingerprint; nothing runs over it before then.
+                        self.pendingHostKeyConfirmation = MobilePendingHostKeyConfirmation(
+                            profile: profile,
+                            connectionId: outcome.connectionId,
+                            host: firstConnection.host,
+                            port: firstConnection.port,
+                            fingerprint: firstConnection.fingerprint,
+                            onSuccess: onSuccess,
+                            onFailure: onFailure
+                        )
+                        return
+                    }
+                    self.finishConnect(profile: profile, connectionId: outcome.connectionId, onSuccess: onSuccess)
                 case .failure(let error):
                     let message = Self.describeConnectFailure(error, profile: profile)
                     self.statuses[profile.id] = .failed(message)
@@ -124,6 +129,66 @@ final class MobileSessionStore: ObservableObject {
                 }
             }
         }
+    }
+
+    private func finishConnect(
+        profile: MobileConnectionProfile,
+        connectionId: String,
+        onSuccess: () -> Void
+    ) {
+        statuses[profile.id] = .connected(connectionId: connectionId)
+        MobileWidgetSnapshotCenter.shared.publish(
+            profile: profile,
+            status: .connected(connectionId: connectionId),
+            connectionId: connectionId
+        )
+        MobileActivityLogStore.shared.record(
+            title: "Connected",
+            detail: "\(profile.username)@\(profile.host):\(profile.port)",
+            profileId: profile.id,
+            connectionId: connectionId,
+            systemImage: profile.kind.supportsTerminal ? "terminal" : "folder",
+            severity: .ok
+        )
+        onSuccess()
+    }
+
+    /// User compared the first-connection fingerprint and accepted it.
+    func confirmPendingHostKey() {
+        guard let pending = pendingHostKeyConfirmation else { return }
+        pendingHostKeyConfirmation = nil
+        finishConnect(profile: pending.profile, connectionId: pending.connectionId, onSuccess: pending.onSuccess)
+    }
+
+    /// User did not recognise the fingerprint: tear the session down and
+    /// drop the pinned key so the next attempt prompts again.
+    func rejectPendingHostKey() {
+        guard let pending = pendingHostKeyConfirmation else { return }
+        pendingHostKeyConfirmation = nil
+        let message = "Disconnected: the host key for \(pending.profile.host):\(pending.profile.port) was not verified."
+        statuses[pending.profile.id] = .failed(message)
+        MobileWidgetSnapshotCenter.shared.publish(
+            profile: pending.profile,
+            status: .failed(message),
+            connectionId: pending.connectionId,
+            detail: message
+        )
+        MobileActivityLogStore.shared.record(
+            title: "Host key rejected",
+            detail: "\(pending.profile.name): \(pending.fingerprint)",
+            profileId: pending.profile.id,
+            connectionId: pending.connectionId,
+            systemImage: "exclamationmark.shield",
+            severity: .warning
+        )
+        let connectionId = pending.connectionId
+        let host = pending.host
+        let port = pending.port
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = rshellDisconnect(connectionId: connectionId)
+            _ = rshellForgetHostKey(host: host, port: port)
+        }
+        pending.onFailure?(message)
     }
 
     func disconnect(profile: MobileConnectionProfile) {
@@ -221,7 +286,7 @@ final class MobileSessionStore: ObservableObject {
         passphrase: String?,
         networkOptions: NetworkConnectionOptions,
         sessionId: String,
-        completion: @escaping (Result<String, Error>) -> Void
+        completion: @escaping (Result<MobileConnectOutcome, Error>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
             defer {
@@ -253,7 +318,11 @@ final class MobileSessionStore: ObservableObject {
             )
 
             do {
-                completion(.success(try rshellConnect(config: config)))
+                let connectionId = try rshellConnect(config: config)
+                completion(.success(MobileConnectOutcome(
+                    connectionId: connectionId,
+                    firstConnection: rshellTakeFirstConnection(connectionId: connectionId)
+                )))
             } catch {
                 completion(.failure(error))
             }
@@ -269,6 +338,27 @@ final class MobileSessionStore: ObservableObject {
             completion(result.success, result.error)
         }
     }
+}
+
+/// Result of a successful `rshellConnect`, plus whether that connect was the
+/// first contact with the host (in which case the key was auto-pinned).
+struct MobileConnectOutcome {
+    let connectionId: String
+    let firstConnection: FfiFirstConnection?
+}
+
+/// A live session that is waiting for the user to verify the host key
+/// fingerprint before it is reported as connected.
+struct MobilePendingHostKeyConfirmation: Identifiable {
+    let profile: MobileConnectionProfile
+    let connectionId: String
+    let host: String
+    let port: UInt16
+    let fingerprint: String
+    let onSuccess: () -> Void
+    let onFailure: ((String) -> Void)?
+
+    var id: String { connectionId }
 }
 
 struct MobileSessionDiagnostics: Codable {
