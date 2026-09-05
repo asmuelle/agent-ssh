@@ -314,7 +314,10 @@ final class MobileSSHKeyVault {
         let record = try readRecord(id: id)
         let privateKey = try decrypt(record.encryptedKey)
         let directory = try materializedDirectory()
-        let url = directory.appendingPathComponent("\(id).key", isDirectory: false)
+        // Unique per materialization: two concurrent connections on the same
+        // identity each get their own file, so one connection's cleanup can't
+        // remove the key before the other has read it.
+        let url = directory.appendingPathComponent("\(id)-\(UUID().uuidString).key", isDirectory: false)
         try privateKey.write(to: url, options: [.atomic])
         try applyProtection(to: url)
         return url

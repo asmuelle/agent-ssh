@@ -109,9 +109,14 @@ public class MCPSecurityGate {
 public enum ShellCommandClassifier {
     /// Commands whose process behavior is read-only for all supported argument
     /// shapes. Anything outside this allowlist requires local approval.
+    ///
+    /// `sort` is deliberately absent: it writes files via `-o`, `--output`,
+    /// attached forms (`-ofile`, `-uo file`) and `-T`, and runs a helper via
+    /// `--compress-program`. A flag denylist could not enumerate those safely,
+    /// so it requires approval until a flag *allowlist* is implemented.
     static let readOnlyCommands: Set<String> = [
         "cat", "cut", "date", "df", "du", "echo", "free", "grep", "head",
-        "docker", "git", "hostname", "id", "ls", "lsof", "podman", "printf", "ps", "pwd", "sort",
+        "docker", "git", "hostname", "id", "ls", "lsof", "podman", "printf", "ps", "pwd",
         "stat", "tail", "uname", "uniq", "uptime", "wc", "who", "whoami",
     ]
     /// Commands that create, destroy, move, or mutate state on the host.
@@ -318,10 +323,6 @@ public enum ShellCommandClassifier {
             ]
             guard rest.allSatisfy({ readOnlyFlags.contains($0) }) else {
                 return .modifying(reason: "Execute hostname operation that may change the system hostname")
-            }
-        case "sort":
-            if rest.contains(where: { $0 == "-o" || $0 == "--output" || $0.hasPrefix("--output=") }) {
-                return .modifying(reason: "Execute sort operation that writes an output file")
             }
         default:
             break
