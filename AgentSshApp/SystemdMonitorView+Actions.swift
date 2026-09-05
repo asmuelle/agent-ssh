@@ -12,28 +12,28 @@ extension SystemdMonitorView {
         let fragmentPath = unit.id == selectedUnit?.id ? unitProperties["FragmentPath", default: ""] : ""
 
         Button {
-            pendingAction = UnitAction(verb: "start", unit: unit.name)
+            requestAction(.start, unit: unit.name)
         } label: {
             Label("Start", systemImage: "play.fill")
         }
         .disabled(unit.isActive || unit.isTransitional || !unit.isLoaded)
 
         Button(role: .destructive) {
-            pendingAction = UnitAction(verb: "stop", unit: unit.name)
+            requestAction(.stop, unit: unit.name)
         } label: {
             Label("Stop", systemImage: "stop.fill")
         }
         .disabled(!unit.isActive && !unit.isTransitional)
 
         Button(role: .destructive) {
-            pendingAction = UnitAction(verb: "restart", unit: unit.name)
+            requestAction(.restart, unit: unit.name)
         } label: {
             Label("Restart", systemImage: "arrow.clockwise")
         }
         .disabled(!unit.isLoaded)
 
         Button {
-            pendingAction = UnitAction(verb: "reload", unit: unit.name)
+            requestAction(.reload, unit: unit.name)
         } label: {
             Label("Reload", systemImage: "arrow.triangle.2.circlepath")
         }
@@ -42,14 +42,14 @@ extension SystemdMonitorView {
         Divider()
 
         Button {
-            pendingAction = UnitAction(verb: "enable", unit: unit.name)
+            requestAction(.enable, unit: unit.name)
         } label: {
             Label("Enable", systemImage: "checkmark.circle")
         }
         .disabled(unit.isEnabled || unit.unitFileState.lowercased() == "static" || unit.unitFileState.lowercased() == "generated")
 
         Button(role: .destructive) {
-            pendingAction = UnitAction(verb: "disable", unit: unit.name)
+            requestAction(.disable, unit: unit.name)
         } label: {
             Label("Disable", systemImage: "slash.circle")
         }
@@ -312,15 +312,34 @@ extension SystemdMonitorView {
         }
     }
 
+    /// Build the action the user asked for, or say why it cannot be run.
+    ///
+    /// A unit name comes from the remote host, so rendering can refuse
+    /// it. A refusal has to be visible — silently doing nothing would
+    /// leave the user pressing a button that appears broken.
+    func requestAction(_ verb: SystemdVerb, unit: String) {
+        do {
+            pendingAction = try UnitAction(verb: verb, unit: unit)
+        } catch let templateError as CommandTemplateError {
+            error = templateError.explanation
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     func run(_ action: UnitAction) async {
         guard let connectionId else { return }
         pendingAction = nil
-        let script = "systemctl \(action.verb) \(RemoteCommandRunner.shellQuote(action.unit)) 2>&1"
+        // `runShell` already wraps the script in `( … ) 2>&1`, so stderr
+        // is merged without the template carrying a redirection.
         do {
-            _ = try await RemoteCommandRunner.runChecked(connectionId: connectionId, script: script)
+            _ = try await RemoteCommandRunner.runChecked(
+                connectionId: connectionId,
+                script: action.rendered.command
+            )
             await loadUnits()
         } catch {
-            logger.error("systemctl \(action.verb, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("systemctl \(action.verb.rawValue, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             self.error = error.localizedDescription
         }
     }

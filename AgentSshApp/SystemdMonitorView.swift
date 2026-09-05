@@ -410,10 +410,23 @@ struct SystemdMonitorView: View {
 
     struct UnitAction: Identifiable {
         let id = UUID()
-        let verb: String
+        let verb: SystemdVerb
         let unit: String
-        var destructive: Bool {
-            ["stop", "restart", "kill", "disable", "mask"].contains(verb)
+        /// Rendered when the user asks, shown in the confirmation, and
+        /// executed unchanged — no re-derivation between consent and
+        /// execution, so the dialog cannot describe a different command
+        /// than the one that runs.
+        let rendered: RenderedCommand
+
+        var destructive: Bool { verb.destructive }
+
+        init(verb: SystemdVerb, unit: String) throws {
+            self.verb = verb
+            self.unit = unit
+            self.rendered = try CommandTemplateRenderer.render(
+                templateId: verb.templateId,
+                values: ["unit": unit]
+            )
         }
     }
 
@@ -459,12 +472,14 @@ struct SystemdMonitorView: View {
             ),
             presenting: pendingAction
         ) { action in
-            Button("\(action.verb) \(action.unit)", role: action.destructive ? .destructive : nil) {
+            Button("\(action.verb.rawValue) \(action.unit)", role: action.destructive ? .destructive : nil) {
                 Task { await run(action) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { action in
-            Text("Run systemctl \(action.verb) on \(connectionLabel)?")
+            // The literal command, not a description of it: consent is
+            // only meaningful if it is consent to what will actually run.
+            Text("Run on \(connectionLabel):\n\n\(action.rendered.command)")
         }
     }
 

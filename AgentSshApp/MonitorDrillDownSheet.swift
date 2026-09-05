@@ -188,7 +188,7 @@ struct MonitorDrillDownSheet: View {
         if case .systemdService(let unit) = drillDown {
             HStack(spacing: 6) {
                 Button {
-                    Task { await runSystemdAction("start", unit: unit) }
+                    Task { await runSystemdAction(.start, unit: unit) }
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "play.fill")
@@ -201,7 +201,7 @@ struct MonitorDrillDownSheet: View {
                 .help("Start service")
 
                 Button {
-                    Task { await runSystemdAction("stop", unit: unit) }
+                    Task { await runSystemdAction(.stop, unit: unit) }
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "stop.fill")
@@ -214,7 +214,7 @@ struct MonitorDrillDownSheet: View {
                 .help("Stop service")
 
                 Button {
-                    Task { await runSystemdAction("restart", unit: unit) }
+                    Task { await runSystemdAction(.restart, unit: unit) }
                 } label: {
                     Image(systemName: "arrow.triangle.2.circlepath")
                 }
@@ -224,7 +224,7 @@ struct MonitorDrillDownSheet: View {
                 .help("Restart service")
 
                 Button {
-                    Task { await runSystemdAction("reload", unit: unit) }
+                    Task { await runSystemdAction(.reload, unit: unit) }
                 } label: {
                     Image(systemName: "arrow.down.doc")
                 }
@@ -280,9 +280,25 @@ struct MonitorDrillDownSheet: View {
     }
 
     @MainActor
-    func runSystemdAction(_ verb: String, unit: String) async {
+    func runSystemdAction(_ verb: SystemdVerb, unit: String) async {
         guard let connectionId else {
             error = "No SSH connection selected."
+            return
+        }
+
+        // The unit name came from the host, so rendering may refuse it.
+        // Refusing loudly beats running something unvetted.
+        let rendered: RenderedCommand
+        do {
+            rendered = try CommandTemplateRenderer.render(
+                templateId: verb.templateId,
+                values: ["unit": unit]
+            )
+        } catch let templateError as CommandTemplateError {
+            error = templateError.explanation
+            return
+        } catch {
+            self.error = error.localizedDescription
             return
         }
 
@@ -291,13 +307,14 @@ struct MonitorDrillDownSheet: View {
         notice = nil
         defer { isLoading = false }
 
-        let quotedUnit = RemoteCommandRunner.shellQuote(unit)
+        // The command itself is the vetted, validated render; only the
+        // surrounding preflight and privilege retry are author-written.
         let script = """
         command -v systemctl >/dev/null 2>&1 || { echo "systemctl is not available on this host."; exit 127; }
-        systemctl \(verb) \(quotedUnit) 2>&1
+        \(rendered.command)
         status=$?
         if [ "$status" -ne 0 ]; then
-          sudo -n systemctl \(verb) \(quotedUnit) 2>&1
+          sudo -n \(rendered.command)
           status=$?
         fi
         exit "$status"
@@ -307,7 +324,7 @@ struct MonitorDrillDownSheet: View {
             let result = try await RemoteCommandRunner.runShell(connectionId: connectionId, script: script)
             rawOutput = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
             if result.succeeded {
-                let message = "\(verb.capitalized) completed for \(unit)."
+                let message = "\(verb.rawValue.capitalized) completed for \(unit)."
                 ActivityLogStore.shared.record(
                     title: "Service \(verb)",
                     detail: unit,
@@ -325,7 +342,7 @@ struct MonitorDrillDownSheet: View {
                     icon: "exclamationmark.triangle.fill",
                     severity: .critical
                 )
-                error = "\(verb.capitalized) exited with code \(result.exitCode)."
+                error = "\(verb.rawValue.capitalized) exited with code \(result.exitCode)."
             }
         } catch {
             self.error = error.localizedDescription

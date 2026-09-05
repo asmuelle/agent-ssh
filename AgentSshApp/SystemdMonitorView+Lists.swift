@@ -262,7 +262,7 @@ extension SystemdMonitorView {
     func unitInlineActions(_ unit: SystemdUnit) -> some View {
         HStack(spacing: 4) {
             Button {
-                pendingAction = UnitAction(verb: "start", unit: unit.name)
+                requestAction(.start, unit: unit.name)
             } label: {
                 Image(systemName: "play.fill")
             }
@@ -270,7 +270,7 @@ extension SystemdMonitorView {
             .help("Start \(unit.name)")
 
             Button {
-                pendingAction = UnitAction(verb: "stop", unit: unit.name)
+                requestAction(.stop, unit: unit.name)
             } label: {
                 Image(systemName: "stop.fill")
             }
@@ -278,7 +278,7 @@ extension SystemdMonitorView {
             .help("Stop \(unit.name)")
 
             Button {
-                pendingAction = UnitAction(verb: "restart", unit: unit.name)
+                requestAction(.restart, unit: unit.name)
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
