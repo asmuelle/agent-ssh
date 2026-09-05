@@ -21,7 +21,19 @@ path = "uniffi-bindgen.rs"
 
 [dependencies]
 # Full SSH/SFTP/FTP + Postgres client — keeps the default feature set.
-ssh-commander-core = "0.2.3"
+# `ftp` is on by default upstream and pulls in suppaftp 6, which
+# RUSTSEC-2026-0271 reports as vulnerable to CRLF command injection
+# on the FTP control channel. Nothing here calls it — there is no FTP
+# module use and no FTP FFI export — so the honest fix is to stop
+# compiling it rather than to suppress the advisory. The remaining
+# features are upstream's defaults minus `ftp`.
+ssh-commander-core = { version = "0.2.3", default-features = false, features = [
+    "ssh",
+    "sftp",
+    "desktop",
+    "tools",
+    "postgres",
+] }
 ssh-commander-pg-parquet = "0.2.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
