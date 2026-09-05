@@ -242,13 +242,17 @@ fn spawn_pty_output_forwarder(connection_id: String, generation: u64, bridge: &M
             }
         }
 
-        // The PTY for this connection is gone. This covers both clean
-        // teardown (close_pty_connection cancels the token) and dirty
-        // disconnects (network drop, server kill — `output_rx.recv()`
-        // returns None when the SSH reader task exits). The Swift side
-        // observes `connection_status: disconnected` and lights up the
-        // reconnect affordance. Idempotent vs. the explicit publish in
-        // rshell_disconnect — TerminalTabsStore.setStatus dedupes.
+        // Cancellation means deliberate teardown: `rshell_disconnect`
+        // publishes its own Disconnected, and a PTY replacement (open_pty
+        // on a live connection cancels the old session) must not report
+        // the healthy new session as dead. `ConnectionStatus` carries no
+        // generation, so a stale publish here would flip the tab to
+        // disconnected after the replacement already went connected.
+        // Only a dirty exit (network drop, server kill — `output_rx.recv()`
+        // returned None without cancellation) publishes.
+        if cancel.is_cancelled() {
+            return;
+        }
         let _ = tx.send(ssh_commander_core::event_bus::CoreEvent::ConnectionStatus {
             connection_id: connection_id.clone(),
             status: ssh_commander_core::event_bus::ConnectionStatus::Disconnected,

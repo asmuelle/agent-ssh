@@ -94,7 +94,18 @@ if [[ ! -f "$latest_dmg" ]]; then
 fi
 
 mv "$latest_dmg" "$release_dmg"
+if [[ "$notarize" == "true" ]]; then
+    just mac-notarize "$release_dmg"
+    xcrun stapler validate "$release_dmg"
+    spctl --assess --type open --context context:primary-signature --verbose=2 "$release_dmg"
+else
+    echo "Skipping notarization. This artifact is not ready for public distribution. Pass 'true' to notarize it."
+fi
+
+# Stapling attaches the notarization ticket to the DMG, so hash only the
+# final artifact — and re-verify the file the checksum describes.
 shasum -a 256 "$release_dmg" > "${release_dmg}.sha256"
+shasum -a 256 --check "${release_dmg}.sha256"
 
 cat > "${release_dir}/release-notes.md" <<EOF
 # ${app_name} ${version}
@@ -115,14 +126,6 @@ Generated: ${stamp}
 - DMG: $(basename "$release_dmg")
 - SHA-256: $(cut -d ' ' -f 1 "${release_dmg}.sha256")
 EOF
-
-if [[ "$notarize" == "true" ]]; then
-    just mac-notarize "$release_dmg"
-    xcrun stapler validate "$release_dmg"
-    spctl --assess --type open --context context:primary-signature --verbose=2 "$release_dmg"
-else
-    echo "Skipping notarization. This artifact is not ready for public distribution. Pass 'true' to notarize it."
-fi
 
 if [[ "$notarize" == "true" && -n "${MAC_RELEASE_BASE_URL:-}" ]]; then
     # generate_appcast signs each DMG with the EdDSA private key from the
