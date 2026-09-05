@@ -15,6 +15,27 @@ struct MidnightSSHMobileApp: App {
             MobilePrivacyGateView {
                 MobileContentView()
             }
+                .alert(
+                    item: Binding(
+                        get: { sessionStore.pendingHostKeyConfirmation },
+                        // Dismissal without a button press (e.g. scene teardown)
+                        // must not leave an unverified session live.
+                        set: { if $0 == nil { sessionStore.rejectPendingHostKey() } }
+                    )
+                ) { pending in
+                    Alert(
+                        title: Text("Verify host key for \(pending.host)"),
+                        message: Text(
+                            "First connection to \(pending.host):\(pending.port). Compare this fingerprint with the one published by the server's administrator before continuing.\n\n\(pending.fingerprint)"
+                        ),
+                        primaryButton: .cancel(Text("Disconnect")) {
+                            sessionStore.rejectPendingHostKey()
+                        },
+                        secondaryButton: .default(Text("Trust and Continue")) {
+                            sessionStore.confirmPendingHostKey()
+                        }
+                    )
+                }
                 .environmentObject(bridgeManager)
                 .environmentObject(keychainManager)
                 .environmentObject(connectionStore)

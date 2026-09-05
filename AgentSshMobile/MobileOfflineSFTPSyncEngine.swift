@@ -38,6 +38,11 @@ final class MobileOfflineSFTPSyncEngine {
                 integrationStore: integrationStore
             )
             try FileManager.default.createDirectory(at: cacheRoot, withIntermediateDirectories: true)
+            // Remote files can be anything the user chose to take offline,
+            // including configs with credentials. Protect the whole tree and
+            // keep it out of iCloud/Finder backups, matching the key vault.
+            try Self.protectCacheLocation(cacheRoot.deletingLastPathComponent())
+            try Self.protectCacheLocation(cacheRoot)
 
             var itemCount = 0
             var byteCount: UInt64 = 0
@@ -134,6 +139,7 @@ final class MobileOfflineSFTPSyncEngine {
             switch entry.kind {
             case .directory:
                 try FileManager.default.createDirectory(at: localURL, withIntermediateDirectories: true)
+                try Self.protectCacheLocation(localURL)
                 records.append(
                     OfflineSFTPCacheItemRecord(
                         folderId: folderId,
@@ -170,6 +176,7 @@ final class MobileOfflineSFTPSyncEngine {
                     expectedSize: entry.size
                 )
                 byteCount += bytes
+                try Self.protectCacheLocation(localURL)
                 records.append(
                     OfflineSFTPCacheItemRecord(
                         folderId: folderId,
@@ -258,6 +265,21 @@ final class MobileOfflineSFTPSyncEngine {
             .reduce(cacheRoot) { partial, component in
                 partial.appendingPathComponent(safeCachePathComponent(String(component)), isDirectory: isDirectory)
             }
+    }
+
+    /// `completeUnlessOpen` rather than `complete`: background sync must be
+    /// able to create files while the device is locked, but nothing may
+    /// *read* them until it is unlocked. Directories pass the class on to
+    /// files the Rust downloader creates underneath them.
+    static func protectCacheLocation(_ url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUnlessOpen],
+            ofItemAtPath: url.path
+        )
+        var resourceURL = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try resourceURL.setResourceValues(values)
     }
 
     private func safeCachePathComponent(_ component: String) -> String {

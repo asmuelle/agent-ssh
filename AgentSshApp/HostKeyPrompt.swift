@@ -71,6 +71,40 @@ enum HostKeyPrompt {
         return .trust
     }
 
+    /// Show the fingerprint of a host key that this connect trusted for the
+    /// first time. The SSH core pins unknown keys silently; this is the
+    /// user's chance to compare against the server's known fingerprint the
+    /// way OpenSSH asks before the first connect. `.cancel` means the caller
+    /// must disconnect and forget the entry.
+    @MainActor
+    static func presentFirstConnection(
+        host: String,
+        port: UInt16,
+        fingerprint: String
+    ) async -> Outcome {
+        let alert = NSAlert()
+        alert.messageText = "Verify host key for \(host)"
+        alert.alertStyle = .warning
+        alert.informativeText = [
+            "This is the first connection to \(host):\(port). Its host key is not yet known.",
+            "",
+            "Fingerprint: \(fingerprint)",
+            "",
+            "Compare this with the fingerprint published by the server's administrator (for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the host). Only continue if it matches.",
+        ].joined(separator: "\n")
+        let trustButton = alert.addButton(withTitle: "Trust and Continue")
+        let cancelButton = alert.addButton(withTitle: "Disconnect")
+        // Same Return-key hardening as the mismatch prompt: mashing Enter
+        // must not silently pin an unverified key.
+        trustButton.keyEquivalent = ""
+        cancelButton.keyEquivalent = "\r"
+        cancelButton.keyEquivalentModifierMask = []
+        alert.window.defaultButtonCell = nil
+
+        let response = alert.runModal()
+        return response == .alertFirstButtonReturn ? .trust : .cancel
+    }
+
     // MARK: - Detail parsing
 
     private struct ParsedDetail {

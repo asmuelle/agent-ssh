@@ -320,6 +320,16 @@ RustBuffer uniffi_agent_ssh_fn_func_rshell_doctor_collect(RustBuffer request, Ru
 RustBuffer uniffi_agent_ssh_fn_func_rshell_doctor_preview(RustBuffer request, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_HOST_KEY_IS_KNOWN
+#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_HOST_KEY_IS_KNOWN
+int8_t uniffi_agent_ssh_fn_func_rshell_host_key_is_known(RustBuffer host, uint16_t port, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_TAKE_FIRST_CONNECTION
+#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_TAKE_FIRST_CONNECTION
+RustBuffer uniffi_agent_ssh_fn_func_rshell_take_first_connection(RustBuffer connection_id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_KEYCHAIN_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_KEYCHAIN_DELETE
 RustBuffer uniffi_agent_ssh_fn_func_rshell_keychain_delete(RustBuffer kind, RustBuffer account, RustCallStatus *_Nonnull out_status
@@ -904,6 +914,18 @@ uint16_t uniffi_agent_ssh_checksum_func_rshell_doctor_collect(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_DOCTOR_PREVIEW
 #define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_DOCTOR_PREVIEW
 uint16_t uniffi_agent_ssh_checksum_func_rshell_doctor_preview(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_HOST_KEY_IS_KNOWN
+#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_HOST_KEY_IS_KNOWN
+uint16_t uniffi_agent_ssh_checksum_func_rshell_host_key_is_known(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_TAKE_FIRST_CONNECTION
+#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_TAKE_FIRST_CONNECTION
+uint16_t uniffi_agent_ssh_checksum_func_rshell_take_first_connection(void
     
 );
 #endif

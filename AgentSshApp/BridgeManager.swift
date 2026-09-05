@@ -389,6 +389,16 @@ final class BridgeManager {
         }
     }
 
+    /// If the connect that produced `connectionId` pinned a host key the
+    /// store had never seen, return it (once) so the UI can ask the user to
+    /// verify the fingerprint. `nil` means the host was already trusted.
+    func takeFirstConnection(connectionId: String) async -> FfiFirstConnection? {
+        let record = try? await runOnUtilityQueue {
+            rshellTakeFirstConnection(connectionId: connectionId)
+        }
+        return record ?? nil
+    }
+
     func forgetHostKey(host: String, port: UInt16) async throws {
         try await runOnUtilityQueue {
             let result = rshellForgetHostKey(host: host, port: port)

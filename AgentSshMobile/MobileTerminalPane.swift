@@ -70,6 +70,7 @@ struct MobileTerminalPane: View {
                             mouseReporting: terminalPreferences.mouseReporting,
                             optionAsMeta: terminalPreferences.optionAsMeta,
                             copyOnSelect: terminalPreferences.copyOnSelect,
+                            allowRemoteClipboardWrite: terminalPreferences.allowRemoteClipboardWrite,
                             onOutput: handleTerminalOutput,
                             onCurrentDirectoryChange: { currentDirectory = $0 },
                             commandRequest: $terminalViewCommand

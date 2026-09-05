@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("terminalCursorStyle") private var terminalCursorStyle = "blinkBlock"
     @AppStorage("terminalMouseReporting") private var terminalMouseReporting = true
     @AppStorage("terminalOptionAsMeta") private var terminalOptionAsMeta = true
+    @AppStorage("terminalAllowRemoteClipboardWrite") private var terminalAllowRemoteClipboardWrite = false
     @AppStorage("terminalCopyOnSelect") private var terminalCopyOnSelect = false
     @AppStorage("SUEnableAutomaticChecks") private var automaticUpdateChecks = true
     @AppStorage("SUAllowsAutomaticUpdates") private var automaticUpdateInstall = true
@@ -221,6 +222,14 @@ struct SettingsView: View {
                 Toggle("Use Option as Meta", isOn: $terminalOptionAsMeta)
                 Toggle("Mouse reporting", isOn: $terminalMouseReporting)
                 Toggle("Copy on select", isOn: $terminalCopyOnSelect)
+            }
+
+            Section {
+                Toggle("Let remote programs write the clipboard (OSC 52)", isOn: $terminalAllowRemoteClipboardWrite)
+            } header: {
+                Text("Security")
+            } footer: {
+                Text("Off by default. When on, output from the server can replace your clipboard while the terminal is focused. A hostile host could stage a command you later paste.")
             }
         }
         .formStyle(.grouped)

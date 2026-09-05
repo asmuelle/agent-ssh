@@ -10,7 +10,38 @@ final class MobileSFTPBridge {
         autoreleaseFrequency: .workItem
     )
 
-    private init() {}
+    private init() {
+        Self.sweepStaleTemporaryFiles()
+    }
+
+    /// Editor staging files are removed by `defer` on the happy path. If the
+    /// app is killed mid-edit they survive, so clear the directory on launch.
+    private static func sweepStaleTemporaryFiles() {
+        let directory = temporaryDirectory()
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) else { return }
+        for entry in entries {
+            try? FileManager.default.removeItem(at: entry)
+        }
+    }
+
+    private static func temporaryDirectory() -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-ssh-mobile-sftp", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            // Remote file contents may be secrets; unreadable while locked.
+            attributes: [.protectionKey: FileProtectionType.complete]
+        )
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: directory.path
+        )
+        return directory
+    }
 
     func listDir(connectionId: String, path: String) async throws -> [FfiFileEntry] {
         try await run {
@@ -124,6 +155,12 @@ final class MobileSFTPBridge {
             expectedSize: expectedSize
         )
 
+        // The Rust downloader inherits the directory's protection class, but
+        // pin it on the file too so a future path change cannot regress it.
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: tempURL.path
+        )
         let data = try Data(contentsOf: tempURL)
         if UInt64(data.count) > maxBytes {
             throw MobileSFTPBridgeError.fileTooLarge(fileName: fileName, size: UInt64(data.count))
@@ -149,7 +186,7 @@ final class MobileSFTPBridge {
         guard let data = content.data(using: .utf8) else {
             throw MobileSFTPBridgeError.unsupportedEncoding(fileName: fileName)
         }
-        try data.write(to: tempURL, options: .atomic)
+        try data.write(to: tempURL, options: [.atomic, .completeFileProtection])
 
         _ = try await upload(
             connectionId: connectionId,
@@ -187,12 +224,7 @@ final class MobileSFTPBridge {
     }
 
     private func temporaryURL(fileName: String) -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-ssh-mobile-sftp", isDirectory: true)
-        try? FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
+        let directory = Self.temporaryDirectory()
 
         let sanitized = fileName
             .replacingOccurrences(of: "/", with: "_")

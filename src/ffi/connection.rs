@@ -43,6 +43,11 @@ pub fn rshell_connect(config: FfiConnectConfig) -> Result<String, ConnectError> 
 
     let cm = bridge.connection_manager.clone();
     let conn_id = connection_id.clone();
+    let (target_host, target_port) = (ssh_config.host.clone(), ssh_config.port);
+    // Snapshot before the handshake: the core trusts an unknown key on first
+    // use, so "was it known before?" is the only way to tell the UI that this
+    // connect pinned a brand-new key that the user has not yet verified.
+    let known_before = host_key_is_known(&bridge.connection_manager, &target_host, target_port);
 
     bridge
         .runtime
@@ -58,6 +63,9 @@ pub fn rshell_connect(config: FfiConnectConfig) -> Result<String, ConnectError> 
             }
         })
         .map(|_| {
+            if !known_before {
+                record_first_connection(bridge, &connection_id, &target_host, target_port);
+            }
             // Surface the new state so the UI can light up the
             // connected indicator. Status events are best-effort —
             // a future network blip won't be detected unless the SSH

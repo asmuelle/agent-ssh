@@ -75,39 +75,23 @@ targets:
         product: SwiftTerm
       - package: Sparkle
         product: Sparkle
-    # Declared inline so `xcodegen generate` regenerates the file
-    # deterministically. A bare `path:` (no `properties:`) would write an
-    # empty plist and silently break code signing — every regenerate would
-    # wipe out the disable-library-validation flag, then dyld rejects the
-    # ad-hoc-signed framework with "different Team IDs" at launch.
-    entitlements:
-      path: AgentSshApp/AgentSsh.entitlements
-      properties:
-        com.apple.security.app-sandbox: false
-        com.apple.security.automation.apple-events: false
-        # Required for ad-hoc dev builds only: embedded SPM frameworks
-        # (Sparkle, SwiftTerm) carry ad-hoc signatures with no Team ID,
-        # which library validation rejects. The Rust core is a static
-        # lib, so no other unsigned code is loaded. Hardened-runtime
-        # exceptions beyond this one (dyld env vars, unsigned executable
-        # memory) were removed deliberately — do not re-add without a
-        # documented need.
-        com.apple.security.cs.disable-library-validation: true
-        com.apple.security.device.audio-input: false
-        com.apple.security.device.camera: false
-        com.apple.security.files.user-selected.read-write: true
-        com.apple.security.files.bookmarks.app-scope: true
-        com.apple.security.network.client: true
-        com.apple.security.network.server: true
-        com.apple.security.application-groups:
-          - group.com.agent-ssh.agent-ssh
-        # `keychain-access-groups` requires a provisioning profile (Apple
-        # ties access groups to a Team ID), so it can't coexist with
-        # ad-hoc signing. Keychain APIs still work via the implicit
-        # per-bundle access group. Re-add this when switching to
-        # Developer ID for distribution.
-        # keychain-access-groups:
-        #   - $(AppIdentifierPrefix)com.agent-ssh.macos
+    # Entitlements are two committed files, selected per configuration in
+    # `settings.configs` below (xcodegen's `entitlements:` block would pin
+    # one file to every config and silently override that split):
+    #   AgentSshApp/AgentSsh.entitlements          Debug — includes
+    #     com.apple.security.cs.disable-library-validation, required only
+    #     for ad-hoc dev builds whose embedded SPM frameworks (Sparkle,
+    #     SwiftTerm) carry no Team ID.
+    #   AgentSshApp/AgentSsh-Release.entitlements  Release — identical
+    #     minus that exemption. Development- and Developer-ID-signed builds
+    #     sign every embedded framework with the Team ID, so library
+    #     validation passes; a shipped SSH client holding decrypted keys
+    #     must not accept unsigned dylibs.
+    # Keep the two files in sync when adding entitlements. Hardened-runtime
+    # exceptions beyond the Debug one (dyld env vars, unsigned executable
+    # memory) were removed deliberately — do not re-add without a documented
+    # need. The macOS app is intentionally unsandboxed (MCP helper socket,
+    # Sparkle); see DISTRIBUTION.md.
     settings:
       base:
         INFOPLIST_FILE: AgentSshApp/Info.plist
@@ -118,10 +102,7 @@ targets:
         # Force a clean identifier so the test bundle's `@testable import
         # AgentSshApp` resolves.
         PRODUCT_MODULE_NAME: AgentSshApp
-        CODE_SIGN_ENTITLEMENTS: AgentSshApp/AgentSsh.entitlements
         ENABLE_HARDENED_RUNTIME: true
-        # Hardened runtime exceptions needed for the Rust bridge
-        COM_APPLE_SECURITY_CS_DISABLE_LIBRARY_VALIDATION: true
         COM_APPLE_SECURITY_DEVICE_MICROPHONE: false
         COM_APPLE_SECURITY_DEVICE_CAMERA: false
         COM_APPLE_SECURITY_NETWORK_CLIENT: true
@@ -148,6 +129,17 @@ targets:
           - SystemConfiguration
           - -lxml2
           - -lz
+      configs:
+        # Library validation stays disabled only where ad-hoc signing forces
+        # it (Debug). A shipped Release build must keep the hardened-runtime
+        # default: the process holds decrypted SSH keys, and an injected
+        # dylib would see all of them.
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: AgentSshApp/AgentSsh.entitlements
+          COM_APPLE_SECURITY_CS_DISABLE_LIBRARY_VALIDATION: true
+        Release:
+          CODE_SIGN_ENTITLEMENTS: AgentSshApp/AgentSsh-Release.entitlements
+          COM_APPLE_SECURITY_CS_DISABLE_LIBRARY_VALIDATION: false
     preBuildScripts:
       - name: "Build Rust Library"
         script: |
