@@ -143,7 +143,7 @@ pub fn rshell_disconnect(connection_id: String) -> FfiResult {
 /// frontend can pass it back in `rshell_pty_close` to prevent stale closes.
 ///
 /// Spawns a background task that drains the PTY's `output_rx` channel and
-/// publishes each chunk as a `CoreEvent::PtyOutput` on the event bus, so the
+/// delivers each chunk straight to the registered event callback, so the
 /// Swift event callback receives terminal output. The macOS app is the only
 /// consumer of `output_rx` (Tauri uses `read_pty_burst` in its own process),
 /// so there is no contention.
@@ -209,6 +209,18 @@ fn spawn_pty_output_forwarder(connection_id: String, generation: u64, bridge: &M
                 return;
             }
         };
+        // Terminal bytes go straight to the Swift callback, not onto the
+        // broadcast bus. The bus drops the oldest events when a consumer
+        // lags, and lost PTY bytes can't be reconstructed — they leave the
+        // emulator's escape state corrupt. This path is lossless: the only
+        // backpressure is the SSH reader's channel, which the loop drains.
+        let sink = match super::event_callback() {
+            Some(cb) => cb,
+            None => {
+                tracing::error!("PTY forwarder: no event callback registered");
+                return;
+            }
+        };
 
         loop {
             tokio::select! {
@@ -223,14 +235,7 @@ fn spawn_pty_output_forwarder(connection_id: String, generation: u64, bridge: &M
                 } => {
                     match msg {
                         Some(data) if !data.is_empty() => {
-                            // Send may fail if all subscribers dropped — that's
-                            // fine, just keep draining so the channel doesn't
-                            // back-pressure the SSH reader.
-                            let _ = tx.send(ssh_commander_core::event_bus::CoreEvent::PtyOutput {
-                                connection_id: connection_id.clone(),
-                                generation,
-                                data,
-                            });
+                            sink.on_event(super::pty_output_event(&connection_id, generation, &data));
                         }
                         Some(_) => continue, // empty chunk, ignore
                         None => {

@@ -33,6 +33,11 @@ final class AgentSshEventCallback: FfiEventCallback {
                     .transferProgress(connectionId: event.connectionId, payload: event.payload)
                 )
 
+            case "event_bus_lagged":
+                // Only monitoring events (status, progress, tcpdump) travel on
+                // the bus; PTY bytes are delivered directly and are unaffected.
+                self.logger.warning("Rust event bus overflowed; monitoring events dropped: \(event.payload, privacy: .public)")
+
             case "tcpdump_line":
                 // Payload shape: {"captureId": Number, "line": String, "isStderr": Bool}
                 if let data = event.payload.data(using: .utf8),

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 pub(crate) use crate::bridge::MacOsBridge;
 
 // ---------------------------------------------------------------------------
@@ -82,10 +84,70 @@ pub trait FfiEventCallback: Send + Sync {
 // Send + Sync.
 // ---------------------------------------------------------------------------
 
+/// The most recently registered Swift callback. PTY output bypasses the
+/// broadcast event bus and is delivered through this handle directly, so
+/// terminal bytes are never subject to the bus's lossy overflow policy.
+static EVENT_CALLBACK: std::sync::RwLock<Option<Arc<dyn FfiEventCallback>>> =
+    std::sync::RwLock::new(None);
+
+/// Store `callback` as the current event sink and return the shared handle.
+fn register_event_callback(callback: Box<dyn FfiEventCallback>) -> Arc<dyn FfiEventCallback> {
+    let callback: Arc<dyn FfiEventCallback> = Arc::from(callback);
+    let mut slot = EVENT_CALLBACK
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *slot = Some(Arc::clone(&callback));
+    callback
+}
+
+/// The registered Swift callback, if any. Used by the PTY output forwarder.
+pub(crate) fn event_callback() -> Option<Arc<dyn FfiEventCallback>> {
+    EVENT_CALLBACK
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+/// Wire event for one PTY output chunk: `{"generation": N, "bytes": [...]}`
+/// so the consumer can drop stale frames whose generation no longer matches
+/// the active session.
+pub(crate) fn pty_output_event(connection_id: &str, generation: u64, data: &[u8]) -> FfiEvent {
+    FfiEvent {
+        ty: "pty_output".into(),
+        connection_id: connection_id.to_string(),
+        payload: serde_json::json!({
+            "generation": generation,
+            "bytes": data,
+        })
+        .to_string(),
+    }
+}
+
+/// Sentinel `connection_id` for events that aren't about one connection.
+pub(crate) const BUS_CONNECTION_ID: &str = "bus";
+
+/// Wire event telling the Swift side the monitoring bus dropped `dropped`
+/// events. PTY bytes are not affected (they don't travel on the bus); status
+/// and progress events may be stale until the next update.
+pub(crate) fn event_bus_lagged_event(dropped: u64) -> FfiEvent {
+    FfiEvent {
+        ty: "event_bus_lagged".into(),
+        connection_id: BUS_CONNECTION_ID.into(),
+        payload: serde_json::json!({ "droppedEvents": dropped }).to_string(),
+    }
+}
+
 /// Spawn a background Tokio task on the bridge runtime that drains the
-/// core event bus and forwards every event to the registered callback.
+/// core event bus and forwards monitoring events to the registered callback.
 /// The task lives until the bridge runtime is dropped (process exit).
-fn start_event_listener(callback: Box<dyn FfiEventCallback>) {
+///
+/// The bus is a bounded `tokio::sync::broadcast` channel: a slow consumer
+/// gets `Lagged` and loses the oldest events. That is acceptable for status
+/// and progress events, which are superseded by their successors, but not
+/// for terminal bytes. PTY output therefore never travels on the bus — the
+/// per-PTY forwarder in `connection.rs` calls the callback directly, back-
+/// pressured by the SSH reader's channel — and is skipped here.
+fn start_event_listener(callback: Arc<dyn FfiEventCallback>) {
     let bridge = MacOsBridge::global();
     let mut rx = ssh_commander_core::event_bus::subscribe();
     bridge.runtime.spawn(async move {
@@ -95,23 +157,8 @@ fn start_event_listener(callback: Box<dyn FfiEventCallback>) {
                 Ok(core_event) => {
                     use ssh_commander_core::event_bus::{ConnectionStatus, CoreEvent};
                     let (ty, connection_id, payload) = match core_event {
-                        CoreEvent::PtyOutput {
-                            connection_id,
-                            generation,
-                            data,
-                        } => (
-                            "pty_output".into(),
-                            connection_id,
-                            // `{"generation": N, "bytes": [...]}` so the
-                            // consumer can drop stale frames whose
-                            // generation no longer matches the active
-                            // session. Bare-array payloads are gone.
-                            serde_json::json!({
-                                "generation": generation,
-                                "bytes": data,
-                            })
-                            .to_string(),
-                        ),
+                        // Delivered directly by the PTY forwarder; see above.
+                        CoreEvent::PtyOutput { .. } => continue,
                         CoreEvent::ConnectionStatus {
                             connection_id,
                             status,
@@ -172,6 +219,7 @@ fn start_event_listener(callback: Box<dyn FfiEventCallback>) {
                 }
                 Err(RecvError::Lagged(n)) => {
                     tracing::warn!("macOS bridge event bus lagged by {} events", n);
+                    callback.on_event(event_bus_lagged_event(n));
                 }
                 Err(RecvError::Closed) => {
                     tracing::info!("macOS bridge event bus closed, listener exiting");
@@ -205,6 +253,7 @@ pub fn rshell_init() -> bool {
 /// operations (PTY start, file transfer, etc.).
 #[uniffi::export]
 pub fn rshell_set_event_callback(callback: Box<dyn FfiEventCallback>) {
+    let callback = register_event_callback(callback);
     start_event_listener(callback);
 }
 
@@ -371,5 +420,65 @@ mod tests {
     #[test]
     fn init_succeeds() {
         assert!(rshell_init());
+    }
+}
+
+#[cfg(test)]
+mod event_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    struct Recorder(Mutex<Vec<FfiEvent>>);
+    impl FfiEventCallback for Recorder {
+        fn on_event(&self, event: FfiEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    #[test]
+    fn pty_output_event_carries_generation_and_bytes() {
+        let event = pty_output_event("conn-1", 7, &[0x1b, b'[', b'm']);
+        assert_eq!(event.ty, "pty_output");
+        assert_eq!(event.connection_id, "conn-1");
+        let payload: serde_json::Value = serde_json::from_str(&event.payload).unwrap();
+        assert_eq!(payload["generation"], 7);
+        assert_eq!(payload["bytes"], serde_json::json!([27, 91, 109]));
+    }
+
+    #[test]
+    fn lag_event_reports_dropped_count_on_the_bus_sentinel() {
+        let event = event_bus_lagged_event(42);
+        assert_eq!(event.ty, "event_bus_lagged");
+        assert_eq!(event.connection_id, BUS_CONNECTION_ID);
+        let payload: serde_json::Value = serde_json::from_str(&event.payload).unwrap();
+        assert_eq!(payload["droppedEvents"], 42);
+    }
+
+    #[test]
+    fn forwarder_handle_is_the_registered_callback_and_preserves_order() {
+        let registered = register_event_callback(Box::new(Recorder(Mutex::new(Vec::new()))));
+        let sink = event_callback().expect("callback registered");
+        assert!(
+            Arc::ptr_eq(&registered, &sink),
+            "forwarder must use the callback Swift registered"
+        );
+
+        let chunks: Vec<Vec<u8>> = (0..500u32).map(|i| i.to_le_bytes().to_vec()).collect();
+        for chunk in &chunks {
+            sink.on_event(pty_output_event("conn", 1, chunk));
+        }
+
+        // Every frame arrives, in order, with no lag/drop policy in between.
+        let recorder = Recorder(Mutex::new(Vec::new()));
+        for chunk in &chunks {
+            recorder.on_event(pty_output_event("conn", 1, chunk));
+        }
+        let seen = recorder.0.lock().unwrap();
+        assert_eq!(seen.len(), chunks.len());
+        for (event, chunk) in seen.iter().zip(&chunks) {
+            let payload: serde_json::Value = serde_json::from_str(&event.payload).unwrap();
+            let bytes: Vec<u8> = serde_json::from_value(payload["bytes"].clone()).unwrap();
+            assert_eq!(&bytes, chunk);
+        }
     }
 }
