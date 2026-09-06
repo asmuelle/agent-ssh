@@ -30,12 +30,18 @@ final class MobileTerminalSessionManager {
         let ptyGeneration: UInt64
         let bufferManager: MobilePTYBufferManager
         var isPaused = false
+        /// Output received while paused. Flushed, in order, on resume.
+        var pausedOutput = MobilePausedOutputBuffer(limit: MobileTerminalSessionManager.maxPausedBytesPerSession)
     }
 
     private var sessions: [String: Session] = [:]
     private var pendingPayloads: [String: [MobilePtyOutputFrame]] = [:]
     private var shellIntegrationParsers: [String: ShellIntegrationCommandStreamParser] = [:]
     private static let maxPendingBytesPerConnection = 1 << 20
+    /// Bound on output held per paused session. Exceeding it delivers the
+    /// held bytes to the emulator immediately rather than dropping them; see
+    /// `MobilePausedOutputBuffer`.
+    static let maxPausedBytesPerSession = 1 << 20
 
     private init() {}
 
@@ -74,12 +80,15 @@ final class MobileTerminalSessionManager {
         unregisterSession(connectionId: connectionId)
     }
 
+    /// Pausing stops presentation only. Shell-integration parsing keeps
+    /// running and output is retained (bounded) so the terminal's escape
+    /// state stays consistent across an interruption.
     func pauseSession(connectionId: String) {
         sessions[connectionId]?.isPaused = true
     }
 
     func resumeSession(connectionId: String) {
-        sessions[connectionId]?.isPaused = false
+        resume(connectionId)
     }
 
     func pauseAllSessions() {
@@ -90,7 +99,17 @@ final class MobileTerminalSessionManager {
 
     func resumeAllSessions() {
         for connectionId in sessions.keys {
-            sessions[connectionId]?.isPaused = false
+            resume(connectionId)
+        }
+    }
+
+    private func resume(_ connectionId: String) {
+        guard var session = sessions[connectionId] else { return }
+        session.isPaused = false
+        let held = session.pausedOutput.drain()
+        sessions[connectionId] = session
+        if !held.isEmpty {
+            session.bufferManager.append(held)
         }
     }
 
@@ -100,10 +119,17 @@ final class MobileTerminalSessionManager {
             return
         }
 
-        if let session = sessions[connectionId] {
-            guard !session.isPaused, frame.generation == session.ptyGeneration else { return }
+        if var session = sessions[connectionId] {
+            guard frame.generation == session.ptyGeneration else { return }
             handleShellIntegrationCommands(in: frame.data, connectionId: connectionId)
-            session.bufferManager.append(frame.data)
+            guard session.isPaused else {
+                session.bufferManager.append(frame.data)
+                return
+            }
+            if let overflow = session.pausedOutput.append(frame.data) {
+                session.bufferManager.append(overflow)
+            }
+            sessions[connectionId] = session
         } else {
             var queue = pendingPayloads[connectionId] ?? []
             let pendingBytes = queue.reduce(0) { $0 + $1.data.count }

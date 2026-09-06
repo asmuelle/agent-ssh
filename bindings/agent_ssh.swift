@@ -7447,7 +7447,7 @@ public func rshellPtyResize(connectionId: String, cols: UInt32, rows: UInt32) ->
  * frontend can pass it back in `rshell_pty_close` to prevent stale closes.
  *
  * Spawns a background task that drains the PTY's `output_rx` channel and
- * publishes each chunk as a `CoreEvent::PtyOutput` on the event bus, so the
+ * delivers each chunk straight to the registered event callback, so the
  * Swift event callback receives terminal output. The macOS app is the only
  * consumer of `output_rx` (Tauri uses `read_pty_burst` in its own process),
  * so there is no contention.
@@ -8189,7 +8189,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_agent_ssh_checksum_func_rshell_pty_resize() != 37779) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_agent_ssh_checksum_func_rshell_pty_start() != 1558) {
+    if (uniffi_agent_ssh_checksum_func_rshell_pty_start() != 65256) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_agent_ssh_checksum_func_rshell_pty_write() != 51628) {
