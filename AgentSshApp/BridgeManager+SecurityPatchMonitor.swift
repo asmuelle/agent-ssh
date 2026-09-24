@@ -57,7 +57,7 @@ extension BridgeManager {
         )
     }
 
-    private func securityPatchWrapping<T>(_ work: @escaping () throws -> T) async throws -> T {
+    private func securityPatchWrapping<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             securityPatchQueue.async {
                 do {

@@ -6,7 +6,7 @@ import Darwin
 // argument matters because this helper may run unsandboxed/unsigned where the
 // app-group container is not resolvable — the in-app setup snippet passes the
 // app's actual socket path explicitly.
-var socketPath: String {
+func resolveSocketPath() -> String {
     let arguments = CommandLine.arguments
     if arguments.count > 1, !arguments[1].isEmpty {
         return arguments[1]
@@ -66,7 +66,7 @@ func connectToSocket(path: String) -> Int32 {
 }
 
 func main() {
-    let path = socketPath
+    let path = resolveSocketPath()
     let clientFd = connectToSocket(path: path)
     guard clientFd >= 0 else {
         exit(1)

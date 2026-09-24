@@ -13,7 +13,10 @@ enum AgentSshEvent: Equatable {
     case showDashboard
 }
 
-final class AgentSshEventBus {
+// `@unchecked`: `PassthroughSubject` is not annotated `Sendable`, but Combine
+// subjects serialize `send` internally. Events arrive from the Rust callback
+// thread and the main thread alike.
+final class AgentSshEventBus: @unchecked Sendable {
     static let shared = AgentSshEventBus()
     let events = PassthroughSubject<AgentSshEvent, Never>()
     private init() {}

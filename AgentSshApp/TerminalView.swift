@@ -83,7 +83,7 @@ struct TerminalView: NSViewRepresentable {
         TerminalSessionManager.shared.registerSession(
             connectionId: connectionId,
             generation: generation
-        ) { data in
+        ) { [weak term] data in
             DispatchQueue.main.async { [weak term] in
                 guard let term else { return }
                 let bytes = Array(data)
@@ -155,7 +155,11 @@ struct TerminalView: NSViewRepresentable {
 
     // MARK: - Coordinator
 
-    final class Coordinator: NSObject, TerminalViewDelegate {
+    // SwiftTerm's delegate protocol predates concurrency annotations but is
+    // driven from AppKit event and layout callbacks on the main thread;
+    // `@preconcurrency` makes that assumption checked at runtime.
+    @MainActor
+    final class Coordinator: NSObject, @preconcurrency TerminalViewDelegate {
         let connectionId: String
         weak var term: SwiftTerm.TerminalView?
         private let logger = Logger(subsystem: "com.mc-ssh", category: "terminal")

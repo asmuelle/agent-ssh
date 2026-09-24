@@ -62,7 +62,7 @@ final class MobileServerHealthStore: ObservableObject {
 
         await withTaskGroup(of: MobileServerHealthSnapshot.self) { group in
             for entry in connected {
-                group.addTask { @MainActor in
+                group.addTask {
                     await Self.probe(profile: entry.profile, connectionId: entry.connectionId)
                 }
             }

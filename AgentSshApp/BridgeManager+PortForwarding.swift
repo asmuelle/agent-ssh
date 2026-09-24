@@ -85,7 +85,7 @@ extension BridgeManager {
         }
     }
 
-    private func portForwardWrapping<T>(_ work: @escaping () throws -> T) async throws -> T {
+    private func portForwardWrapping<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             portForwardQueue.async {
                 do {

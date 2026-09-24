@@ -11,7 +11,7 @@ import AgentSshMacOS
 /// (see `SSHConfigParser`). Private keys are never read — an `IdentityFile`
 /// is carried across as a key *path* reference, and hosts without one
 /// default to SSH-agent authentication.
-class ImportManager {
+final class ImportManager: Sendable {
     static let shared = ImportManager()
     private let logger = Logger(subsystem: "com.mc-ssh", category: "import")
 

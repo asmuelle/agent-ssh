@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MobileRunbook: Identifiable {
+struct MobileRunbook: Identifiable, Sendable {
     let id: String
     let title: String
     let detail: String
@@ -8,7 +8,7 @@ struct MobileRunbook: Identifiable {
     let risk: MobileTaskRisk
     let variableLabel: String?
     let placeholder: String?
-    let command: (String) -> String
+    let command: @Sendable (String) -> String
 
     static let builtIns: [MobileRunbook] = [
         MobileRunbook(

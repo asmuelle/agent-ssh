@@ -16,7 +16,11 @@ import AgentSshMacOS
 /// serial control queue for ordering; remote commands, monitor reads, and
 /// short SFTP probes use a separate utility queue so slow host commands do
 /// not delay interactive typing.
-final class BridgeManager {
+///
+/// `@unchecked Sendable`: every mutable stored property (`isInitialized`,
+/// `eventCallback`, `writeBatchers`) is only touched on `dispatchQueue`.
+/// Keep it that way — route new mutable state through the control queue.
+final class BridgeManager: @unchecked Sendable {
     static let shared = BridgeManager()
     private let logger = Logger(subsystem: "com.mc-ssh", category: "bridge")
 
@@ -51,11 +55,11 @@ final class BridgeManager {
         self.dispatchQueue.setSpecific(key: controlQueueKey, value: ())
     }
 
-    private func runOnControlQueue<T>(_ work: @escaping () throws -> T) async throws -> T {
+    private func runOnControlQueue<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await run(on: dispatchQueue, work)
     }
 
-    private func runOnUtilityQueue<T>(_ work: @escaping () throws -> T) async throws -> T {
+    private func runOnUtilityQueue<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await run(on: utilityQueue, work)
     }
 
@@ -67,9 +71,9 @@ final class BridgeManager {
         }
     }
 
-    private func run<T>(
+    private func run<T: Sendable>(
         on queue: DispatchQueue,
-        _ work: @escaping () throws -> T
+        _ work: @escaping @Sendable () throws -> T
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
@@ -114,8 +118,10 @@ final class BridgeManager {
     }
 
     func shutdown() {
-        logger.info("Shutting down Rust bridge")
-        isInitialized = false
+        runSynchronouslyOnControlQueue { [self] in
+            self.logger.info("Shutting down Rust bridge")
+            self.isInitialized = false
+        }
         // The Rust runtime is dropped on process exit; nothing else to do.
     }
 

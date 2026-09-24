@@ -46,7 +46,7 @@ final class ShellIntegrationCommandCenter {
         )
 
         notificationCenter.getNotificationSettings { [notificationCenter, logger] settings in
-            let schedule = {
+            let schedule: @Sendable () -> Void = {
                 let content = UNMutableNotificationContent()
                 content.title = title
                 content.body = body

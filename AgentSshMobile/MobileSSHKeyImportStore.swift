@@ -19,7 +19,7 @@ enum MobileSSHKeyImportError: Error, LocalizedError {
 
 enum MobileSSHKeyImportStore {
     private static let maxKeyBytes = 256 * 1024
-    private static let fileManager = FileManager.default
+    private static var fileManager: FileManager { .default }
 
     static func importKey(from sourceURL: URL) throws -> URL {
         let didStartAccess = sourceURL.startAccessingSecurityScopedResource()

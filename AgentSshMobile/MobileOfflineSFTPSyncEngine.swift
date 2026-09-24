@@ -7,7 +7,7 @@ struct MobileOfflineSFTPSyncSummary {
     let byteCount: UInt64
 }
 
-final class MobileOfflineSFTPSyncEngine {
+final class MobileOfflineSFTPSyncEngine: Sendable {
     static let shared = MobileOfflineSFTPSyncEngine()
 
     private let itemLimit = 2_000

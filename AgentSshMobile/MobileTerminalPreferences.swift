@@ -84,20 +84,24 @@ final class MobileTerminalPreferences: ObservableObject {
     }
 }
 
-struct MobileTerminalTheme: Identifiable {
+struct MobileTerminalTheme: Identifiable, Sendable {
     let id: String
     let label: String
     let background: UIColor
     let foreground: UIColor
     let caret: UIColor
-    let ansiPalette: [SwiftTerm.Color]
+    /// 16 hex colours (`"rrggbb"`), converted in `apply(to:)`. Kept as
+    /// strings because `SwiftTerm.Color` is a mutable class and themes are
+    /// shared statics.
+    let ansiPalette: [String]
 
+    @MainActor
     func apply(to term: SwiftTerm.TerminalView) {
         term.backgroundColor = background
         term.nativeBackgroundColor = background
         term.nativeForegroundColor = foreground
         term.caretColor = caret
-        term.installColors(ansiPalette)
+        term.installColors(ansiPalette.map(MobileHexColor.term))
     }
 
     static func resolve(_ id: String) -> MobileTerminalTheme {
@@ -156,10 +160,10 @@ extension MobileTerminalTheme {
         foreground: MobileHexColor.ui("00a600"),
         caret: MobileHexColor.ui("00d900"),
         ansiPalette: [
-            MobileHexColor.term("000000"), MobileHexColor.term("990000"), MobileHexColor.term("00a600"), MobileHexColor.term("999900"),
-            MobileHexColor.term("0000b2"), MobileHexColor.term("b200b2"), MobileHexColor.term("00a6b2"), MobileHexColor.term("bfbfbf"),
-            MobileHexColor.term("666666"), MobileHexColor.term("e50000"), MobileHexColor.term("00d900"), MobileHexColor.term("e5e500"),
-            MobileHexColor.term("0000ff"), MobileHexColor.term("e500e5"), MobileHexColor.term("00e5e5"), MobileHexColor.term("e5e5e5"),
+            "000000", "990000", "00a600", "999900",
+            "0000b2", "b200b2", "00a6b2", "bfbfbf",
+            "666666", "e50000", "00d900", "e5e500",
+            "0000ff", "e500e5", "00e5e5", "e5e5e5",
         ]
     )
 
@@ -170,10 +174,10 @@ extension MobileTerminalTheme {
         foreground: MobileHexColor.ui("839496"),
         caret: MobileHexColor.ui("839496"),
         ansiPalette: [
-            MobileHexColor.term("073642"), MobileHexColor.term("dc322f"), MobileHexColor.term("859900"), MobileHexColor.term("b58900"),
-            MobileHexColor.term("268bd2"), MobileHexColor.term("d33682"), MobileHexColor.term("2aa198"), MobileHexColor.term("eee8d5"),
-            MobileHexColor.term("002b36"), MobileHexColor.term("cb4b16"), MobileHexColor.term("586e75"), MobileHexColor.term("657b83"),
-            MobileHexColor.term("839496"), MobileHexColor.term("6c71c4"), MobileHexColor.term("93a1a1"), MobileHexColor.term("fdf6e3"),
+            "073642", "dc322f", "859900", "b58900",
+            "268bd2", "d33682", "2aa198", "eee8d5",
+            "002b36", "cb4b16", "586e75", "657b83",
+            "839496", "6c71c4", "93a1a1", "fdf6e3",
         ]
     )
 
@@ -184,10 +188,10 @@ extension MobileTerminalTheme {
         foreground: MobileHexColor.ui("f8f8f2"),
         caret: MobileHexColor.ui("f8f8f2"),
         ansiPalette: [
-            MobileHexColor.term("21222c"), MobileHexColor.term("ff5555"), MobileHexColor.term("50fa7b"), MobileHexColor.term("f1fa8c"),
-            MobileHexColor.term("bd93f9"), MobileHexColor.term("ff79c6"), MobileHexColor.term("8be9fd"), MobileHexColor.term("f8f8f2"),
-            MobileHexColor.term("6272a4"), MobileHexColor.term("ff6e6e"), MobileHexColor.term("69ff94"), MobileHexColor.term("ffffa5"),
-            MobileHexColor.term("d6acff"), MobileHexColor.term("ff92df"), MobileHexColor.term("a4ffff"), MobileHexColor.term("ffffff"),
+            "21222c", "ff5555", "50fa7b", "f1fa8c",
+            "bd93f9", "ff79c6", "8be9fd", "f8f8f2",
+            "6272a4", "ff6e6e", "69ff94", "ffffa5",
+            "d6acff", "ff92df", "a4ffff", "ffffff",
         ]
     )
 
@@ -198,10 +202,10 @@ extension MobileTerminalTheme {
         foreground: MobileHexColor.ui("d8dee9"),
         caret: MobileHexColor.ui("d8dee9"),
         ansiPalette: [
-            MobileHexColor.term("3b4252"), MobileHexColor.term("bf616a"), MobileHexColor.term("a3be8c"), MobileHexColor.term("ebcb8b"),
-            MobileHexColor.term("81a1c1"), MobileHexColor.term("b48ead"), MobileHexColor.term("88c0d0"), MobileHexColor.term("e5e9f0"),
-            MobileHexColor.term("4c566a"), MobileHexColor.term("bf616a"), MobileHexColor.term("a3be8c"), MobileHexColor.term("ebcb8b"),
-            MobileHexColor.term("81a1c1"), MobileHexColor.term("b48ead"), MobileHexColor.term("8fbcbb"), MobileHexColor.term("eceff4"),
+            "3b4252", "bf616a", "a3be8c", "ebcb8b",
+            "81a1c1", "b48ead", "88c0d0", "e5e9f0",
+            "4c566a", "bf616a", "a3be8c", "ebcb8b",
+            "81a1c1", "b48ead", "8fbcbb", "eceff4",
         ]
     )
 
@@ -212,10 +216,10 @@ extension MobileTerminalTheme {
         foreground: MobileHexColor.ui("c5c8c6"),
         caret: MobileHexColor.ui("c5c8c6"),
         ansiPalette: [
-            MobileHexColor.term("1d1f21"), MobileHexColor.term("cc6666"), MobileHexColor.term("b5bd68"), MobileHexColor.term("f0c674"),
-            MobileHexColor.term("81a2be"), MobileHexColor.term("b294bb"), MobileHexColor.term("8abeb7"), MobileHexColor.term("c5c8c6"),
-            MobileHexColor.term("969896"), MobileHexColor.term("cc6666"), MobileHexColor.term("b5bd68"), MobileHexColor.term("f0c674"),
-            MobileHexColor.term("81a2be"), MobileHexColor.term("b294bb"), MobileHexColor.term("8abeb7"), MobileHexColor.term("ffffff"),
+            "1d1f21", "cc6666", "b5bd68", "f0c674",
+            "81a2be", "b294bb", "8abeb7", "c5c8c6",
+            "969896", "cc6666", "b5bd68", "f0c674",
+            "81a2be", "b294bb", "8abeb7", "ffffff",
         ]
     )
 }
@@ -379,11 +383,11 @@ enum MobileTerminalAccessoryKey: Hashable {
 }
 
 private enum MobileHexColor {
-    static let xtermPalette: [SwiftTerm.Color] = [
-        term("000000"), term("cd0000"), term("00cd00"), term("cdcd00"),
-        term("0000ee"), term("cd00cd"), term("00cdcd"), term("e5e5e5"),
-        term("7f7f7f"), term("ff0000"), term("00ff00"), term("ffff00"),
-        term("5c5cff"), term("ff00ff"), term("00ffff"), term("ffffff"),
+    static let xtermPalette: [String] = [
+        "000000", "cd0000", "00cd00", "cdcd00",
+        "0000ee", "cd00cd", "00cdcd", "e5e5e5",
+        "7f7f7f", "ff0000", "00ff00", "ffff00",
+        "5c5cff", "ff00ff", "00ffff", "ffffff",
     ]
 
     static func ui(_ hex: String) -> UIColor {

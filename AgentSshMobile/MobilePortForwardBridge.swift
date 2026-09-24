@@ -1,6 +1,6 @@
 import Foundation
 
-final class MobilePortForwardBridge {
+final class MobilePortForwardBridge: Sendable {
     static let shared = MobilePortForwardBridge()
 
     private let queue = DispatchQueue(
@@ -48,7 +48,7 @@ final class MobilePortForwardBridge {
         }
     }
 
-    private func run<T>(_ work: @escaping () throws -> T) async throws -> T {
+    private func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 do {

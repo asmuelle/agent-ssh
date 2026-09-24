@@ -54,7 +54,7 @@ extension BridgeManager {
         return bundle.serverDoctorModel(hostLabel: request.hostLabel)
     }
 
-    private func serverDoctorWrapping<T>(_ work: @escaping () throws -> T) async throws -> T {
+    private func serverDoctorWrapping<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             serverDoctorQueue.async {
                 do {

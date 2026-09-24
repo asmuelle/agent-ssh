@@ -1,4 +1,7 @@
-import ActivityKit
+// `@preconcurrency`: `Activity` is not annotated `Sendable`, yet its
+// `update`/`end` are nonisolated async methods Apple documents calling from
+// app code. Everything else crossing isolation here is checked `Sendable`.
+@preconcurrency import ActivityKit
 import Foundation
 import WidgetKit
 

@@ -14,7 +14,9 @@ import OSLog
 /// Concurrent writes for different connections live in separate
 /// `WriteBatcher` instances and have no ordering relationship by design
 /// (different SSH sessions).
-final class WriteBatcher {
+// `@unchecked Sendable`: created, mutated, and flushed only on the bridge's
+// serial control queue (`queue`), which is what serializes `pending`.
+final class WriteBatcher: @unchecked Sendable {
     private let connectionId: String
     private let queue: DispatchQueue
     private let logger = Logger(subsystem: "com.mc-ssh", category: "write-batch")
