@@ -1,11 +1,11 @@
 import Foundation
 import LocalAuthentication
 
-public class MCPSecurityGate {
+public final class MCPSecurityGate: Sendable {
     public static let shared = MCPSecurityGate()
     private init() {}
 
-    public enum ActionRisk {
+    public enum ActionRisk: Sendable {
         case safe
         case modifying(reason: String)
     }

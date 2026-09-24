@@ -91,13 +91,15 @@ public enum JournalSyntaxHighlighting {
         init(_ value: Value) { self.value = value }
     }
 
-    private static let highlightCache: NSCache<NSString, Box<AttributedString>> = {
+    // NSCache is internally synchronized (documented thread-safe), so
+    // sharing it across isolation domains is sound.
+    nonisolated(unsafe) private static let highlightCache: NSCache<NSString, Box<AttributedString>> = {
         let cache = NSCache<NSString, Box<AttributedString>>()
         cache.countLimit = 4096
         return cache
     }()
 
-    private static let assessmentCache: NSCache<NSString, Box<JournalEntryAssessment>> = {
+    nonisolated(unsafe) private static let assessmentCache: NSCache<NSString, Box<JournalEntryAssessment>> = {
         let cache = NSCache<NSString, Box<JournalEntryAssessment>>()
         cache.countLimit = 8192
         return cache

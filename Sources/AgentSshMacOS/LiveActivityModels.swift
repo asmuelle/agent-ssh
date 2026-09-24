@@ -327,8 +327,8 @@ public extension Notification.Name {
 
 #if os(iOS) && canImport(ActivityKit)
 @available(iOS 16.1, *)
-public struct MidnightSSHOperationActivityAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
+public struct MidnightSSHOperationActivityAttributes: ActivityAttributes, Sendable {
+    public struct ContentState: Codable, Hashable, Sendable {
         public var subtitle: String?
         public var state: LiveActivityOperationState
         public var progress: Double?
