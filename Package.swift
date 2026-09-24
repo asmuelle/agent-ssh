@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // agent-ssh SPM package — pure-Swift models shared by the native macOS app.
 //
 // ## Prerequisites

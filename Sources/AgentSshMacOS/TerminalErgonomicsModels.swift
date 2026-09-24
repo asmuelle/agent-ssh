@@ -252,7 +252,9 @@ public enum TerminalSnippetRenderer {
         "backspace": "\u{08}",
     ]
 
-    private static let dateFormatter: ISO8601DateFormatter = {
+    // ISO8601DateFormatter is documented thread-safe and is never
+    // reconfigured after this initializer.
+    nonisolated(unsafe) private static let dateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
         return formatter

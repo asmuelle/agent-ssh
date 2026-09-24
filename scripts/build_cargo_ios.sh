@@ -233,7 +233,11 @@ if [ "$needs_regen" -eq 1 ]; then
         cargo build -p agent-ssh --jobs "$CARGO_BUILD_JOBS" --release --bin uniffi-bindgen
     fi
 
+    # --no-format: uniffi pipes the file through `xcrun swift-format` and
+    # discards the result (the output is byte-identical either way), and on
+    # the xcode-27 CI image that formatter never returned, hanging the job.
     "$UNIFFI_BIN" generate \
+        --no-format \
         --library "$HOST_DYLIB" \
         --language swift \
         --out-dir "$BINDINGS_DIR"

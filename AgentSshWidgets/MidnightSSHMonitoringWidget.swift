@@ -662,7 +662,7 @@ public struct ServerQuickCheckControl: ControlWidget {
 
 @available(iOS 18.0, macOS 26.0, *)
 public struct WidgetTriggerBackgroundScanIntent: AppIntent {
-    public static var title: LocalizedStringResource = "Trigger Widget Background Scan"
+    public static let title: LocalizedStringResource = "Trigger Widget Background Scan"
     
     public init() {}
 

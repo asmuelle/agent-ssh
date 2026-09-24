@@ -1,6 +1,6 @@
 import Foundation
 
-final class MobileSFTPBridge {
+final class MobileSFTPBridge: Sendable {
     static let shared = MobileSFTPBridge()
 
     private let queue = DispatchQueue(
@@ -211,7 +211,7 @@ final class MobileSFTPBridge {
         return tempURL
     }
 
-    private func run<T>(_ work: @escaping () throws -> T) async throws -> T {
+    private func run<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 do {

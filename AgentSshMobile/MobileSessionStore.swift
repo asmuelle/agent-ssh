@@ -55,8 +55,8 @@ final class MobileSessionStore: ObservableObject {
         profile: MobileConnectionProfile,
         password: String?,
         passphrase: String?,
-        onSuccess: @escaping () -> Void,
-        onFailure: ((String) -> Void)? = nil
+        onSuccess: @escaping @MainActor () -> Void,
+        onFailure: (@MainActor (String) -> Void)? = nil
     ) {
         guard !status(for: profile).isBusy else { return }
 
@@ -286,7 +286,7 @@ final class MobileSessionStore: ObservableObject {
         passphrase: String?,
         networkOptions: NetworkConnectionOptions,
         sessionId: String,
-        completion: @escaping (Result<MobileConnectOutcome, Error>) -> Void
+        completion: @escaping @Sendable (Result<MobileConnectOutcome, Error>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
             defer {
@@ -331,7 +331,7 @@ final class MobileSessionStore: ObservableObject {
 
     private nonisolated func disconnectInBackground(
         connectionId: String,
-        completion: @escaping (Bool, String?) -> Void
+        completion: @escaping @Sendable (Bool, String?) -> Void
     ) {
         DispatchQueue.global(qos: .utility).async {
             let result = rshellDisconnect(connectionId: connectionId)
@@ -342,7 +342,7 @@ final class MobileSessionStore: ObservableObject {
 
 /// Result of a successful `rshellConnect`, plus whether that connect was the
 /// first contact with the host (in which case the key was auto-pinned).
-struct MobileConnectOutcome {
+struct MobileConnectOutcome: Sendable {
     let connectionId: String
     let firstConnection: FfiFirstConnection?
 }
@@ -355,8 +355,8 @@ struct MobilePendingHostKeyConfirmation: Identifiable {
     let host: String
     let port: UInt16
     let fingerprint: String
-    let onSuccess: () -> Void
-    let onFailure: ((String) -> Void)?
+    let onSuccess: @MainActor () -> Void
+    let onFailure: (@MainActor (String) -> Void)?
 
     var id: String { connectionId }
 }

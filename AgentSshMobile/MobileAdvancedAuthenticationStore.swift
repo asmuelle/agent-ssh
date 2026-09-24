@@ -92,7 +92,7 @@ final class MobileAdvancedAuthenticationStore: ObservableObject {
     }
 }
 
-final class MobileSecureEnclaveSSHIdentityStore {
+final class MobileSecureEnclaveSSHIdentityStore: Sendable {
     static let shared = MobileSecureEnclaveSSHIdentityStore()
 
     private let keychainService = "com.mc-ssh.mobile.advanced-auth.secure-enclave"

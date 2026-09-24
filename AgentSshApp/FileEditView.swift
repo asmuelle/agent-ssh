@@ -296,6 +296,7 @@ private struct SyntaxTextEditor: NSViewRepresentable {
         context.coordinator.applyHighlighting(to: textView)
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
         var syntax: FileSyntax
@@ -333,7 +334,8 @@ private struct SyntaxTextEditor: NSViewRepresentable {
 }
 
 private enum SyntaxHighlighter {
-    static let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    // NSFont is immutable once created; safe to share across threads.
+    nonisolated(unsafe) static let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
 
     static var baseAttributes: [NSAttributedString.Key: Any] {
         [

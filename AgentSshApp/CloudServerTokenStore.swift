@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-final class CloudServerTokenStore {
+final class CloudServerTokenStore: Sendable {
     static let shared = CloudServerTokenStore()
 
     private let service = "com.mc-ssh.cloud-api-token"

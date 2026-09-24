@@ -17,7 +17,7 @@ welcome — bug reports, focused fixes, and well-scoped features.
 
 **Prerequisites** (see [README.md](README.md) for detail):
 
-- macOS 14+ with Xcode 15+ and command-line tools
+- Xcode 27+ (Swift 6.4, macOS 27 / iOS 27 SDKs — what CI builds with) and command-line tools
 - Rust **1.95+** (edition 2024) — `rustup default stable`
 - [`just`](https://github.com/casey/just) — `brew install just`
 - [`xcodegen`](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`

@@ -32,7 +32,7 @@ private enum MacRunbookRisk: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-private struct MacRunbook: Identifiable {
+private struct MacRunbook: Identifiable, Sendable {
     let id: String
     let title: String
     let detail: String
@@ -40,7 +40,7 @@ private struct MacRunbook: Identifiable {
     let risk: MacRunbookRisk
     let variableLabel: String?
     let placeholder: String?
-    let command: (String) -> String
+    let command: @Sendable (String) -> String
 
     static let builtIns: [MacRunbook] = [
         MacRunbook(

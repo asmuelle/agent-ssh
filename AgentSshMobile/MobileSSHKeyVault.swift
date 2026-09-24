@@ -78,10 +78,10 @@ struct MobileSSHIdentity: Identifiable, Hashable, Sendable {
     }
 }
 
-final class MobileSSHKeyVault {
+final class MobileSSHKeyVault: Sendable {
     static let shared = MobileSSHKeyVault()
 
-    private let fileManager = FileManager.default
+    private var fileManager: FileManager { .default }
     private let maxKeyBytes = 256 * 1024
     private let keychainService = "com.mc-ssh.mobile.ssh.key-vault"
     private let keychainAccount = "master-key"

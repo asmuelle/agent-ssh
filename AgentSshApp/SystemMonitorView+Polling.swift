@@ -125,7 +125,7 @@ extension SystemMonitorView {
 
     /// Split on the separator and parse each section. Static and pure
     /// so it can be unit-tested without a connection.
-    static func parseHygieneOutput(_ output: String, separator: String) -> HygieneSnapshot {
+    nonisolated static func parseHygieneOutput(_ output: String, separator: String) -> HygieneSnapshot {
         let sections = output.components(separatedBy: separator)
         let failedSection = sections.indices.contains(0) ? sections[0] : ""
         let dockerSection = sections.indices.contains(1) ? sections[1] : ""

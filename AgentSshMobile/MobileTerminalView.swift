@@ -29,7 +29,7 @@ struct MobileTerminalView: UIViewRepresentable {
         MobileTerminalSessionManager.shared.registerSession(
             connectionId: connectionId,
             generation: ptyGeneration
-        ) { data in
+        ) { [weak term] data in
             DispatchQueue.main.async { [weak term] in
                 guard let term else { return }
                 let bytes = Array(data)
@@ -85,7 +85,11 @@ struct MobileTerminalView: UIViewRepresentable {
         // hardware-keyboard input (no on-screen keyboard, no visual cue).
     }
 
-    final class Coordinator: NSObject, TerminalViewDelegate {
+    // SwiftTerm's delegate protocol predates concurrency annotations but is
+    // driven from UIKit event and layout callbacks on the main thread;
+    // `@preconcurrency` makes that assumption checked at runtime.
+    @MainActor
+    final class Coordinator: NSObject, @preconcurrency TerminalViewDelegate {
         let connectionId: String
         let ptyGeneration: UInt64
         let onCurrentDirectoryChange: ((String?) -> Void)?

@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 import AgentSshMacOS
 import Darwin
+import os
 
 struct MCPAuditEvent: Identifiable, Codable {
     let id: UUID
@@ -23,7 +24,42 @@ struct MCPAuditEvent: Identifiable, Codable {
     }
 }
 
-class MCPServerManager: ObservableObject {
+/// JSON-RPC request id. Requests carry a number, a string, or nothing; this
+/// keeps it a `Sendable` value so it can travel from the socket thread through
+/// the approval flow and back into the response.
+private enum JSONRPCID: Sendable {
+    case int(Int)
+    case double(Double)
+    case string(String)
+
+    init?(_ raw: Any?) {
+        if let value = raw as? String {
+            self = .string(value)
+        } else if let value = raw as? Int {
+            self = .int(value)
+        } else if let value = raw as? Double {
+            self = .double(value)
+        } else {
+            return nil
+        }
+    }
+
+    var jsonValue: Any {
+        switch self {
+        case .int(let value): return value
+        case .double(let value): return value
+        case .string(let value): return value
+        }
+    }
+}
+
+/// Owns the MCP socket and the audit log shown in Settings.
+///
+/// UI state lives on the main actor. Request handling is `nonisolated`: the
+/// socket server calls in from its own client threads, and only audit-log
+/// updates hop back to the main queue.
+@MainActor
+final class MCPServerManager: ObservableObject {
     static let shared = MCPServerManager()
     
     @Published var isServerEnabled: Bool = false {
@@ -87,21 +123,21 @@ class MCPServerManager: ObservableObject {
         print("MCP Server stopped.")
     }
     
-    private func handleMessage(_ jsonStr: String, responseBlock: @escaping (String) -> Void) {
+    nonisolated private func handleMessage(_ jsonStr: String, responseBlock: @escaping @Sendable (String) -> Void) {
         guard let data = jsonStr.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             responseBlock(makeErrorResponse(code: -32700, message: "Parse error", id: nil))
             return
         }
         
-        let id = json["id"]
+        let id = JSONRPCID(json["id"])
         let method = json["method"] as? String ?? ""
         
         switch method {
         case "initialize":
             let response = [
                 "jsonrpc": "2.0",
-                "id": id ?? 1,
+                "id": id?.jsonValue ?? 1,
                 "result": [
                     "protocolVersion": "2024-11-05",
                     "capabilities": [
@@ -230,8 +266,21 @@ class MCPServerManager: ObservableObject {
                 return
             }
             
+            // Serialize and classify here so only Sendable values cross
+            // onto the worker queue.
+            let argsData = try? JSONSerialization.data(withJSONObject: arguments)
+            let argsJson = argsData.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            let classification = MCPSecurityGate.shared.classify(tool: toolName, arguments: arguments)
+
             DispatchQueue.global(qos: .userInitiated).async {
-                self.executeToolCall(id: id, toolName: toolName, connectionId: connectionId, arguments: arguments, responseBlock: responseBlock)
+                self.executeToolCall(
+                    id: id,
+                    toolName: toolName,
+                    connectionId: connectionId,
+                    argsJson: argsJson,
+                    classification: classification,
+                    responseBlock: responseBlock
+                )
             }
             
         default:
@@ -239,12 +288,15 @@ class MCPServerManager: ObservableObject {
         }
     }
     
-    private func executeToolCall(id: Any?, toolName: String, connectionId: String, arguments: [String: Any], responseBlock: @escaping (String) -> Void) {
-        let argsData = try? JSONSerialization.data(withJSONObject: arguments)
-        let argsJson = argsData.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        
+    nonisolated private func executeToolCall(
+        id: JSONRPCID?,
+        toolName: String,
+        connectionId: String,
+        argsJson: String,
+        classification: MCPSecurityGate.ActionRisk,
+        responseBlock: @escaping @Sendable (String) -> Void
+    ) {
         let eventId = UUID()
-        let classification = MCPSecurityGate.shared.classify(tool: toolName, arguments: arguments)
         
         // Log pending event
         let initialStatus: MCPAuditEvent.Status = {
@@ -298,7 +350,7 @@ class MCPServerManager: ObservableObject {
         }
     }
     
-    private func runCoreExecution(id: Any?, eventId: UUID, toolName: String, connectionId: String, argsJson: String, responseBlock: @escaping (String) -> Void) {
+    nonisolated private func runCoreExecution(id: JSONRPCID?, eventId: UUID, toolName: String, connectionId: String, argsJson: String, responseBlock: @escaping @Sendable (String) -> Void) {
         do {
             let result = try rshellMcpExecute(connectionId: connectionId, tool: toolName, arguments: argsJson)
             self.updateEventStatus(eventId, to: .executed)
@@ -306,7 +358,7 @@ class MCPServerManager: ObservableObject {
             // Format success response
             let response = [
                 "jsonrpc": "2.0",
-                "id": id ?? 1,
+                "id": id?.jsonValue ?? 1,
                 "result": [
                     "content": [
                         [
@@ -323,7 +375,7 @@ class MCPServerManager: ObservableObject {
         }
     }
     
-    private func updateEventStatus(_ id: UUID, to status: MCPAuditEvent.Status) {
+    nonisolated private func updateEventStatus(_ id: UUID, to status: MCPAuditEvent.Status) {
         DispatchQueue.main.async {
             if let idx = self.auditLog.firstIndex(where: { $0.id == id }) {
                 self.auditLog[idx].status = status
@@ -331,10 +383,10 @@ class MCPServerManager: ObservableObject {
         }
     }
     
-    private func makeErrorResponse(code: Int, message: String, id: Any?) -> String {
+    nonisolated private func makeErrorResponse(code: Int, message: String, id: JSONRPCID?) -> String {
         let errorDict = [
             "jsonrpc": "2.0",
-            "id": id ?? 1,
+            "id": id?.jsonValue ?? 1,
             "error": [
                 "code": code,
                 "message": message
@@ -343,7 +395,7 @@ class MCPServerManager: ObservableObject {
         return serializeJson(errorDict)
     }
     
-    private func serializeJson(_ dict: [String: Any]) -> String {
+    nonisolated private func serializeJson(_ dict: [String: Any]) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
               let str = String(data: data, encoding: .utf8) else {
             return "{}"
@@ -354,20 +406,43 @@ class MCPServerManager: ObservableObject {
 
 // MARK: - BSD Sockets Core
 
-fileprivate class UnixSocketServer {
-    private var serverFd: Int32 = -1
-    private var isRunning = false
+/// `start`/`stop` run on the main thread while the accept loop and client
+/// handlers run on global queues, so the run flag and listening fd live
+/// behind a lock.
+fileprivate final class UnixSocketServer: Sendable {
+    private struct State {
+        var serverFd: Int32 = -1
+        var isRunning = false
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
     private let path: String
-    private let onDataReceived: (String, @escaping (String) -> Void) -> Void
-    
-    init(path: String, onDataReceived: @escaping (String, @escaping (String) -> Void) -> Void) {
+    private let onDataReceived: @Sendable (String, @escaping @Sendable (String) -> Void) -> Void
+
+    private var isRunning: Bool {
+        state.withLock { $0.isRunning }
+    }
+
+    private var serverFd: Int32 {
+        state.withLock { $0.serverFd }
+    }
+
+    init(path: String, onDataReceived: @escaping @Sendable (String, @escaping @Sendable (String) -> Void) -> Void) {
         self.path = path
         self.onDataReceived = onDataReceived
     }
-    
+
+    private func markStopped() {
+        state.withLock { $0.isRunning = false }
+    }
+
     func start() {
-        guard !isRunning else { return }
-        isRunning = true
+        let didStart = state.withLock { state -> Bool in
+            guard !state.isRunning else { return false }
+            state.isRunning = true
+            return true
+        }
+        guard didStart else { return }
         
         let socketPath = path
         unlink(socketPath)
@@ -375,10 +450,10 @@ fileprivate class UnixSocketServer {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else {
             print("Failed to create Unix socket")
-            isRunning = false
+            markStopped()
             return
         }
-        self.serverFd = fd
+        state.withLock { $0.serverFd = fd }
         
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -387,7 +462,7 @@ fileprivate class UnixSocketServer {
         let pathBytes = socketPath.utf8CString
         guard pathBytes.count <= 104 else {
             print("Socket path too long")
-            isRunning = false
+            markStopped()
             close(fd)
             return
         }
@@ -408,7 +483,7 @@ fileprivate class UnixSocketServer {
         
         guard bindResult >= 0 else {
             print("Failed to bind Unix socket at \(socketPath)")
-            isRunning = false
+            markStopped()
             close(fd)
             return
         }
@@ -422,7 +497,7 @@ fileprivate class UnixSocketServer {
             )
         } catch {
             print("Failed to secure Unix socket at \(socketPath): \(error)")
-            isRunning = false
+            markStopped()
             close(fd)
             unlink(socketPath)
             return
@@ -430,7 +505,7 @@ fileprivate class UnixSocketServer {
         
         guard listen(fd, 5) >= 0 else {
             print("Failed to listen on Unix socket")
-            isRunning = false
+            markStopped()
             close(fd)
             unlink(socketPath)
             return
@@ -444,10 +519,14 @@ fileprivate class UnixSocketServer {
     }
     
     func stop() {
-        isRunning = false
-        if serverFd >= 0 {
-            close(serverFd)
-            serverFd = -1
+        let fd = state.withLock { state -> Int32 in
+            let fd = state.serverFd
+            state.isRunning = false
+            state.serverFd = -1
+            return fd
+        }
+        if fd >= 0 {
+            close(fd)
         }
         unlink(path)
     }
@@ -496,16 +575,16 @@ fileprivate class UnixSocketServer {
                 
                 if let messageStr = String(data: messageData, encoding: .utf8) {
                     let sem = DispatchSemaphore(value: 0)
-                    var responseStr: String?
-                    
+                    let responseBox = OSAllocatedUnfairLock<String?>(initialState: nil)
+
                     onDataReceived(messageStr) { response in
-                        responseStr = response
+                        responseBox.withLock { $0 = response }
                         sem.signal()
                     }
-                    
+
                     sem.wait()
-                    
-                    if let response = responseStr {
+
+                    if let response = responseBox.withLock({ $0 }) {
                         let responseData = (response + "\n").data(using: .utf8)!
                         responseData.withUnsafeBytes { bytes in
                             _ = write(clientFd, bytes.baseAddress!, bytes.count)

@@ -2,7 +2,10 @@ import Foundation
 import UIKit
 import UserNotifications
 
-final class MobileMonitoringAlertNotificationCenter: NSObject {
+// `@unchecked`: the only stored state is immutable, and
+// `UNUserNotificationCenter` is documented safe to call from any thread;
+// it just isn't annotated `Sendable` in the SDK.
+final class MobileMonitoringAlertNotificationCenter: NSObject, @unchecked Sendable {
     static let shared = MobileMonitoringAlertNotificationCenter()
 
     private let notificationCenter: UNUserNotificationCenter

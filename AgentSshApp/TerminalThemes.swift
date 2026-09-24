@@ -8,23 +8,26 @@ import SwiftTerm
 /// the underlying ANSI palette is left at SwiftTerm's defaults (which are
 /// already legible on every system appearance). The named themes
 /// (Solarized, Dracula, …) override both layers via `installColors`.
-struct TerminalTheme: Identifiable {
+struct TerminalTheme: Identifiable, Sendable {
     let id: String          // matches @AppStorage("terminalTheme")
     let label: String       // shown in Settings picker
     let background: NSColor
     let foreground: NSColor
     let caret: NSColor
-    /// `nil` ⇒ leave SwiftTerm's defaults; non-nil overrides via `installColors`.
-    let ansiPalette: [SwiftTerm.Color]?
+    /// 16 hex colours (`"rrggbb"`). `nil` ⇒ leave SwiftTerm's defaults;
+    /// non-nil overrides via `installColors`. Kept as strings because
+    /// `SwiftTerm.Color` is a mutable class and themes are shared statics.
+    let ansiPalette: [String]?
 
     /// Apply the theme to a SwiftTerm view. Idempotent — safe to call from
     /// `updateNSView` on every Settings change.
+    @MainActor
     func apply(to term: SwiftTerm.TerminalView) {
         term.nativeBackgroundColor = background
         term.nativeForegroundColor = foreground
         term.caretColor = caret
         if let ansi = ansiPalette {
-            term.installColors(ansi)
+            term.installColors(ansi.map(HexColor.term))
         }
     }
 
@@ -85,10 +88,10 @@ extension TerminalTheme {
         foreground: HexColor.ns("00a600"),
         caret: HexColor.ns("00d900"),
         ansiPalette: [
-            HexColor.term("000000"), HexColor.term("990000"), HexColor.term("00a600"), HexColor.term("999900"),
-            HexColor.term("0000b2"), HexColor.term("b200b2"), HexColor.term("00a6b2"), HexColor.term("bfbfbf"),
-            HexColor.term("666666"), HexColor.term("e50000"), HexColor.term("00d900"), HexColor.term("e5e500"),
-            HexColor.term("0000ff"), HexColor.term("e500e5"), HexColor.term("00e5e5"), HexColor.term("e5e5e5"),
+            "000000", "990000", "00a600", "999900",
+            "0000b2", "b200b2", "00a6b2", "bfbfbf",
+            "666666", "e50000", "00d900", "e5e500",
+            "0000ff", "e500e5", "00e5e5", "e5e5e5",
         ]
     )
 
@@ -100,10 +103,10 @@ extension TerminalTheme {
         foreground: HexColor.ns("839496"),
         caret: HexColor.ns("839496"),
         ansiPalette: [
-            HexColor.term("073642"), HexColor.term("dc322f"), HexColor.term("859900"), HexColor.term("b58900"),
-            HexColor.term("268bd2"), HexColor.term("d33682"), HexColor.term("2aa198"), HexColor.term("eee8d5"),
-            HexColor.term("002b36"), HexColor.term("cb4b16"), HexColor.term("586e75"), HexColor.term("657b83"),
-            HexColor.term("839496"), HexColor.term("6c71c4"), HexColor.term("93a1a1"), HexColor.term("fdf6e3"),
+            "073642", "dc322f", "859900", "b58900",
+            "268bd2", "d33682", "2aa198", "eee8d5",
+            "002b36", "cb4b16", "586e75", "657b83",
+            "839496", "6c71c4", "93a1a1", "fdf6e3",
         ]
     )
 
@@ -115,10 +118,10 @@ extension TerminalTheme {
         foreground: HexColor.ns("f8f8f2"),
         caret: HexColor.ns("f8f8f2"),
         ansiPalette: [
-            HexColor.term("21222c"), HexColor.term("ff5555"), HexColor.term("50fa7b"), HexColor.term("f1fa8c"),
-            HexColor.term("bd93f9"), HexColor.term("ff79c6"), HexColor.term("8be9fd"), HexColor.term("f8f8f2"),
-            HexColor.term("6272a4"), HexColor.term("ff6e6e"), HexColor.term("69ff94"), HexColor.term("ffffa5"),
-            HexColor.term("d6acff"), HexColor.term("ff92df"), HexColor.term("a4ffff"), HexColor.term("ffffff"),
+            "21222c", "ff5555", "50fa7b", "f1fa8c",
+            "bd93f9", "ff79c6", "8be9fd", "f8f8f2",
+            "6272a4", "ff6e6e", "69ff94", "ffffa5",
+            "d6acff", "ff92df", "a4ffff", "ffffff",
         ]
     )
 
@@ -130,10 +133,10 @@ extension TerminalTheme {
         foreground: HexColor.ns("d8dee9"),
         caret: HexColor.ns("d8dee9"),
         ansiPalette: [
-            HexColor.term("3b4252"), HexColor.term("bf616a"), HexColor.term("a3be8c"), HexColor.term("ebcb8b"),
-            HexColor.term("81a1c1"), HexColor.term("b48ead"), HexColor.term("88c0d0"), HexColor.term("e5e9f0"),
-            HexColor.term("4c566a"), HexColor.term("bf616a"), HexColor.term("a3be8c"), HexColor.term("ebcb8b"),
-            HexColor.term("81a1c1"), HexColor.term("b48ead"), HexColor.term("8fbcbb"), HexColor.term("eceff4"),
+            "3b4252", "bf616a", "a3be8c", "ebcb8b",
+            "81a1c1", "b48ead", "88c0d0", "e5e9f0",
+            "4c566a", "bf616a", "a3be8c", "ebcb8b",
+            "81a1c1", "b48ead", "8fbcbb", "eceff4",
         ]
     )
 
@@ -145,10 +148,10 @@ extension TerminalTheme {
         foreground: HexColor.ns("c5c8c6"),
         caret: HexColor.ns("c5c8c6"),
         ansiPalette: [
-            HexColor.term("1d1f21"), HexColor.term("cc6666"), HexColor.term("b5bd68"), HexColor.term("f0c674"),
-            HexColor.term("81a2be"), HexColor.term("b294bb"), HexColor.term("8abeb7"), HexColor.term("c5c8c6"),
-            HexColor.term("969896"), HexColor.term("cc6666"), HexColor.term("b5bd68"), HexColor.term("f0c674"),
-            HexColor.term("81a2be"), HexColor.term("b294bb"), HexColor.term("8abeb7"), HexColor.term("ffffff"),
+            "1d1f21", "cc6666", "b5bd68", "f0c674",
+            "81a2be", "b294bb", "8abeb7", "c5c8c6",
+            "969896", "cc6666", "b5bd68", "f0c674",
+            "81a2be", "b294bb", "8abeb7", "ffffff",
         ]
     )
 }

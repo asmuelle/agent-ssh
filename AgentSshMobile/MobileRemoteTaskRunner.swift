@@ -1,6 +1,6 @@
 import Foundation
 
-final class MobileRemoteTaskRunner {
+final class MobileRemoteTaskRunner: Sendable {
     static let shared = MobileRemoteTaskRunner()
 
     private init() {}

@@ -177,8 +177,9 @@ final class WidgetMonitoringSnapshotCenter: @unchecked Sendable {
         guard !decisions.isEmpty else { return }
 
         MonitoringAlertNotificationCenter.shared.deliver(decisions) { [weak self] decision in
-            self?.queue.async {
-                self?.alertHistory.record(
+            guard let self else { return }
+            self.queue.async {
+                self.alertHistory.record(
                     ruleId: decision.ruleId,
                     snapshotId: decision.snapshotId,
                     deliveredAt: Date()
@@ -275,9 +276,10 @@ final class WidgetMonitoringSnapshotCenter: @unchecked Sendable {
         let workItem = DispatchWorkItem { [weak self] in
             WidgetCenter.shared.reloadTimelines(ofKind: WidgetSnapshotConfiguration.widgetKind)
             WidgetCenter.shared.reloadAllTimelines()
-            self?.queue.async {
-                self?.lastTimelineReloadAt = Date()
-                self?.pendingTimelineReload = nil
+            guard let self else { return }
+            self.queue.async {
+                self.lastTimelineReloadAt = Date()
+                self.pendingTimelineReload = nil
             }
         }
         pendingTimelineReload = workItem

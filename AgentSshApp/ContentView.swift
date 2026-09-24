@@ -215,9 +215,10 @@ struct ContentView: View {
             pendingAutoConnectDashboard = true
         }
 
+        let tabsStore = tabsStore
         await withTaskGroup(of: Void.self) { group in
             for profile in profiles {
-                group.addTask { @MainActor in
+                group.addTask {
                     await tabsStore.openConnection(profile)
                 }
             }
@@ -505,14 +506,14 @@ private struct DetailColumn: View {
 // MARK: - Preference keys for split-pane dimensions
 
 private struct InspectorWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }
 }
 
 private struct SidebarWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }

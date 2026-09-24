@@ -113,7 +113,7 @@ struct LocalFileBrowserView: View {
     /// current cwd. Optional so the single-pane case (when this
     /// view ever gets reused outside the dual-pane host) doesn't
     /// have to plumb a closure it can't satisfy.
-    let onDownloadFromRemote: ((RemoteFileDrag) -> Void)?
+    let onDownloadFromRemote: (@MainActor (RemoteFileDrag) -> Void)?
 
     @State private var entries: [LocalFileEntry] = []
     @State private var selection: String?

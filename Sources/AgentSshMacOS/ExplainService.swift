@@ -186,7 +186,7 @@ public enum ExplainService {
 
 /// Guarantees a checked continuation is resumed exactly once when two
 /// unstructured tasks race to complete it.
-private final class ResumeOnceGate<T>: @unchecked Sendable {
+private final class ResumeOnceGate<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var resumed = false
 

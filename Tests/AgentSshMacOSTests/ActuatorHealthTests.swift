@@ -83,7 +83,7 @@ final class ActuatorHealthTests: XCTestCase {
     }
 
     func testParserFlattensNestedHealthComponentsWithoutPersistingDetails() throws {
-        let document = try ActuatorHealthParser.parse(jsonData("""
+        let document = try ActuatorHealthParser.parse(Self.jsonData("""
         {
           "status": "DOWN",
           "components": {
@@ -114,7 +114,7 @@ final class ActuatorHealthTests: XCTestCase {
             requested.append(path)
             return ActuatorEndpointResponse(
                 statusCode: 200,
-                data: self.healthData(status: "UP", component: path.contains("readiness") ? "db" : "ping"),
+                data: Self.healthData(status: "UP", component: path.contains("readiness") ? "db" : "ping"),
                 duration: 0.12
             )
         }
@@ -136,7 +136,7 @@ final class ActuatorHealthTests: XCTestCase {
             if path == "/manage/health" {
                 return ActuatorEndpointResponse(
                     statusCode: 200,
-                    data: self.healthData(status: "UP", component: "db"),
+                    data: Self.healthData(status: "UP", component: "db"),
                     duration: 0.08
                 )
             }
@@ -172,7 +172,7 @@ final class ActuatorHealthTests: XCTestCase {
             let status = path.contains("readiness") ? "DOWN" : "UP"
             return ActuatorEndpointResponse(
                 statusCode: 200,
-                data: self.healthData(status: status, component: "db"),
+                data: Self.healthData(status: status, component: "db"),
                 duration: 0.02
             )
         }
@@ -184,10 +184,10 @@ final class ActuatorHealthTests: XCTestCase {
 
     func testSessionHistoryIsBoundedAndTransitionsIgnoreRepeatedState() {
         let store = ActuatorSessionHistoryStore(maxObservationsPerService: 3)
-        store.record(snapshot(serviceId: "orders", state: .healthy, time: 1))
-        store.record(snapshot(serviceId: "orders", state: .healthy, time: 2))
-        store.record(snapshot(serviceId: "orders", state: .degraded, time: 3))
-        store.record(snapshot(serviceId: "orders", state: .unhealthy, time: 4))
+        store.record(Self.snapshot(serviceId: "orders", state: .healthy, time: 1))
+        store.record(Self.snapshot(serviceId: "orders", state: .healthy, time: 2))
+        store.record(Self.snapshot(serviceId: "orders", state: .degraded, time: 3))
+        store.record(Self.snapshot(serviceId: "orders", state: .unhealthy, time: 4))
 
         XCTAssertEqual(store.history(for: "orders").map(\.observedAt), [
             Date(timeIntervalSince1970: 2),
@@ -226,7 +226,7 @@ final class ActuatorHealthTests: XCTestCase {
     }
 
     func testSnapshotProjectionBecomesStaleWithoutChangingRecordedState() {
-        let observation = snapshot(serviceId: "orders", state: .healthy, time: 10)
+        let observation = Self.snapshot(serviceId: "orders", state: .healthy, time: 10)
 
         XCTAssertEqual(
             observation.effectiveState(now: Date(timeIntervalSince1970: 80), staleAfter: 60),
@@ -251,8 +251,8 @@ final class ActuatorHealthTests: XCTestCase {
             ),
         ]
         let snapshots = [
-            "orders": snapshot(serviceId: "orders", state: .healthy, time: 100),
-            "billing": snapshot(serviceId: "billing", state: .unhealthy, time: 100),
+            "orders": Self.snapshot(serviceId: "orders", state: .healthy, time: 100),
+            "billing": Self.snapshot(serviceId: "billing", state: .unhealthy, time: 100),
         ]
 
         let summary = ActuatorFleetSummary.make(
@@ -280,10 +280,10 @@ final class ActuatorHealthTests: XCTestCase {
 
     func testVerifierRequiresConsecutiveHealthyObservations() async {
         let sequence = LockedQueue([
-            snapshot(serviceId: "orders", state: .unhealthy, time: 1),
-            snapshot(serviceId: "orders", state: .healthy, time: 2),
-            snapshot(serviceId: "orders", state: .healthy, time: 3),
-            snapshot(serviceId: "orders", state: .healthy, time: 4),
+            Self.snapshot(serviceId: "orders", state: .unhealthy, time: 1),
+            Self.snapshot(serviceId: "orders", state: .healthy, time: 2),
+            Self.snapshot(serviceId: "orders", state: .healthy, time: 3),
+            Self.snapshot(serviceId: "orders", state: .healthy, time: 4),
         ])
         let sleeps = LockedValues<TimeInterval>()
 
@@ -305,7 +305,7 @@ final class ActuatorHealthTests: XCTestCase {
             requiredConsecutiveHealthy: 2,
             maxAttempts: 3,
             interval: 0,
-            observe: { self.snapshot(serviceId: "orders", state: .degraded, time: 1) },
+            observe: { Self.snapshot(serviceId: "orders", state: .degraded, time: 1) },
             sleep: { _ in }
         )
 
@@ -314,8 +314,8 @@ final class ActuatorHealthTests: XCTestCase {
         XCTAssertEqual(result.lastSnapshot?.state, .degraded)
     }
 
-    private func healthData(status: String, component: String) -> Data {
-        jsonData("""
+    private static func healthData(status: String, component: String) -> Data {
+        Self.jsonData("""
         {
           "status": "\(status)",
           "components": { "\(component)": { "status": "\(status)" } }
@@ -323,7 +323,7 @@ final class ActuatorHealthTests: XCTestCase {
         """)
     }
 
-    private func snapshot(
+    private static func snapshot(
         serviceId: String,
         state: ActuatorServiceState,
         time: TimeInterval
@@ -335,7 +335,7 @@ final class ActuatorHealthTests: XCTestCase {
         )
     }
 
-    private func jsonData(_ value: String) -> Data {
+    private static func jsonData(_ value: String) -> Data {
         Data(value.utf8)
     }
 

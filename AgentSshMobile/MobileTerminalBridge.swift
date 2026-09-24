@@ -1,6 +1,8 @@
 import Foundation
 
-final class MobileTerminalBridge {
+/// `@unchecked Sendable`: the only mutable state, `writeBatchers`, is read
+/// and written exclusively on `queue`.
+final class MobileTerminalBridge: @unchecked Sendable {
     static let shared = MobileTerminalBridge()
 
     private let queue = DispatchQueue(
@@ -102,7 +104,9 @@ enum MobileTerminalBridgeError: Error, LocalizedError {
     }
 }
 
-private final class MobileWriteBatcher {
+// `@unchecked Sendable`: created, mutated, and flushed only on the bridge's
+// serial `queue`, which is what serializes `pending`.
+private final class MobileWriteBatcher: @unchecked Sendable {
     private let connectionId: String
     private let queue: DispatchQueue
     private var pending = Data()

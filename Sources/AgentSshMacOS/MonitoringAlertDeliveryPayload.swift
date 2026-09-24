@@ -119,7 +119,9 @@ public struct MonitoringAlertDeliveryPayload: Codable, Equatable, Sendable {
     private static let checkedAtKey = "msshAlertCheckedAt"
     public static let openURLKey = "msshAlertOpenURL"
 
-    private static let iso8601Formatter: ISO8601DateFormatter = {
+    // ISO8601DateFormatter is documented thread-safe and is never
+    // reconfigured after this initializer.
+    nonisolated(unsafe) private static let iso8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter

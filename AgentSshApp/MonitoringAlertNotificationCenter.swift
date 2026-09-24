@@ -4,7 +4,10 @@ import OSLog
 import AgentSshMacOS
 import UserNotifications
 
-final class MonitoringAlertNotificationCenter: NSObject {
+// `@unchecked`: the only stored state is immutable, and
+// `UNUserNotificationCenter` is documented safe to call from any thread;
+// it just isn't annotated `Sendable` in the SDK.
+final class MonitoringAlertNotificationCenter: NSObject, @unchecked Sendable {
     static let shared = MonitoringAlertNotificationCenter()
 
     private let logger = Logger(subsystem: "com.mc-ssh", category: "monitoring-alerts")

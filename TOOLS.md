@@ -87,7 +87,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 ### File edit & safe config save
 
-- **macOS**: `FileEditView.swift`, `FileEditView+WritingTools.swift`, `FileDiffReviewSheet.swift`, `SafeConfigSave.swift`
+- **macOS**: `FileEditView.swift`, `FileDiffReviewSheet.swift`, `SafeConfigSave.swift`
 - **iPadOS**: `MobileRemoteFileEditorView.swift`, `MobileSafeConfigSave.swift`
 - Diff review before overwriting remote files. Safe config save takes a timestamped `.bak` copy on the host before writing known config paths, with optional validator commands (e.g. `nginx -t`) so a typo doesn't take the host down. A failed validation verifies the rollback command and reports restored, failed, and unknown outcomes distinctly instead of claiming recovery without evidence.
 

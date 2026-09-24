@@ -32,7 +32,9 @@ public enum JournalMessageFingerprinting {
         init(_ value: JournalMessageFingerprint) { self.value = value }
     }
 
-    private static let cache: NSCache<NSString, Box> = {
+    // NSCache is internally synchronized (documented thread-safe), so
+    // sharing it across isolation domains is sound.
+    nonisolated(unsafe) private static let cache: NSCache<NSString, Box> = {
         let cache = NSCache<NSString, Box>()
         cache.countLimit = 8192
         return cache

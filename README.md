@@ -18,7 +18,7 @@ Native macOS, iPhone, and iPad SSH workspace. AppKit + SwiftUI shell, SwiftTerm 
 
 ## Prerequisites
 
-- macOS 14+ with Xcode 15+ and command-line tools (`xcode-select --install`)
+- Xcode 27+ (Swift 6.4, macOS 27 / iOS 27 SDKs — what CI builds with) and command-line tools (`xcode-select --install`)
 - Rust **1.95+** (edition 2024) — `rustup default stable`
 - [`just`](https://github.com/casey/just) — `brew install just`
 - [`xcodegen`](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen` (auto-installed by `just mac-bootstrap`)

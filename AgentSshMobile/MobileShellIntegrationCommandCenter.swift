@@ -34,7 +34,7 @@ final class MobileShellIntegrationCommandCenter {
         )
 
         notificationCenter.getNotificationSettings { [notificationCenter] settings in
-            let schedule = {
+            let schedule: @Sendable () -> Void = {
                 let content = UNMutableNotificationContent()
                 content.title = title
                 content.body = body
