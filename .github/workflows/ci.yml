@@ -77,6 +77,8 @@ jobs:
     # annotations differ between SDK generations. Still a runner-images
     # preview (actions/runner-images#14404); move to macos-27 once it is GA.
     runs-on: xcode-27
+    # Normally 5-15 min; fail a hung build long before the 6 h default.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -136,6 +138,8 @@ jobs:
     name: iOS/iPadOS — build + logic tests
     # Same toolchain as the mac job: Swift 6.4, iOS 27 SDK and simulators.
     runs-on: xcode-27
+    # Normally 5-15 min; fail a hung build long before the 6 h default.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
