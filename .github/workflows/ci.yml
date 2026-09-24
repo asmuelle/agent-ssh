@@ -71,9 +71,12 @@ jobs:
 
   mac:
     name: macOS — build + Swift tests
-    # macos-26 image: the widgets target uses ControlWidget, which needs
-    # the macOS 26 SDK (Xcode 26); macos-15's Xcode 16.4 can't compile it.
-    runs-on: macos-26
+    # xcode-27 image (macOS 27 base, Xcode 27 default): the Swift targets
+    # build in the Swift 6 language mode against the 27 SDKs, so CI must use
+    # the same Swift 6.4 toolchain as local development — Sendable
+    # annotations differ between SDK generations. Still a runner-images
+    # preview (actions/runner-images#14404); move to macos-27 once it is GA.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -86,6 +89,12 @@ jobs:
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
 
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+
+      - name: Show Swift toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+          echo "macOS SDK $(xcrun --sdk macosx --show-sdk-version), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -120,7 +129,8 @@ jobs:
 
   ios:
     name: iOS/iPadOS — build + logic tests
-    runs-on: macos-26
+    # Same toolchain as the mac job: Swift 6.4, iOS 27 SDK and simulators.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -133,6 +143,12 @@ jobs:
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
 
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+
+      - name: Show Swift toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+          echo "macOS SDK $(xcrun --sdk macosx --show-sdk-version), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
 
       - name: Install xcodegen
         run: brew install xcodegen
