@@ -96,6 +96,11 @@ jobs:
           xcrun swift --version
           echo "macOS SDK $(xcrun --sdk macosx --show-sdk-version), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
 
+      # Xcode 26+ ships the Metal compiler as a separate component, and the
+      # xcode-27 image does not preinstall it; SwiftTerm compiles a shader.
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Install xcodegen
         run: brew install xcodegen
 
@@ -149,6 +154,11 @@ jobs:
           xcodebuild -version
           xcrun swift --version
           echo "macOS SDK $(xcrun --sdk macosx --show-sdk-version), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
+
+      # Xcode 26+ ships the Metal compiler as a separate component, and the
+      # xcode-27 image does not preinstall it; SwiftTerm compiles a shader.
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Install xcodegen
         run: brew install xcodegen
