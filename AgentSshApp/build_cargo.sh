@@ -131,7 +131,11 @@ if [ "$needs_regen" -eq 1 ]; then
     fi
 
     echo "📝 Regenerating Swift bindings from $HOST_DYLIB"
+    # --no-format: uniffi pipes the file through `xcrun swift-format` and
+    # discards the result (the output is byte-identical either way), and
+    # Xcode 27's swift-format can spin indefinitely on the generated file.
     "$UNIFFI_BIN" generate \
+        --no-format \
         --library "$HOST_DYLIB" \
         --language swift \
         --out-dir "$BINDINGS_DIR"
