@@ -24,6 +24,7 @@
 //
 //   cargo build --release --lib
 //   uniffi-bindgen generate \
+//     --no-format \
 //     --library target/release/libagent_ssh.dylib \
 //     --language swift \
 //     --out-dir bindings

@@ -41,7 +41,7 @@ final class MobileTerminalSessionManager {
     /// Bound on output held per paused session. Exceeding it delivers the
     /// held bytes to the emulator immediately rather than dropping them; see
     /// `MobilePausedOutputBuffer`.
-    static let maxPausedBytesPerSession = 1 << 20
+    nonisolated static let maxPausedBytesPerSession = 1 << 20
 
     private init() {}
 
