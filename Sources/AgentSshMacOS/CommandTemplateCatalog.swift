@@ -49,6 +49,33 @@ public enum CommandTemplateCatalog {
             requiresPrivilege: true
         ),
         CommandTemplate(
+            id: "systemd.reload",
+            segments: [
+                .literal("systemctl"), .literal("reload"),
+                .literal("--"), .slot(.init(name: "unit", kind: .systemdUnit)),
+            ],
+            risk: .modifiesService,
+            requiresPrivilege: true
+        ),
+        CommandTemplate(
+            id: "systemd.enable",
+            segments: [
+                .literal("systemctl"), .literal("enable"),
+                .literal("--"), .slot(.init(name: "unit", kind: .systemdUnit)),
+            ],
+            risk: .modifiesService,
+            requiresPrivilege: true
+        ),
+        CommandTemplate(
+            id: "systemd.disable",
+            segments: [
+                .literal("systemctl"), .literal("disable"),
+                .literal("--"), .slot(.init(name: "unit", kind: .systemdUnit)),
+            ],
+            risk: .modifiesService,
+            requiresPrivilege: true
+        ),
+        CommandTemplate(
             id: "journal.unit-recent",
             segments: [
                 .literal("journalctl"), .literal("--no-pager"), .literal("-n"), .literal("200"),
