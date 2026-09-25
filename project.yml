@@ -522,6 +522,7 @@ targets:
       # FFI-free health evaluator compiled directly into the logic-test target
       # so it exercises the exact source the app ships.
       - path: AgentSshMobile/MobileServerHealth.swift
+      - path: AgentSshMobile/MobilePausedOutputBuffer.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.mobile.tests
