@@ -234,8 +234,8 @@ if [ "$needs_regen" -eq 1 ]; then
     fi
 
     # --no-format: uniffi pipes the file through `xcrun swift-format` and
-    # discards the result (the output is byte-identical either way), and on
-    # the xcode-27 CI image that formatter never returned, hanging the job.
+    # discards the result (the output is byte-identical either way), and
+    # Xcode 27's swift-format can spin indefinitely on the generated file.
     "$UNIFFI_BIN" generate \
         --no-format \
         --library "$HOST_DYLIB" \
