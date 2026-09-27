@@ -4,7 +4,7 @@ Midnight SSH deliberately uses separate Apple distribution channels rather than 
 
 ## iPhone and iPad — App Store
 
-The mobile app is the initial App Store product. Release builds include only capabilities that are enabled and provisioned. Current minimum: iOS/iPadOS 17.
+The mobile app is the initial App Store product. Release builds include only capabilities that are enabled and provisioned. Current minimum: iOS/iPadOS 27.
 
 Before submission:
 
