@@ -286,7 +286,7 @@ struct ServerDoctorView: View {
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .onChange(of: store.selectedFindingId) { _ in
+        .onChange(of: store.selectedFindingId) {
             explanation = nil
             explanationError = nil
             isExplaining = false

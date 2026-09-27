@@ -11,7 +11,7 @@ agent-ssh helps people responsible for a small number of Linux servers diagnose 
 - Configuration backup, diff, validation, and rollback workflows
 - Saved runbooks with verification
 - Fleet health and incident evidence exports
-- macOS 13+ and iOS/iPadOS 17+
+- macOS 27+ and iOS/iPadOS 27+
 
 ## Security and privacy
 

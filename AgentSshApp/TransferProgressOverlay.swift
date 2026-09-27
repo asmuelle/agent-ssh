@@ -41,7 +41,7 @@ struct TransferProgressOverlay: View {
         .onAppear {
             revealIfNeeded()
         }
-        .onChange(of: activeTransfers.count) { _ in
+        .onChange(of: activeTransfers.count) {
             revealIfNeeded()
         }
     }

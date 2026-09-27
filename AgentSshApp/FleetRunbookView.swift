@@ -69,7 +69,7 @@ struct FleetRunbookSheet: View {
             }
             clampPolicyValues()
         }
-        .onChange(of: selectedProfileIds) { _ in clampPolicyValues() }
+        .onChange(of: selectedProfileIds) { clampPolicyValues() }
         .confirmationDialog(
             "Run on \(selectedTabs.count) hosts?",
             isPresented: $showingConfirmation,

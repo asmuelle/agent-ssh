@@ -1,9 +1,7 @@
 import Foundation
 import AgentSshMacOS
 
-#if canImport(FoundationModels)
 import FoundationModels
-#endif
 
 /// Turns a finished diagnosis into a single plain-language line suitable for a
 /// sidebar badge, a notification body, or a Shortcuts answer. Uses the on-device
@@ -13,14 +11,11 @@ enum HostHealthNarrator {
     static func narrate(report: ServerDoctorReport) async -> (headline: String, onDevice: Bool) {
         let fallback = fallbackHeadline(report)
 
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, iOS 26.0, *),
-           case .available = SystemLanguageModel.default.availability {
+        if case .available = SystemLanguageModel.default.availability {
             if let line = await modelHeadline(report: report) {
                 return (line, true)
             }
         }
-        #endif
 
         return (fallback, false)
     }
@@ -35,8 +30,6 @@ enum HostHealthNarrator {
         return oneLine(report.summary)
     }
 
-    #if canImport(FoundationModels)
-    @available(macOS 26.0, iOS 26.0, *)
     private static func modelHeadline(report: ServerDoctorReport) async -> String? {
         let findings = report.findings.prefix(5)
             .map { "- [\($0.severity.rawValue)] \($0.title)" }
@@ -68,7 +61,6 @@ enum HostHealthNarrator {
             return nil
         }
     }
-    #endif
 
     private static func oneLine(_ text: String) -> String {
         let collapsed = text

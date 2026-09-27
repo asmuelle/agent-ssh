@@ -1,7 +1,6 @@
 import Foundation
 import AgentSshMacOS
 
-#if canImport(FoundationModels)
 import FoundationModels
 
 // MARK: - Guided-generation schema
@@ -12,7 +11,6 @@ import FoundationModels
 // stripping, brace scanning, partial-decode fallbacks): the framework hands us a
 // typed value or throws.
 
-@available(macOS 26.0, iOS 26.0, *)
 @Generable
 struct DoctorReportGen {
     @Guide(description: "Short report title, roughly ten words or fewer.")
@@ -31,7 +29,6 @@ struct DoctorReportGen {
     var findings: [DoctorFindingGen]
 }
 
-@available(macOS 26.0, iOS 26.0, *)
 @Generable
 struct DoctorFindingGen {
     @Guide(description: "Stable short identifier in kebab-case, e.g. nginx-missing-cert.")
@@ -76,7 +73,6 @@ struct DoctorFindingGen {
 // construction: it reads already-collected, already-redacted local data and runs
 // no commands — it cannot widen collection or reach the host.
 
-@available(macOS 26.0, iOS 26.0, *)
 struct ServerDoctorEvidenceTool: Tool {
     let name = "fetch_evidence_detail"
     let description = "Return the full redacted text of a specific collected evidence item by its id, when the truncated excerpt is not enough to judge a finding."
@@ -107,7 +103,6 @@ struct ServerDoctorEvidenceTool: Tool {
 
 // MARK: - Provider
 
-@available(macOS 26.0, iOS 26.0, *)
 struct AppleFoundationModelsDoctorProvider: ServerDoctorLLMProviding {
     var metadata: ServerDoctorProviderMetadata {
         ServerDoctorProviderMetadata(
@@ -255,17 +250,15 @@ struct AppleFoundationModelsDoctorProvider: ServerDoctorLLMProviding {
         ServerDoctorConfidence(rawValue: value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }
-#endif
 
-// MARK: - SDK-independent availability probe
+// MARK: - Availability probe
 //
-// Callable from non-`@available` code (the provider factory, settings UI). When
-// the framework or OS is missing it reports the reason instead of crashing.
+// Used by the provider factory and settings UI: reports why the on-device model
+// can't be used (Apple Intelligence off, device not eligible, model not ready)
+// instead of failing at generation time.
 enum AppleFoundationModelsDoctorAvailability {
     enum Status: Equatable {
         case ready
-        case unsupportedOS
-        case frameworkUnavailable
         case unavailable(String)
 
         var isReady: Bool { self == .ready }
@@ -274,10 +267,6 @@ enum AppleFoundationModelsDoctorAvailability {
             switch self {
             case .ready:
                 return "On-device model ready."
-            case .unsupportedOS:
-                return "Requires macOS 26 or iOS 26 or later."
-            case .frameworkUnavailable:
-                return "This build was not compiled with the Foundation Models framework."
             case .unavailable(let reason):
                 return reason
             }
@@ -285,8 +274,6 @@ enum AppleFoundationModelsDoctorAvailability {
     }
 
     static func current() -> Status {
-        #if canImport(FoundationModels)
-        guard #available(macOS 26.0, iOS 26.0, *) else { return .unsupportedOS }
         switch SystemLanguageModel.default.availability {
         case .available:
             return .ready
@@ -295,8 +282,5 @@ enum AppleFoundationModelsDoctorAvailability {
         @unknown default:
             return .unavailable("Apple Intelligence is currently unavailable.")
         }
-        #else
-        return .frameworkUnavailable
-        #endif
     }
 }

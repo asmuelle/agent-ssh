@@ -67,8 +67,8 @@ extension SystemdMonitorView {
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .onChange(of: journalPriority) { _ in Task { await loadJournal() } }
-        .onChange(of: journalTail) { _ in Task { await loadJournal() } }
+        .onChange(of: journalPriority) { Task { await loadJournal() } }
+        .onChange(of: journalTail) { Task { await loadJournal() } }
     }
 
     var rawJournalLines: [String] {
@@ -311,7 +311,7 @@ extension SystemdMonitorView {
                         alignment: .leading
                     )
                 }
-                .onChange(of: lines.count) { _ in
+                .onChange(of: lines.count) {
                     if autoScroll, let last = items.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }

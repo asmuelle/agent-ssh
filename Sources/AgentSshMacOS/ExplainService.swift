@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(FoundationModels)
 import FoundationModels
-#endif
 
 public enum ExplainServiceError: LocalizedError {
     case unavailable(String)
@@ -51,15 +49,10 @@ public enum ExplainService {
     static let generationTimeout: TimeInterval = 25
 
     public static var isAvailable: Bool {
-        #if canImport(FoundationModels)
-        guard #available(macOS 26.0, iOS 26.0, *) else { return false }
         if case .available = SystemLanguageModel.default.availability {
             return true
         }
         return false
-        #else
-        return false
-        #endif
     }
 
     /// Explains `text` in plain language. `context` names what the text is
@@ -114,10 +107,6 @@ public enum ExplainService {
     // MARK: - Generation
 
     private static func generate(payload: String, context: String) async throws -> String {
-        #if canImport(FoundationModels)
-        guard #available(macOS 26.0, iOS 26.0, *) else {
-            throw ExplainServiceError.unavailable("On-device explanations require macOS 26 / iPadOS 26 or later.")
-        }
         guard case .available = SystemLanguageModel.default.availability else {
             throw ExplainServiceError.unavailable("Apple Intelligence is not available on this device right now.")
         }
@@ -148,9 +137,6 @@ public enum ExplainService {
             options: GenerationOptions(temperature: 0.3)
         )
         return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        #else
-        throw ExplainServiceError.unavailable("This build was not compiled with the Foundation Models framework.")
-        #endif
     }
 
     /// Races `work` against a deadline and returns to the caller at whichever

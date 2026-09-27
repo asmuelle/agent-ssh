@@ -73,10 +73,10 @@ struct LogPanel: View {
             }
         }
         .onAppear { discoverSources() }
-        .onChange(of: isLiveTail) { live in
+        .onChange(of: isLiveTail) { _, live in
             if live { startLiveTail() } else { stopLiveTail() }
         }
-        .onChange(of: selectedSource?.id) { _ in tailLog() }
+        .onChange(of: selectedSource?.id) { tailLog() }
     }
 
     // MARK: - Log list
@@ -105,7 +105,7 @@ struct LogPanel: View {
                 }
             }
             .listStyle(.plain)
-            .onChange(of: poller.logEntries.count) { _ in
+            .onChange(of: poller.logEntries.count) {
                 if let last = poller.logEntries.last {
                     scroll.scrollTo(last.id, anchor: .bottom)
                 }

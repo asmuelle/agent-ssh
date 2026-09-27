@@ -1,9 +1,7 @@
 import Foundation
 import AgentSshMacOS
 
-#if canImport(FoundationModels)
 import FoundationModels
-#endif
 
 enum ServerDoctorExplanationError: LocalizedError {
     case unavailable(String)
@@ -28,10 +26,6 @@ enum ServerDoctorExplanationService {
         finding: ServerDoctorFinding,
         evidence: [ServerDoctorEvidence]
     ) async throws -> String {
-        #if canImport(FoundationModels)
-        guard #available(macOS 26.0, iOS 26.0, *) else {
-            throw ServerDoctorExplanationError.unavailable("On-device explanations require macOS 26 or later.")
-        }
         guard case .available = SystemLanguageModel.default.availability else {
             throw ServerDoctorExplanationError.unavailable(
                 AppleFoundationModelsDoctorAvailability.current().userMessage
@@ -72,10 +66,5 @@ enum ServerDoctorExplanationService {
             options: GenerationOptions(temperature: 0.3)
         )
         return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        #else
-        throw ServerDoctorExplanationError.unavailable(
-            "This build was not compiled with the Foundation Models framework."
-        )
-        #endif
     }
 }

@@ -79,7 +79,7 @@ struct ContentView: View {
             actuatorMonitor.start(tabsStore: tabsStore)
             await runAutoConnect()
         }
-        .onChange(of: tabsStore.connectedSSHTabs.count) { count in
+        .onChange(of: tabsStore.connectedSSHTabs.count) { _, count in
             if pendingAutoConnectDashboard, count >= 2 {
                 pendingAutoConnectDashboard = false
                 workspaceMode = .dashboard
@@ -457,17 +457,17 @@ private struct DetailColumn: View {
         // When a mode's precondition disappears, fall back to the
         // server workspace instead of leaving a lit segment with a
         // dead pane behind it.
-        .onChange(of: connectedSSHTabIds) { ids in
+        .onChange(of: connectedSSHTabIds) { _, ids in
             if ids.count < 2, mode == .dashboard {
                 mode = .server
             }
         }
-        .onChange(of: tabsStore.tabs.isEmpty) { isEmpty in
+        .onChange(of: tabsStore.tabs.isEmpty) { _, isEmpty in
             if isEmpty, mode == .agent {
                 mode = .server
             }
         }
-        .onChange(of: connectedFileTabCount) { count in
+        .onChange(of: connectedFileTabCount) { _, count in
             if count < 1, mode == .files {
                 mode = .server
             }

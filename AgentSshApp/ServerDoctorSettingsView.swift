@@ -108,7 +108,7 @@ struct ServerDoctorSettingsView: View {
                 .onAppear {
                     localToken = ServerDoctorLocalLLMConfig.loadToken() ?? ""
                 }
-                .onChange(of: localToken) { newValue in
+                .onChange(of: localToken) { _, newValue in
                     tokenSaveFailed = !ServerDoctorLocalLLMConfig.saveToken(newValue)
                 }
             if tokenSaveFailed {

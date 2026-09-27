@@ -232,7 +232,7 @@ struct SystemMonitorView: View {
         .onAppear {
             publishDashboardHealthSnapshot()
         }
-        .onChange(of: connectionStatus) { _ in
+        .onChange(of: connectionStatus) {
             publishDashboardHealthSnapshot()
         }
     }

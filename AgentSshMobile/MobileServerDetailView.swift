@@ -23,6 +23,10 @@ struct MobileServerDetailView: View {
     @State private var wasBackgroundedWhileConnected = false
     @State private var showingResumeBanner = false
     @State private var splitFraction = 0.55
+    /// Height of the scroll viewport, i.e. this window's content area. Sizes
+    /// the split work pane; unlike the screen, it tracks Split View and Stage
+    /// Manager windows.
+    @State private var viewportHeight: CGFloat = 0
     @State private var showingConfidence = false
     @State private var pendingShortcutApprovals: [BackgroundSSHOperationRecord] = []
     @State private var shortcutApprovalError: String?
@@ -72,6 +76,9 @@ struct MobileServerDetailView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                viewportHeight = height
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 quickActionsToolbar(scrollProxy: scrollProxy)
@@ -263,7 +270,7 @@ struct MobileServerDetailView: View {
             // accessory bar usable at small split fractions.
             terminalSection(fitsContainer: true)
                 .id(MobileServerDetailSection.terminal)
-                .frame(height: max(340, UIScreen.main.bounds.height * splitFraction * 0.75))
+                .frame(height: max(340, viewportHeight * splitFraction * 0.75))
                 .clipped()
 
             Rectangle()
@@ -300,7 +307,8 @@ struct MobileServerDetailView: View {
                 .gesture(
                     DragGesture()
                         .onChanged { value in
-                            let totalHeight = UIScreen.main.bounds.height * 0.75
+                            let totalHeight = viewportHeight * 0.75
+                            guard totalHeight > 0 else { return }
                             let newFraction = splitFraction + value.translation.height / totalHeight
                             splitFraction = min(0.8, max(0.2, newFraction))
                         }
@@ -1607,7 +1615,7 @@ struct MobileJournalLogView: View {
                         }
                     }
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-                    .onChange(of: jumpCursor) { newValue in
+                    .onChange(of: jumpCursor) { _, newValue in
                         guard let target = newValue else { return }
                         withAnimation(.snappy) {
                             proxy.scrollTo(target, anchor: .center)

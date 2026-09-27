@@ -11,9 +11,9 @@ name: "Agent-Ssh"
 options:
   bundleIdPrefix: com.agent-ssh
   deploymentTarget:
-    macOS: "13.0"
-    iOS: "17.0"
-  xcodeVersion: "15.0"
+    macOS: "27.0"
+    iOS: "27.0"
+  xcodeVersion: "27.0"
   postGenCommand: |
     # After project generation, copy the Rust library to a known location
     # that Xcode's linker can find without extra search paths.
@@ -32,8 +32,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MACOSX_DEPLOYMENT_TARGET: "13.0"
-    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    MACOSX_DEPLOYMENT_TARGET: "27.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "27.0"
     DEVELOPMENT_TEAM: "9QFT5JP875"
     CURRENT_PROJECT_VERSION: "1"
     MARKETING_VERSION: "1.3.2"
@@ -172,7 +172,7 @@ targets:
   AgentSshMobile:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "27.0"
     sources:
       - path: AgentSshMobile
         type: group
@@ -255,7 +255,7 @@ targets:
   AgentSshFileProvider:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "27.0"
     sources:
       - path: AgentSshFileProvider
         type: group
@@ -294,7 +294,7 @@ targets:
   AgentSshShareExtension:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "27.0"
     sources:
       - path: AgentSshShareExtension
         type: group
@@ -332,7 +332,7 @@ targets:
   AgentSshShortcutsExtension:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "27.0"
     sources:
       - path: AgentSshShortcutsExtension
         type: group
@@ -373,7 +373,7 @@ targets:
   AgentSshMobileWidgets:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "27.0"
     sources:
       - path: AgentSshMobileWidgets
         type: group
@@ -421,7 +421,7 @@ targets:
           - group.com.agent-ssh.agent-ssh
     settings:
       base:
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "27.0"
         INFOPLIST_FILE: AgentSshWidgets/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.agent-ssh.macos.widgets
         PRODUCT_NAME: AgentSshWidgets
@@ -510,7 +510,7 @@ targets:
   AgentSshMobileTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "27.0"
     sources:
       - path: Tests/AgentSshMobileTests
         type: group

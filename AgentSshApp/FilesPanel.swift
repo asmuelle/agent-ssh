@@ -248,28 +248,8 @@ struct FilesPanel: View {
         let destDir = panePaths[tab.id] ?? "."
 
         for provider in textProviders {
-            provider.loadItem(
-                forTypeIdentifier: UTType.plainText.identifier,
-                options: nil
-            ) { item, _ in
-                let raw: String?
-                if let string = item as? String {
-                    raw = string
-                } else if let string = item as? NSString {
-                    raw = string as String
-                } else if let data = item as? Data {
-                    raw = String(data: data, encoding: .utf8)
-                } else {
-                    raw = nil
-                }
-
-                guard let raw,
-                      let drag = RemoteFileDrag.decodePasteboardString(raw)
-                else { return }
-
-                DispatchQueue.main.async {
-                    routeCrossServerCopy(drag: drag, destTab: tab, destDir: destDir)
-                }
+            RemoteFileDrag.load(from: provider) { drag in
+                routeCrossServerCopy(drag: drag, destTab: tab, destDir: destDir)
             }
         }
         return true

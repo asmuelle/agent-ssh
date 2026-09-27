@@ -289,7 +289,7 @@ struct RemoteIPMapPoint: Identifiable {
 struct WorldMapCanvas: View {
     let points: [RemoteIPMapPoint]
 
-    @State private var region = Self.worldRegion
+    @State private var position: MapCameraPosition = .region(Self.worldRegion)
 
     private static let worldRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 18, longitude: 0),
@@ -305,17 +305,22 @@ struct WorldMapCanvas: View {
     }
 
     var body: some View {
-        Map(coordinateRegion: $region, annotationItems: points) { point in
-            MapAnnotation(coordinate: point.location.coordinate.mapCoordinate) {
-                Circle()
-                    .fill(point.kind.color)
-                    .frame(width: point.kind == .banned ? 10 : 9, height: point.kind == .banned ? 10 : 9)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.9), lineWidth: 1.25)
-                    )
-                    .shadow(color: point.kind.color.opacity(0.65), radius: 5)
-                    .help(point.helpText)
+        Map(position: $position) {
+            ForEach(points) { point in
+                Annotation(point.ip, coordinate: point.location.coordinate.mapCoordinate) {
+                    Circle()
+                        .fill(point.kind.color)
+                        .frame(width: point.kind == .banned ? 10 : 9, height: point.kind == .banned ? 10 : 9)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.9), lineWidth: 1.25)
+                        )
+                        .shadow(color: point.kind.color.opacity(0.65), radius: 5)
+                        .help(point.helpText)
+                }
+                // The IP stays the marker's accessibility label; the dot
+                // carries no visible caption.
+                .annotationTitles(.hidden)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -326,14 +331,14 @@ struct WorldMapCanvas: View {
         .onAppear {
             fitRegionToPoints()
         }
-        .onChange(of: regionKey) { _ in
+        .onChange(of: regionKey) {
             fitRegionToPoints()
         }
     }
 
     private func fitRegionToPoints() {
         guard !points.isEmpty else {
-            region = Self.worldRegion
+            position = .region(Self.worldRegion)
             return
         }
 
@@ -342,7 +347,7 @@ struct WorldMapCanvas: View {
         guard let minLatitude = latitudes.min(),
               let maxLatitude = latitudes.max()
         else {
-            region = Self.worldRegion
+            position = .region(Self.worldRegion)
             return
         }
 
@@ -351,7 +356,7 @@ struct WorldMapCanvas: View {
         let longitudeDelta = Self.paddedDelta(longitudeFit.span, minimum: 28, maximum: 360)
         let latitudeCenter = max(-72, min(72, (minLatitude + maxLatitude) / 2))
 
-        region = MKCoordinateRegion(
+        position = .region(MKCoordinateRegion(
             center: CLLocationCoordinate2D(
                 latitude: latitudeCenter,
                 longitude: Self.normalizedLongitude(longitudeFit.center)
@@ -360,7 +365,7 @@ struct WorldMapCanvas: View {
                 latitudeDelta: latitudeDelta,
                 longitudeDelta: longitudeDelta
             )
-        )
+        ))
     }
 
     private static func paddedDelta(_ delta: Double, minimum: Double, maximum: Double) -> Double {

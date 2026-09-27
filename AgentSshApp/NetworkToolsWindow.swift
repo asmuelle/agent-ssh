@@ -478,7 +478,7 @@ private struct PacketCaptureTabView: View {
                     }
                     .background(Color(NSColor.textBackgroundColor))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .onChange(of: capture.lines.count) { _ in
+                    .onChange(of: capture.lines.count) {
                         if let last = capture.lines.last {
                             withAnimation(.linear(duration: 0.1)) {
                                 proxy.scrollTo(last.id, anchor: .bottom)

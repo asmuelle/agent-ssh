@@ -34,7 +34,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>27.0</string>
 	<key>MSSHEnforceEntitlements</key>
 	<false/>
 	<key>MSSHLicenseP256PublicKey</key>
