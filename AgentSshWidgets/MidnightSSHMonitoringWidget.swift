@@ -105,48 +105,28 @@ struct MonitoringWidgetView: View {
 
     @ViewBuilder
     var body: some View {
-        if #available(macOS 14.0, *) {
-            switch family {
-            case .systemLarge:
-                LargeMonitoringWidgetView(model: entry.model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .widgetURL(URL(string: entry.model.openURL))
-                    .containerBackground(for: .widget) {
-                        Color(nsColor: .windowBackgroundColor)
-                    }
-            case .systemMedium:
-                MediumMonitoringWidgetView(model: entry.model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .widgetURL(URL(string: entry.model.openURL))
-                    .containerBackground(for: .widget) {
-                        Color(nsColor: .windowBackgroundColor)
-                    }
-            default:
-                SmallMonitoringWidgetView(model: entry.model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .widgetURL(URL(string: entry.model.openURL))
-                    .containerBackground(for: .widget) {
-                        Color(nsColor: .windowBackgroundColor)
-                    }
-            }
-        } else {
-            switch family {
-            case .systemLarge:
-                LargeMonitoringWidgetView(model: entry.model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .widgetURL(URL(string: entry.model.openURL))
-                    .background(Color(nsColor: .windowBackgroundColor))
-            case .systemMedium:
-                MediumMonitoringWidgetView(model: entry.model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .widgetURL(URL(string: entry.model.openURL))
-                    .background(Color(nsColor: .windowBackgroundColor))
-            default:
-                SmallMonitoringWidgetView(model: entry.model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .widgetURL(URL(string: entry.model.openURL))
-                    .background(Color(nsColor: .windowBackgroundColor))
-            }
+        switch family {
+        case .systemLarge:
+            LargeMonitoringWidgetView(model: entry.model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .widgetURL(URL(string: entry.model.openURL))
+                .containerBackground(for: .widget) {
+                    Color(nsColor: .windowBackgroundColor)
+                }
+        case .systemMedium:
+            MediumMonitoringWidgetView(model: entry.model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .widgetURL(URL(string: entry.model.openURL))
+                .containerBackground(for: .widget) {
+                    Color(nsColor: .windowBackgroundColor)
+                }
+        default:
+            SmallMonitoringWidgetView(model: entry.model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .widgetURL(URL(string: entry.model.openURL))
+                .containerBackground(for: .widget) {
+                    Color(nsColor: .windowBackgroundColor)
+                }
         }
     }
 }
@@ -616,18 +596,16 @@ private extension WidgetMonitorState {
     }
 }
 
-// MARK: - iOS 18 / macOS Sequoia Control Center Quick Actions
+// MARK: - Control Center Quick Actions
 
 import AppIntents
 
-@available(iOS 18.0, macOS 26.0, *)
 public struct ServerQuickCheckControl: ControlWidget {
     public static var title: LocalizedStringResource = "Server Quick Check"
     public static var kind: String = "com.agent-ssh.macos.widgets.QuickCheck"
 
     public init() {}
 
-    @available(iOS 18.0, macOS 26.0, *)
     public var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind) {
             ControlWidgetButton(action: WidgetTriggerBackgroundScanIntent()) {
@@ -660,7 +638,6 @@ public struct ServerQuickCheckControl: ControlWidget {
     }
 }
 
-@available(iOS 18.0, macOS 26.0, *)
 public struct WidgetTriggerBackgroundScanIntent: AppIntent {
     public static let title: LocalizedStringResource = "Trigger Widget Background Scan"
     

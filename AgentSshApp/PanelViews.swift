@@ -472,7 +472,7 @@ struct DashboardPanel: View {
                 try? fleetHealthStore.prune(keepingProfileIds: savedProfiles.map(\.id))
                 fleetHealthRecords = fleetHealthStore.load()
             }
-            .onChange(of: tabs.map(\.id)) { _ in
+            .onChange(of: tabs.map(\.id)) {
                 pruneDashboardHealthSnapshots()
                 if let expandedTabId, !tabs.contains(where: { $0.id == expandedTabId }) {
                     self.expandedTabId = nil

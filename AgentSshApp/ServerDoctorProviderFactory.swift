@@ -49,15 +49,10 @@ enum ServerDoctorProviderFactory {
     }
 
     private static func appleIntelligenceProvider() -> ServerDoctorLLMProviding? {
-        #if canImport(FoundationModels)
-        guard #available(macOS 26.0, iOS 26.0, *),
-              AppleFoundationModelsDoctorAvailability.current().isReady else {
+        guard AppleFoundationModelsDoctorAvailability.current().isReady else {
             return nil
         }
         return AppleFoundationModelsDoctorProvider()
-        #else
-        return nil
-        #endif
     }
 }
 

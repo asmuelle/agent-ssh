@@ -117,7 +117,7 @@ struct FileBrowserView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: connectionId) { _ in
+        .onChange(of: connectionId) {
             path = "."
             onPathChange?(".")
             refresh()

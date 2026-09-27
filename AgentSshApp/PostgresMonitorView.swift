@@ -130,12 +130,12 @@ struct PostgresMonitorView: View {
         .task(id: "\(connectionId ?? "none"):\(mode.rawValue)") {
             await refresh()
         }
-        .onChange(of: search) { _ in
+        .onChange(of: search) {
             if mode == .vacuum {
                 ensureVisibleVacuumSelection()
             }
         }
-        .onChange(of: vacuumScope) { _ in
+        .onChange(of: vacuumScope) {
             ensureVisibleVacuumSelection()
         }
         .confirmationDialog(

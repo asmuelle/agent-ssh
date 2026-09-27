@@ -33,7 +33,7 @@ struct ActuatorFleetSheet: View {
             }
             monitor.selectedServiceId = selectedServiceId
         }
-        .onChange(of: selectedServiceId) { value in
+        .onChange(of: selectedServiceId) { _, value in
             monitor.selectedServiceId = value
         }
         .sheet(item: $editingTarget) { target in

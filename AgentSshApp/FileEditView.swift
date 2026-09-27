@@ -79,7 +79,7 @@ struct FileEditView: View {
                 syntax: FileSyntax(path: path),
                 isEditable: !isSaving
             )
-                .onChange(of: content) { _ in
+                .onChange(of: content) {
                     isModified = content != originalContent
                     saveError = nil
                 }

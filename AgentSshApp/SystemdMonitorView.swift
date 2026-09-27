@@ -452,16 +452,16 @@ struct SystemdMonitorView: View {
                 await journalLoop()
             }
         }
-        .onChange(of: selectedUnit?.id) { _ in
+        .onChange(of: selectedUnit?.id) {
             Task { await loadSelectedUnitDetail() }
         }
-        .onChange(of: mode) { _ in
+        .onChange(of: mode) {
             ensureVisibleSelection()
         }
-        .onChange(of: search) { _ in
+        .onChange(of: search) {
             ensureVisibleSelection()
         }
-        .onChange(of: serviceScope) { _ in
+        .onChange(of: serviceScope) {
             ensureVisibleSelection()
         }
         .confirmationDialog(

@@ -381,7 +381,7 @@ struct MonitorJournalLogView: View {
                             }
                         }
                         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                        .onChange(of: jumpCursor) { newValue in
+                        .onChange(of: jumpCursor) { _, newValue in
                             guard let target = newValue else { return }
                             withAnimation(.snappy) {
                                 proxy.scrollTo(target, anchor: .center)
@@ -401,7 +401,7 @@ struct MonitorJournalLogView: View {
                 enabledSeverities = Set(MonitorJournalSeverity.allCases)
             }
         }
-        .onChange(of: rawLines) { _ in
+        .onChange(of: rawLines) {
             // Line ids are positions in `rawLines`, so a refetch
             // renumbers every line: a pin or an expanded group kept
             // across it would address whatever now sits at that index.

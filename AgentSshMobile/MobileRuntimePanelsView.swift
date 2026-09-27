@@ -47,7 +47,7 @@ struct MobileRuntimePanelsView: View {
         .task(id: connectionId) {
             await refresh()
         }
-        .onChange(of: mode) { _ in
+        .onChange(of: mode) {
             search = ""
             Task { await refresh() }
         }

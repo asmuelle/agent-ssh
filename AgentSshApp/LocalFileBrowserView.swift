@@ -49,6 +49,23 @@ struct RemoteFileDrag: Codable {
         else { return nil }
         return try? JSONDecoder().decode(RemoteFileDrag.self, from: data)
     }
+
+    /// Reads a dragged remote-file payload off `provider` (vended by
+    /// `itemProvider` as an `NSString`). Calls `completion` on the main queue,
+    /// and only when the payload decodes.
+    static func load(
+        from provider: NSItemProvider,
+        completion: @escaping @MainActor (RemoteFileDrag) -> Void
+    ) {
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+            guard let raw = object as? NSString,
+                  let drag = decodePasteboardString(raw as String)
+            else { return }
+            DispatchQueue.main.async {
+                completion(drag)
+            }
+        }
+    }
 }
 
 /// Folder reparent payload. Carries just the folder id; the receiver
@@ -136,7 +153,7 @@ struct LocalFileBrowserView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { refresh() }
-        .modifier(PathChangeRefresh(path: path, refresh: refresh))
+        .onChange(of: path) { refresh() }
     }
 
     // MARK: - Header
@@ -380,28 +397,8 @@ struct LocalFileBrowserView: View {
         guard !remoteProviders.isEmpty else { return false }
 
         for provider in remoteProviders {
-            provider.loadItem(
-                forTypeIdentifier: UTType.plainText.identifier,
-                options: nil
-            ) { item, _ in
-                let raw: String?
-                if let string = item as? String {
-                    raw = string
-                } else if let string = item as? NSString {
-                    raw = string as String
-                } else if let data = item as? Data {
-                    raw = String(data: data, encoding: .utf8)
-                } else {
-                    raw = nil
-                }
-
-                guard let raw,
-                      let drop = RemoteFileDrag.decodePasteboardString(raw)
-                else { return }
-
-                DispatchQueue.main.async {
-                    onDownloadFromRemote(drop)
-                }
+            RemoteFileDrag.load(from: provider) { drop in
+                onDownloadFromRemote(drop)
             }
         }
 
@@ -509,23 +506,6 @@ struct LocalFileBrowserView: View {
         case "zip", "tar", "gz", "bz2", "xz", "7z": return "archivebox"
         case "pdf": return "doc.richtext"
         default: return "doc"
-        }
-    }
-}
-
-/// Bridges the macOS 13 single-parameter `onChange` and the macOS 14
-/// zero-parameter form. The deployment target is still 13.0, but
-/// SourceKit flags the legacy signature as deprecated; the availability
-/// branch keeps both surfaces happy without an `@available`-stamped view.
-private struct PathChangeRefresh: ViewModifier {
-    let path: String
-    let refresh: () -> Void
-
-    func body(content: Content) -> some View {
-        if #available(macOS 14.0, iOS 17.0, *) {
-            content.onChange(of: path) { refresh() }
-        } else {
-            content.onChange(of: path) { _ in refresh() }
         }
     }
 }
