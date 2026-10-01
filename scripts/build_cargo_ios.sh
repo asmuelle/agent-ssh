@@ -12,6 +12,14 @@ set -euo pipefail
 # Ensure cargo and rustup can be found in non-interactive environments (e.g. Xcode GUI builds)
 export PATH="$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
+# Xcode exports MACOSX_DEPLOYMENT_TARGET to every build phase, and rustc applies
+# it to host artifacts too. With Xcode 27's linker, proc-macro dylibs linked
+# while it is set come out with a misaligned LINKEDIT string pool that macOS
+# 27's dyld refuses to load ("mis-aligned LINKEDIT string pool"), failing the
+# whole build. Nothing here needs it: proc-macros and build scripts are host
+# tools, and Rust objects with an older minimum link into the app fine.
+unset MACOSX_DEPLOYMENT_TARGET
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Script lives at <repo>/scripts/build_cargo_ios.sh — Cargo.toml sits one level up.
 RUST_PROJECT_DIR="${RUST_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
