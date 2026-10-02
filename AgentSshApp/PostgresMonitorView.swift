@@ -85,8 +85,7 @@ struct PostgresMonitorView: View {
     @State var search = ""
     @State var error: String?
     @State var loading = false
-    @State var pendingBackendAction: BackendAction?
-    @State var pendingVacuumAction: VacuumAction?
+    @State var pendingConfirmation: PendingServerAction?
     @State var maintenanceOperation: RemoteOperationFeedback?
     @State var maintenanceOperationOutput: RemoteOperationFeedback?
 
@@ -94,6 +93,8 @@ struct PostgresMonitorView: View {
         let id = UUID()
         let function: String
         let pid: String
+        /// Exactly what runs; the confirmation shows this string.
+        var sql: String { "select \(function)(\(pid));" }
     }
 
     struct VacuumAction: Identifiable {
@@ -138,38 +139,7 @@ struct PostgresMonitorView: View {
         .onChange(of: vacuumScope) {
             ensureVisibleVacuumSelection()
         }
-        .confirmationDialog(
-            "Confirm backend action",
-            isPresented: Binding(
-                get: { pendingBackendAction != nil },
-                set: { if !$0 { pendingBackendAction = nil } }
-            ),
-            presenting: pendingBackendAction
-        ) { action in
-            Button("\(action.function) \(action.pid)", role: action.function.contains("terminate") ? .destructive : nil) {
-                Task { await runBackendAction(action) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { action in
-            Text("This executes SELECT \(action.function)(\(action.pid)) on \(settings.database).")
-        }
-        .confirmationDialog(
-            "Confirm maintenance action",
-            isPresented: Binding(
-                get: { pendingVacuumAction != nil },
-                set: { if !$0 { pendingVacuumAction = nil } }
-            ),
-            presenting: pendingVacuumAction
-        ) { action in
-            Button(action.title, role: action.destructive ? .destructive : nil) {
-                Task { await runVacuumAction(action) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { action in
-            Text(action.destructive
-                ? "\(action.sql)\n\nVACUUM FULL rewrites the table and can hold stronger locks while it runs."
-                : action.sql)
-        }
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(item: $maintenanceOperationOutput) { operation in
             RemoteOperationOutputSheet(operation: operation)
         }

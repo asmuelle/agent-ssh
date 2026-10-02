@@ -212,7 +212,8 @@ struct SystemMonitorView: View {
             MonitorDrillDownSheet(
                 connectionId: connectionId,
                 drillDown: item,
-                sshPort: sshPort
+                sshPort: sshPort,
+                hostLabel: connectionLabel
             )
         }
         .sheet(item: $serviceModal) { kind in

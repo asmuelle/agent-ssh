@@ -29,6 +29,7 @@ struct MobileConnectionEditorView: View {
     @State private var publicKeyCopied = false
     @State private var pendingKeyReferences: Set<MobileSSHKeyReference> = []
     @State private var keySetupRunning = false
+    @State private var pendingConfirmation: PendingServerAction?
     // Shared identities: named keypairs reusable across connections.
     @State private var availableIdentities: [MobileSSHIdentity] = []
     @State private var showingIdentityManager = false
@@ -148,6 +149,7 @@ struct MobileConnectionEditorView: View {
             refreshStoredCredentialState()
             reloadIdentities()
         }
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(isPresented: $showingCreateIdentity) {
             MobileCreateSSHIdentityView { identity in
                 reloadIdentities()
@@ -366,7 +368,7 @@ struct MobileConnectionEditorView: View {
     private var passwordBootstrapControls: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                Task { await generateInstallAndVerifyKey() }
+                requestKeyInstall()
             } label: {
                 if keySetupRunning {
                     ProgressView()
@@ -572,6 +574,23 @@ struct MobileConnectionEditorView: View {
     }
 
     @MainActor
+    /// Installing a key changes the server's authorized_keys, so it asks
+    /// first. The key does not exist yet, so the dialog states what will
+    /// happen rather than a command line.
+    private func requestKeyInstall() {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let server = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingConfirmation = PendingServerAction(
+            title: "Install a new SSH key for \(user.isEmpty ? "this user" : user)?",
+            confirmLabel: "Generate & Install",
+            target: server.isEmpty ? "this server" : server,
+            detail: "Generates a key on this device, signs in once with the password, and appends its public key to ~/.ssh/authorized_keys if it is not already there.",
+            isDestructive: false
+        ) {
+            await generateInstallAndVerifyKey()
+        }
+    }
+
     private func generateInstallAndVerifyKey() async {
         guard !keySetupRunning else { return }
 

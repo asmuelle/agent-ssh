@@ -13,6 +13,7 @@ struct MobileSecurityVaultView: View {
     @State private var secureEnclaveName = ""
     @State private var importingAdvancedIdentity: AdvancedIdentityImportMode?
     @State private var advancedAuthMessage: String?
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var showingIdentities = false
     @State private var identityCount = 0
 
@@ -91,8 +92,19 @@ struct MobileSecurityVaultView: View {
                             advancedIdentityRow(identity)
                         }
                         .onDelete { offsets in
-                            for index in offsets {
-                                advancedAuthStore.delete(advancedAuthStore.identities[index])
+                            let doomed = offsets.map { advancedAuthStore.identities[$0] }
+                            pendingConfirmation = PendingServerAction(
+                                title: doomed.count == 1
+                                    ? "Delete the identity \"\(doomed[0].displayName)\"?"
+                                    : "Delete \(doomed.count) identities?",
+                                confirmLabel: "Delete",
+                                target: "This device",
+                                detail: "Keys held in the Secure Enclave cannot be exported or recovered. Servers that trust them will refuse them.",
+                                isDestructive: true
+                            ) {
+                                for identity in doomed {
+                                    advancedAuthStore.delete(identity)
+                                }
                             }
                         }
                     }
@@ -140,6 +152,7 @@ struct MobileSecurityVaultView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .serverActionConfirmation($pendingConfirmation)
             .fileExporter(
                 isPresented: $exporting,
                 document: exportDocument,

@@ -54,22 +54,22 @@ extension DockerMonitorView {
 
                     Menu {
                         Button {
-                            pendingBatch = dockerDiskCleanupBatch(.buildCache)
+                            requestBatch(dockerDiskCleanupBatch(.buildCache))
                         } label: {
                             Label("Prune unused build cache", systemImage: "hammer")
                         }
                         Button {
-                            pendingBatch = dockerDiskCleanupBatch(.danglingImages)
+                            requestBatch(dockerDiskCleanupBatch(.danglingImages))
                         } label: {
                             Label("Prune dangling images", systemImage: "shippingbox")
                         }
                         Button {
-                            pendingBatch = dockerDiskCleanupBatch(.stoppedContainers)
+                            requestBatch(dockerDiskCleanupBatch(.stoppedContainers))
                         } label: {
                             Label("Remove stopped containers", systemImage: "server.rack")
                         }
                         Button {
-                            pendingBatch = dockerDiskCleanupBatch(.unusedVolumes)
+                            requestBatch(dockerDiskCleanupBatch(.unusedVolumes))
                         } label: {
                             Label("Remove unused volumes", systemImage: "externaldrive")
                         }

@@ -21,6 +21,20 @@ struct SystemdVerbTests {
         #expect(rendered.requiresPrivilege)
     }
 
+    @Test("The executed script retries the same command under sudo, and is what the dialog shows", arguments: SystemdVerb.allCases)
+    func scriptRetriesUnderSudo(verb: SystemdVerb) throws {
+        let rendered = try CommandTemplateRenderer.render(
+            templateId: verb.templateId, values: ["unit": "nginx.service"]
+        )
+        let script = SystemdVerb.script(for: rendered)
+        #expect(script == "\(rendered.command) || sudo -n \(rendered.command)")
+
+        let confirmation = verb.confirmation(unit: "nginx.service", host: "web-1", command: script) {}
+        #expect(confirmation.command == script)
+        #expect(confirmation.isDestructive == verb.destructive)
+        #expect(confirmation.title == "\(verb.label) nginx.service?")
+    }
+
     @Test("A hostile unit name is refused before any command exists", arguments: [
         "*.service", "-delete", "nginx.service\nrm -rf /", "a'\u{0301}; id #", "",
     ])

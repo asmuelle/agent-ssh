@@ -281,8 +281,8 @@ extension PostgresMonitorView {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 420)
             HStack {
-                Button("Run pg_dump") { Task { await runBackup(download: false) } }
-                Button("Run pg_dump and download") { Task { await runBackup(download: true) } }
+                Button("Run pg_dump") { requestBackup(download: false) }
+                Button("Run pg_dump and download") { requestBackup(download: true) }
             }
             Text("Uses pg_dump -Fc on the remote host. Downloads use the existing SFTP transfer queue.")
                 .font(.caption)

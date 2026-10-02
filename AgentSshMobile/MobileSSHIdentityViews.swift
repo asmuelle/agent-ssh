@@ -25,7 +25,7 @@ struct MobileSSHIdentityListView: View {
 
     @State private var identities: [MobileSSHIdentity] = []
     @State private var creating = false
-    @State private var pendingDelete: MobileSSHIdentity?
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var errorText: String?
 
     var body: some View {
@@ -69,7 +69,7 @@ struct MobileSSHIdentityListView: View {
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
-                                pendingDelete = identity
+                                pendingConfirmation = deleteConfirmation(for: identity)
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -116,9 +116,7 @@ struct MobileSSHIdentityListView: View {
                     onSelect?(identity)
                 }
             }
-            .alert(item: $pendingDelete) { identity in
-                deleteAlert(for: identity)
-            }
+            .serverActionConfirmation($pendingConfirmation)
             .onAppear(perform: reload)
         }
     }
@@ -127,18 +125,19 @@ struct MobileSSHIdentityListView: View {
         identities = MobileSSHKeyVault.shared.listIdentities()
     }
 
-    private func deleteAlert(for identity: MobileSSHIdentity) -> Alert {
+    private func deleteConfirmation(for identity: MobileSSHIdentity) -> PendingServerAction {
         // Be explicit that this is a local delete, not revocation: the server
         // keeps trusting the public key until it leaves authorized_keys.
-        Alert(
-            title: Text("Delete \"\(identity.name)\"?"),
-            message: Text("The private key is removed from this device's vault and can't be recovered. To revoke access, also delete its line from ~/.ssh/authorized_keys on the server. Connections using it will fail until you pick another key."),
-            primaryButton: .destructive(Text("Delete")) {
-                MobileSSHKeyVault.shared.deleteIdentity(id: identity.id)
-                reload()
-            },
-            secondaryButton: .cancel()
-        )
+        PendingServerAction(
+            title: "Delete \"\(identity.name)\"?",
+            confirmLabel: "Delete",
+            target: "This device",
+            detail: "The private key is removed from this device's vault and can't be recovered. To revoke access, also delete its line from ~/.ssh/authorized_keys on the server. Connections using it will fail until you pick another key.",
+            isDestructive: true
+        ) {
+            MobileSSHKeyVault.shared.deleteIdentity(id: identity.id)
+            reload()
+        }
     }
 }
 

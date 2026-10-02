@@ -25,4 +25,33 @@ enum SystemdVerb: String, CaseIterable {
         case .start, .reload, .enable: return false
         }
     }
+
+    /// What actually runs for `rendered`: the vetted command, retried under
+    /// `sudo -n` when the unprivileged attempt fails, so it works both as
+    /// root and for sudoers. Show this string and run this string.
+    static func script(for rendered: RenderedCommand) -> String {
+        guard rendered.requiresPrivilege else { return rendered.command }
+        return "\(rendered.command) || sudo -n \(rendered.command)"
+    }
+
+    /// "Restart", for titles and buttons.
+    var label: String { rawValue.capitalized }
+
+    /// The app's one confirmation for this verb. `command` must be the exact
+    /// string `perform` runs.
+    func confirmation(
+        unit: String,
+        host: String,
+        command: String,
+        perform: @escaping @MainActor () async -> Void
+    ) -> PendingServerAction {
+        PendingServerAction(
+            title: "\(label) \(unit)?",
+            confirmLabel: label,
+            target: host,
+            command: command,
+            isDestructive: destructive,
+            perform: perform
+        )
+    }
 }

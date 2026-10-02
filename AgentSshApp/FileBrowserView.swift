@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import AgentSshMacOS
 import OSLog
 
 /// Single-pane remote file browser.
@@ -70,6 +71,7 @@ struct FileBrowserView: View {
     /// Sheet state for the New Folder / Rename text-input flows. Both
     /// share the same model — the action is what differs.
     @State private var inputSheet: InputSheet?
+    @State private var pendingConfirmation: PendingServerAction?
 
     /// Sheet state for the permissions/owner/group editor.
     @State private var permissionsEditorTarget: PermissionsEditorTarget?
@@ -123,6 +125,7 @@ struct FileBrowserView: View {
             refresh()
         }
         .onAppear { refresh() }
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(item: $inputSheet) { sheet in
             FileBrowserInputSheet(
                 title: sheet.title,
@@ -1027,24 +1030,24 @@ struct FileBrowserView: View {
 
     private func presentDeleteConfirmation(for entry: FfiFileEntry) {
         guard let connectionId else { return }
-        let alert = NSAlert()
-        alert.messageText = "Delete \"\(entry.name)\"?"
-        alert.informativeText = entry.kind == .directory
-            ? "All contents will be removed recursively. This is permanent and cannot be undone."
-            : "This is permanent and cannot be undone."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
         let target = absolutePath(joining: entry.name)
-        performSftp(action: "delete") {
-            switch entry.kind {
-            case .directory:
-                try await Self.deleteRecursive(connectionId: connectionId, path: target)
-            case .file, .symlink:
-                try await BridgeManager.shared.sftpDeleteFile(connectionId: connectionId, path: target)
+        pendingConfirmation = PendingServerAction(
+            title: "Delete \"\(entry.name)\"?",
+            confirmLabel: "Delete",
+            target: connectionLabel,
+            command: target,
+            detail: entry.kind == .directory
+                ? "The folder and everything in it are removed. This cannot be undone."
+                : "This cannot be undone.",
+            isDestructive: true
+        ) {
+            performSftp(action: "delete") {
+                switch entry.kind {
+                case .directory:
+                    try await Self.deleteRecursive(connectionId: connectionId, path: target)
+                case .file, .symlink:
+                    try await BridgeManager.shared.sftpDeleteFile(connectionId: connectionId, path: target)
+                }
             }
         }
     }
@@ -1091,39 +1094,46 @@ struct FileBrowserView: View {
             .map { $0.name }
         guard !names.isEmpty else { return }
 
-        let alert = NSAlert()
-        alert.messageText = "Delete \(names.count) item\(names.count == 1 ? "" : "s")?"
-        alert.informativeText = names.prefix(5).joined(separator: ", ")
-            + (names.count > 5 ? ", and \(names.count - 5) more" : "")
-            + "\n\nDirectories are removed recursively. This is permanent."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
         let toDelete = entries.filter { ids.contains($0.name) }
-        Task {
-            var failures: [String] = []
-            for entry in toDelete {
-                let target = self.absolutePath(joining: entry.name)
-                do {
-                    switch entry.kind {
-                    case .directory:
-                        try await Self.deleteRecursive(connectionId: connectionId, path: target)
-                    case .file, .symlink:
-                        try await BridgeManager.shared.sftpDeleteFile(connectionId: connectionId, path: target)
-                    }
-                } catch {
-                    failures.append("\(entry.name): \(error.localizedDescription)")
-                }
-            }
-            self.selection = nil
-            if !failures.isEmpty {
-                self.error = "Could not delete \(failures.count) item\(failures.count == 1 ? "" : "s"): "
-                    + failures.prefix(3).joined(separator: "; ")
-            }
-            self.refresh()
+        let paths = toDelete.map { absolutePath(joining: $0.name) }
+        let limit = 10
+        var shown = paths.prefix(limit).joined(separator: "\n")
+        if paths.count > limit {
+            shown += "\n… and \(paths.count - limit) more"
         }
+        pendingConfirmation = PendingServerAction(
+            title: "Delete \(names.count) item\(names.count == 1 ? "" : "s")?",
+            confirmLabel: "Delete",
+            target: connectionLabel,
+            command: shown,
+            detail: "Folders are removed with everything in them. This cannot be undone.",
+            isDestructive: true
+        ) {
+            await runDelete(toDelete, connectionId: connectionId)
+        }
+    }
+
+    private func runDelete(_ toDelete: [FfiFileEntry], connectionId: String) async {
+        var failures: [String] = []
+        for entry in toDelete {
+            let target = self.absolutePath(joining: entry.name)
+            do {
+                switch entry.kind {
+                case .directory:
+                    try await Self.deleteRecursive(connectionId: connectionId, path: target)
+                case .file, .symlink:
+                    try await BridgeManager.shared.sftpDeleteFile(connectionId: connectionId, path: target)
+                }
+            } catch {
+                failures.append("\(entry.name): \(error.localizedDescription)")
+            }
+        }
+        self.selection = nil
+        if !failures.isEmpty {
+            self.error = "Could not delete \(failures.count) item\(failures.count == 1 ? "" : "s"): "
+                + failures.prefix(3).joined(separator: "; ")
+        }
+        self.refresh()
     }
 
     /// Recursive delete: walk the directory contents, delete each

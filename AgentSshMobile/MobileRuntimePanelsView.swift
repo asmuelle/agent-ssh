@@ -2,8 +2,10 @@ import SwiftUI
 
 struct MobileRuntimePanelsView: View {
     let connectionId: String
+    let hostLabel: String
 
     @State private var mode = Mode.docker
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var dockerSnapshot = MobileDockerSnapshot.empty
     @State private var postgresSnapshot = MobilePostgresSnapshot.empty
     @State private var search = ""
@@ -51,6 +53,7 @@ struct MobileRuntimePanelsView: View {
             search = ""
             Task { await refresh() }
         }
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(item: $dockerActionResult) { result in
             MobileDockerActionResultSheet(result: result)
         }
@@ -265,14 +268,14 @@ struct MobileRuntimePanelsView: View {
         .buttonStyle(.plain)
         .contextMenu {
             if container.state == "running" {
-                Button { Task { await performDockerAction(.stop, on: container) } } label: {
+                Button { requestDockerAction(.stop, on: container) } label: {
                     Label("Stop", systemImage: "stop.circle")
                 }
-                Button { Task { await performDockerAction(.restart, on: container) } } label: {
+                Button { requestDockerAction(.restart, on: container) } label: {
                     Label("Restart", systemImage: "arrow.clockwise")
                 }
             } else {
-                Button { Task { await performDockerAction(.start, on: container) } } label: {
+                Button { requestDockerAction(.start, on: container) } label: {
                     Label("Start", systemImage: "play.circle")
                 }
             }
@@ -289,16 +292,16 @@ struct MobileRuntimePanelsView: View {
         .swipeActions(edge: .trailing) {
             if container.state == "running" {
                 Button("Stop", systemImage: "stop.circle") {
-                    Task { await performDockerAction(.stop, on: container) }
+                    requestDockerAction(.stop, on: container)
                 }
                 .tint(.red)
                 Button("Restart", systemImage: "arrow.clockwise") {
-                    Task { await performDockerAction(.restart, on: container) }
+                    requestDockerAction(.restart, on: container)
                 }
                 .tint(.orange)
             } else if container.state == "exited" || container.state == "dead" {
                 Button("Start", systemImage: "play.circle") {
-                    Task { await performDockerAction(.start, on: container) }
+                    requestDockerAction(.start, on: container)
                 }
                 .tint(.green)
             }
@@ -464,10 +467,22 @@ struct MobileRuntimePanelsView: View {
     }
 
     @MainActor
-    private func performDockerAction(_ action: MobileDockerContainerAction, on container: MobileDockerContainer) async {
-        dockerActionInProgress = container.id
-        defer { dockerActionInProgress = nil }
+    /// Ask before starting, stopping, or restarting. The dialog shows the
+    /// exact command the action then runs.
+    private func requestDockerAction(_ action: MobileDockerContainerAction, on container: MobileDockerContainer) {
+        let (cmd, label) = dockerCommand(action, for: container)
+        pendingConfirmation = PendingServerAction(
+            title: "\(label)?",
+            confirmLabel: action.rawValue.capitalized,
+            target: hostLabel,
+            command: cmd,
+            isDestructive: action == .stop || action == .restart
+        ) {
+            await performDockerAction(action, on: container)
+        }
+    }
 
+    private func dockerCommand(_ action: MobileDockerContainerAction, for container: MobileDockerContainer) -> (command: String, label: String) {
         let cmd: String
         let label: String
 
@@ -491,6 +506,13 @@ struct MobileRuntimePanelsView: View {
             cmd = "echo __MIDNIGHT_DOCKER_EXEC__; echo 'Run in terminal: docker exec -it \(container.name) sh'"
             label = "Shell: \(container.name)"
         }
+        return (cmd, label)
+    }
+
+    private func performDockerAction(_ action: MobileDockerContainerAction, on container: MobileDockerContainer) async {
+        dockerActionInProgress = container.id
+        defer { dockerActionInProgress = nil }
+        let (cmd, label) = dockerCommand(action, for: container)
 
         do {
             let output = try await MobileMonitorBridge.shared.executeCommand(
