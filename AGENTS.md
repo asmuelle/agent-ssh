@@ -71,7 +71,7 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 |------|-------|----------------|
 | App entry | `AgentSshApp/AgentSshApp.swift` | `@main` SwiftUI App, scene setup |
 | FFI entry point on Swift side | `AgentSshApp/BridgeManager.swift` | The single `BridgeManager.initialize()` call routes everything |
-| FFI extensions per feature | `BridgeManager+Postgres.swift`, `BridgeManager+Tools.swift` | Postgres explorer, network tools |
+| FFI extensions per feature | `BridgeManager+Postgres.swift`, `BridgeManager+ServerDoctor.swift` | Postgres explorer, Server Doctor |
 | FFI surface | `src/ffi/` | The uniffi-exported functions and types, split into per-feature modules — most edits land here |
 | FFI runtime | `src/bridge.rs` | Owns the Tokio runtime + connection-manager singleton |
 | Swift bindings | `bindings/agent_ssh.swift` | **Generated, do not hand-edit** — see "FFI checksum gotcha" below |
@@ -80,7 +80,6 @@ Native **macOS + iPadOS** SSH workspace. Swift on top, Rust at the bottom, [unif
 | iOS variant | `AgentSshMobile/Mobile*.swift` | Separate views/stores for iPadOS — keychain, SFTP bridge, etc. |
 | Sparkle integration | `AgentSshApp/UpdateManager.swift`, `scripts/find_sparkle_tool.sh` | Auto-updates via Sparkle 2.x |
 | Postgres UI | `AgentSshApp/Postgres*.swift` | Browser, query tabs, results table, history, saved queries |
-| Network tools UI | `AgentSshApp/NetworkToolsWindow.swift`, `BridgeManager+Tools.swift` | DNS, ports, tcpdump, git status |
 
 ## FFI lifecycle
 

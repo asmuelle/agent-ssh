@@ -72,7 +72,7 @@ final class TerminalTabsStore: ObservableObject {
                 forConnectionId: connectionId
             )
 
-        case .transferProgress, .showCommandPalette, .showDashboard, .tcpdumpLine:
+        case .transferProgress, .showCommandPalette, .showDashboard:
             break
         }
     }
@@ -401,10 +401,6 @@ final class TerminalTabsStore: ObservableObject {
                 icon: "arrow.clockwise",
                 severity: .success
             )
-            await PortForwardingCoordinator.shared.autoStart(
-                profileId: profile.id,
-                connectionId: connectionId
-            )
         } else {
             // First connect: append new tab.
             let tab = TerminalTab(
@@ -428,10 +424,6 @@ final class TerminalTabsStore: ObservableObject {
                 connectionId: connectionId,
                 icon: profile.kind.supportsTerminal ? "terminal" : "folder",
                 severity: .success
-            )
-            await PortForwardingCoordinator.shared.autoStart(
-                profileId: profile.id,
-                connectionId: connectionId
             )
         }
     }
@@ -548,10 +540,6 @@ final class TerminalTabsStore: ObservableObject {
         }
         BridgeManager.shared.disconnect(connectionId: tab.connectionId)
         SSHAgentApprovalCoordinator.shared.revokeSession(sessionId: tab.sessionId)
-        PortForwardingCoordinator.shared.markStopped(
-            profileId: tab.profile.id,
-            connectionId: tab.connectionId
-        )
         removeWidgetSnapshot(for: tab)
         ActivityLogStore.shared.record(
             title: "Disconnected",

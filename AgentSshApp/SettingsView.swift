@@ -30,7 +30,6 @@ struct SettingsView: View {
     @State private var importExportError: String?
     @State private var sshConfigImportSummary: String?
     @State private var syncStatus: String?
-    @State private var syncError: String?
 
     @State private var selectedSection: SettingsSection? = .terminal
 
@@ -39,7 +38,7 @@ struct SettingsView: View {
     /// overflow `»` menu previously hid (and grayed out) Server Doctor,
     /// License, and Privacy. A sidebar keeps every pane reachable.
     enum SettingsSection: String, CaseIterable, Identifiable {
-        case terminal, appearance, sync, cloud, network
+        case terminal, appearance, sync
         case credentials, advancedAuth, aiCommandCenter, serverDoctor
         case license, privacy
 
@@ -49,9 +48,7 @@ struct SettingsView: View {
             switch self {
             case .terminal: return "Terminal"
             case .appearance: return "Appearance"
-            case .sync: return "Sync"
-            case .cloud: return "Cloud"
-            case .network: return "Network"
+            case .sync: return "Import & Export"
             case .credentials: return "Credentials"
             case .advancedAuth: return "Advanced Auth"
             case .aiCommandCenter: return "AI Command Center"
@@ -65,9 +62,7 @@ struct SettingsView: View {
             switch self {
             case .terminal: return "terminal"
             case .appearance: return "paintbrush"
-            case .sync: return "icloud"
-            case .cloud: return "server.rack"
-            case .network: return "network"
+            case .sync: return "square.and.arrow.up.on.square"
             case .credentials: return "key"
             case .advancedAuth: return "lock.shield"
             case .aiCommandCenter: return "cpu"
@@ -77,17 +72,6 @@ struct SettingsView: View {
             }
         }
 
-        var isAvailable: Bool {
-            switch self {
-            case .cloud: return FeatureFlags.cloudServerManagement.isEnabled
-            case .network: return FeatureFlags.networkPolish.isEnabled
-            default: return true
-            }
-        }
-
-        static var available: [SettingsSection] {
-            allCases.filter(\.isAvailable)
-        }
     }
 
     /// Sidebar sections, minus the License pane while entitlement enforcement
@@ -96,7 +80,7 @@ struct SettingsView: View {
     /// without re-reading Info.plist; the pane returns as soon as enforcement
     /// is switched on.
     private var visibleSections: [SettingsSection] {
-        SettingsSection.available.filter { section in
+        SettingsSection.allCases.filter { section in
             section != .license || entitlementsStore.snapshot.status != .preview
         }
     }
@@ -158,17 +142,6 @@ struct SettingsView: View {
         } message: {
             Text(sshConfigImportSummary ?? "")
         }
-        .alert(
-            "Sync Failed",
-            isPresented: Binding(
-                get: { syncError != nil },
-                set: { if !$0 { syncError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(syncError ?? "")
-        }
     }
 
     @ViewBuilder
@@ -177,8 +150,6 @@ struct SettingsView: View {
         case .terminal: terminalSettings
         case .appearance: appearanceSettings
         case .sync: syncSettings
-        case .cloud: CloudServerManagementView(connectionStore: connectionStore)
-        case .network: NetworkPolishSettingsView()
         case .credentials: credentialsSettings
         case .advancedAuth: AdvancedAuthenticationView()
         case .aiCommandCenter: MCPSettingsView()
@@ -269,51 +240,10 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    // MARK: - Sync tab
+    // MARK: - Import & Export tab
 
     private var syncSettings: some View {
         Form {
-            if FeatureFlags.cloudSync.isEnabled {
-                Section {
-                    statusRow(
-                        icon: "key.fill",
-                        title: "Secrets",
-                        value: "Local Keychain only",
-                        color: .green
-                    )
-                    statusRow(
-                        icon: "icloud.fill",
-                        title: "Profile metadata",
-                        value: "iCloud key-value snapshot",
-                        color: .blue
-                    )
-                } header: {
-                    Text("Scope")
-                } footer: {
-                    Text("Sync snapshots contain server names, hosts, usernames, folders, tags, snippets, and terminal preferences. Passwords and passphrases are not exported from Keychain.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("Manual sync") {
-                    HStack {
-                        Button("Publish Snapshot") {
-                            publishSyncSnapshot()
-                        }
-                        Button("Apply Latest Snapshot") {
-                            applySyncSnapshot()
-                        }
-                        Spacer()
-                    }
-
-                    if let syncStatus {
-                        Text(syncStatus)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
             Section {
                 HStack {
                     Button("Import CSV...") {
@@ -323,6 +253,12 @@ struct SettingsView: View {
                         exportConnectionsCSV()
                     }
                     Spacer()
+                }
+
+                if let syncStatus {
+                    Text(syncStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } header: {
                 Text("CSV import/export")
@@ -485,54 +421,6 @@ struct SettingsView: View {
                 importExportError = error.localizedDescription
             }
         }
-    }
-
-    private func publishSyncSnapshot() {
-        do {
-            let report = try connectionStore.publishCloudSync(terminalSettings: currentTerminalSettingsRecord())
-            syncStatus = "Published sync snapshot. \(report.summary)."
-        } catch {
-            syncError = error.localizedDescription
-        }
-    }
-
-    private func applySyncSnapshot() {
-        do {
-            let result = try connectionStore.applyLatestCloudSync()
-            if let terminalSettings = result.terminalSettings {
-                applyTerminalSettings(terminalSettings)
-            }
-            syncStatus = "Applied sync snapshot. \(result.report.summary)."
-        } catch {
-            syncError = error.localizedDescription
-        }
-    }
-
-    private func currentTerminalSettingsRecord() -> SyncedTerminalSettingsRecord {
-        SyncedTerminalSettingsRecord(
-            defaultColumns: defaultColumns,
-            defaultRows: defaultRows,
-            fontSize: fontSize,
-            themeId: terminalTheme,
-            scrollbackLines: scrollbackLines,
-            cursorStyleId: terminalCursorStyle,
-            mouseReporting: terminalMouseReporting,
-            optionAsMeta: terminalOptionAsMeta,
-            copyOnSelect: terminalCopyOnSelect,
-            updatedAt: Date()
-        )
-    }
-
-    private func applyTerminalSettings(_ settings: SyncedTerminalSettingsRecord) {
-        defaultColumns = settings.defaultColumns
-        defaultRows = settings.defaultRows
-        fontSize = settings.fontSize
-        terminalTheme = settings.themeId
-        scrollbackLines = settings.scrollbackLines
-        terminalCursorStyle = settings.cursorStyleId
-        terminalMouseReporting = settings.mouseReporting
-        terminalOptionAsMeta = settings.optionAsMeta
-        terminalCopyOnSelect = settings.copyOnSelect
     }
 
     // MARK: - License tab

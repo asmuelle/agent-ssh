@@ -24,32 +24,6 @@ final class LiveActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.progress ?? -1, 0.25, accuracy: 0.001)
         XCTAssertEqual(snapshot.subtitle, "/var/tmp/report.csv")
     }
-
-    func testPortForwardMapsToTunnelLiveActivity() {
-        let record = PortForwardRuntimeRecord(
-            id: "pg",
-            profileId: "profile-1",
-            connectionId: "conn-1",
-            name: "Postgres",
-            kind: .local,
-            state: .running,
-            bindHost: "127.0.0.1",
-            requestedBindPort: 15432,
-            boundPort: 49152,
-            destinationHost: "localhost",
-            destinationPort: 5432,
-            startedAt: Date(timeIntervalSince1970: 100),
-            updatedAt: Date(timeIntervalSince1970: 120)
-        )
-
-        let snapshot = LiveActivitySnapshot.portForward(record)
-
-        XCTAssertEqual(snapshot.id, "tunnel:pg")
-        XCTAssertEqual(snapshot.kind, .tunnel)
-        XCTAssertEqual(snapshot.state, .running)
-        XCTAssertEqual(snapshot.subtitle, "127.0.0.1:49152 -> localhost:5432")
-        XCTAssertEqual(snapshot.metadata["boundPort"], "49152")
-    }
 }
 
 final class ShellIntegrationCommandTests: XCTestCase {

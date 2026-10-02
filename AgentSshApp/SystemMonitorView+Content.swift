@@ -133,14 +133,6 @@ extension SystemMonitorView {
                         maxEvents: 6
                     )
 
-                    if let profile, let connectionId {
-                        PortForwardingPanel(
-                            profile: profile,
-                            connectionId: connectionId,
-                            isActive: isActive
-                        )
-                    }
-
                     Spacer(minLength: 16)
 
                     if let connectionId {
@@ -457,20 +449,6 @@ extension SystemMonitorView {
                     connectionId: connectionId,
                     maxEvents: 6
                 )
-            }
-
-            if let profile, let connectionId {
-                dashboardDisclosure(
-                    title: "Ports",
-                    icon: "arrow.left.and.right",
-                    isExpanded: $portsExpanded
-                ) {
-                    PortForwardingPanel(
-                        profile: profile,
-                        connectionId: connectionId,
-                        isActive: isActive
-                    )
-                }
             }
 
             if includeMap, let connectionId {

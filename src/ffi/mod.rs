@@ -189,26 +189,10 @@ fn start_event_listener(callback: Arc<dyn FfiEventCallback>) {
                             })
                             .to_string(),
                         ),
-                        CoreEvent::TcpdumpLine {
-                            capture_id,
-                            line,
-                            is_stderr,
-                        } => (
-                            "tcpdump_line".into(),
-                            // Tcpdump captures aren't bound to a per-
-                            // connection routing key on the Swift side;
-                            // they're keyed by `capture_id` inside the
-                            // payload. Use a stable sentinel for the
-                            // connection_id field so the listener can
-                            // dispatch based on `ty` alone.
-                            "tcpdump".into(),
-                            serde_json::json!({
-                                "captureId": capture_id,
-                                "line": line,
-                                "isStderr": is_stderr,
-                            })
-                            .to_string(),
-                        ),
+                        // The app no longer starts tcpdump captures, so
+                        // these never arrive; the arm keeps the match over
+                        // the core's events exhaustive.
+                        CoreEvent::TcpdumpLine { .. } => continue,
                     };
                     let ffi_event = FfiEvent {
                         ty,
@@ -399,13 +383,9 @@ pub(crate) use postgres::*;
 
 mod keychain;
 
-mod port_forward_ffi;
-
 mod doctor_ffi;
 
 mod security_patch_ffi;
-
-mod tools;
 
 mod mcp;
 

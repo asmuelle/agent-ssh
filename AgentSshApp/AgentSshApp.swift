@@ -9,7 +9,6 @@ struct AgentSshApp: App {
     @StateObject private var tabsStore = TerminalTabsStore()
     @StateObject private var updateManager = UpdateManager.shared
     @StateObject private var entitlementsStore = EntitlementsStore.shared
-    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         Window("agent-ssh", id: "main") {
@@ -21,16 +20,6 @@ struct AgentSshApp: App {
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
-
-        // Single network-tools window — git deploy-state, multi-perspective DNS,
-        // listening ports, and live tcpdump captures. Reuses the connected
-        // SSH tabs from the main window via `tabsStore`.
-        Window("Network Tools", id: "network-tools") {
-            NetworkToolsWindow()
-                .environmentObject(tabsStore)
-        }
-        .windowStyle(.titleBar)
-        .defaultSize(width: 900, height: 600)
         .commands {
             CommandGroup(replacing: .sidebar) {
                 Button("Toggle Sidebar") {
@@ -95,13 +84,6 @@ struct AgentSshApp: App {
                 }
                 .keyboardShortcut(.tab, modifiers: [.command, .shift])
                 .disabled(tabsStore.tabs.count < 2)
-            }
-
-            CommandMenu("Tools") {
-                Button("Network Tools…") {
-                    openWindow(id: "network-tools")
-                }
-                .keyboardShortcut("n", modifiers: [.command, .shift, .option])
             }
 
             CommandMenu("Find") {

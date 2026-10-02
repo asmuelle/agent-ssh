@@ -255,27 +255,6 @@ pub struct FfiProcess {
     pub args: String,
 }
 
-/// POSIX signal number. Limited to the two cases the UI actually
-/// surfaces today; widening this means the signal-routing match in
-/// `rshell_signal_process` can stay exhaustive (no wildcard arm)
-/// instead of accepting arbitrary integers from Swift.
-#[derive(uniffi::Enum, Clone, Copy)]
-pub enum FfiSignal {
-    /// SIGTERM — request graceful shutdown.
-    Term,
-    /// SIGKILL — non-catchable, non-ignorable termination.
-    Kill,
-}
-
-impl FfiSignal {
-    fn as_kill_arg(self) -> &'static str {
-        match self {
-            FfiSignal::Term => "TERM",
-            FfiSignal::Kill => "KILL",
-        }
-    }
-}
-
 /// List running processes on the connected host. Same OS-detect
 /// path as `rshell_get_system_stats` — first call runs `uname -s`,
 /// later calls reuse the cached value.
@@ -331,54 +310,6 @@ pub fn rshell_get_processes(connection_id: String) -> Result<Vec<FfiProcess>, Mo
                 args: p.args,
             })
             .collect())
-    })
-}
-
-/// Send a signal to a remote process. Runs `kill -SIGNAME PID` on
-/// the host. Privilege errors (`Operation not permitted`) propagate
-/// through `MonitorError::Other` with the remote's stderr line.
-#[uniffi::export]
-pub fn rshell_signal_process(
-    connection_id: String,
-    pid: u32,
-    signal: FfiSignal,
-) -> Result<(), MonitorError> {
-    let bridge = MacOsBridge::global();
-    let cm = bridge.connection_manager.clone();
-
-    bridge.runtime.block_on(async move {
-        let client =
-            cm.get_connection(&connection_id)
-                .await
-                .ok_or_else(|| MonitorError::NotConnected {
-                    connection_id: connection_id.clone(),
-                })?;
-
-        // `kill` accepts the signal as both number and name. Names
-        // are portable across BSD/Linux and read better in logs.
-        let cmd = format!("kill -{} {}", signal.as_kill_arg(), pid);
-        let guard = client.read().await;
-        let output =
-            match tokio::time::timeout(COMMAND_TIMEOUT, guard.execute_command_full(&cmd)).await {
-                Ok(Ok(output)) => output,
-                Ok(Err(e)) => {
-                    return Err(MonitorError::Other {
-                        detail: sanitize_error(e),
-                    });
-                }
-                Err(_) => {
-                    return Err(MonitorError::Other {
-                        detail: format!("kill timed out after {}s", COMMAND_TIMEOUT.as_secs()),
-                    });
-                }
-            };
-        if output.is_success() {
-            Ok(())
-        } else {
-            Err(MonitorError::Other {
-                detail: command_failure_detail(&output, "kill failed"),
-            })
-        }
     })
 }
 

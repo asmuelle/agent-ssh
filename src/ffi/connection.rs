@@ -103,12 +103,9 @@ pub fn rshell_disconnect(connection_id: String) -> FfiResult {
         );
     }
 
-    let result = bridge.runtime.block_on(async move {
-        crate::port_forward::registry()
-            .stop_for_connection(&conn_id_for_close)
-            .await;
-        cm.close_connection(&conn_id_for_close).await
-    });
+    let result = bridge
+        .runtime
+        .block_on(async move { cm.close_connection(&conn_id_for_close).await });
 
     // Always publish disconnected — close_connection is idempotent on the
     // ssh-commander-core side, so even an error path here means the session is

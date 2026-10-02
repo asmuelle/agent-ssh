@@ -88,83 +88,6 @@ final class MobileConnectionStore: ObservableObject {
         save()
     }
 
-    func makeCloudSyncSnapshot(
-        terminalSettings: SyncedTerminalSettingsRecord? = nil,
-        generatedAt: Date = Date()
-    ) throws -> CloudSyncSnapshot {
-        let integrations = try PlatformIntegrationStore().load()
-        return CloudSyncSnapshot(
-            generatedAt: generatedAt,
-            profiles: connections.map {
-                SyncedConnectionProfileRecord(profile: $0.connectionProfile, updatedAt: generatedAt)
-            },
-            snippets: integrations.snippets.filter(\.syncEnabled),
-            terminalSettings: terminalSettings
-        )
-    }
-
-    @discardableResult
-    func publishCloudSync(
-        terminalSettings: SyncedTerminalSettingsRecord? = nil,
-        store: CloudSyncStore = CloudSyncStore()
-    ) throws -> CloudSyncMergeReport {
-        let local = try makeCloudSyncSnapshot(terminalSettings: terminalSettings)
-        let existing = try store.loadLatest() ?? .empty
-        let (merged, report) = CloudSyncMergeEngine.merge(local: existing, incoming: local)
-        try store.save(merged)
-        return report
-    }
-
-    @discardableResult
-    func applyLatestCloudSync(
-        store: CloudSyncStore = CloudSyncStore()
-    ) throws -> (report: CloudSyncMergeReport, terminalSettings: SyncedTerminalSettingsRecord?) {
-        guard let snapshot = try store.loadLatest() else {
-            throw MobileConnectionStoreError.noSyncSnapshot
-        }
-        return try applyCloudSyncSnapshot(snapshot)
-    }
-
-    @discardableResult
-    func applyCloudSyncSnapshot(
-        _ snapshot: CloudSyncSnapshot
-    ) throws -> (report: CloudSyncMergeReport, terminalSettings: SyncedTerminalSettingsRecord?) {
-        var report = CloudSyncMergeReport()
-        let existingById = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0) })
-        var byId = existingById
-
-        for record in snapshot.profiles {
-            let shared = record.connectionProfile(preserving: existingById[record.id]?.connectionProfile)
-            let updated = MobileConnectionProfile(sharedProfile: shared, preserving: existingById[record.id])
-            if let existing = byId[record.id] {
-                if existing == updated {
-                    report.skippedProfiles += 1
-                } else {
-                    byId[record.id] = updated
-                    report.updatedProfiles += 1
-                }
-            } else {
-                byId[record.id] = updated
-                report.insertedProfiles += 1
-            }
-        }
-
-        for tombstone in snapshot.tombstones where tombstone.collection == .profile {
-            if let removed = byId.removeValue(forKey: tombstone.recordId) {
-                MobileKeychainManager.shared.deleteCredentials(for: removed)
-                deleteUnusedKeyReference(removed.sshKeyReference)
-                report.deletedRecords += 1
-            }
-        }
-
-        connections = byId.values.sorted {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
-        try mergeSyncedSnippets(snapshot.snippets, tombstones: snapshot.tombstones, report: &report)
-        save()
-        return (report, snapshot.terminalSettings)
-    }
-
     private func save() {
         do {
             let url = storeURL
@@ -186,45 +109,6 @@ final class MobileConnectionStore: ObservableObject {
         } catch {
             lastError = "Could not save connections: \(error.localizedDescription)"
         }
-    }
-
-    private func mergeSyncedSnippets(
-        _ incoming: [SharedSnippetRecord],
-        tombstones: [CloudSyncTombstoneRecord],
-        report: inout CloudSyncMergeReport
-    ) throws {
-        let store = PlatformIntegrationStore()
-        var data = try store.load()
-        var byId = Dictionary(uniqueKeysWithValues: data.snippets.map { ($0.id, $0) })
-
-        for snippet in incoming {
-            if tombstones.contains(where: {
-                $0.collection == .snippet && $0.recordId == snippet.id && $0.deletedAt >= snippet.updatedAt
-            }) {
-                report.skippedSnippets += 1
-                continue
-            }
-            if let existing = byId[snippet.id] {
-                if snippet.updatedAt > existing.updatedAt {
-                    byId[snippet.id] = snippet
-                    report.updatedSnippets += 1
-                } else {
-                    report.skippedSnippets += 1
-                }
-            } else {
-                byId[snippet.id] = snippet
-                report.insertedSnippets += 1
-            }
-        }
-
-        for tombstone in tombstones where tombstone.collection == .snippet {
-            if byId.removeValue(forKey: tombstone.recordId) != nil {
-                report.deletedRecords += 1
-            }
-        }
-
-        data.snippets = byId.values.sorted { $0.updatedAt > $1.updatedAt }
-        try store.save(data)
     }
 
     private func syncShortcutServers() -> String? {
@@ -262,17 +146,6 @@ final class MobileConnectionStore: ObservableObject {
     }
 }
 
-enum MobileConnectionStoreError: LocalizedError {
-    case noSyncSnapshot
-
-    var errorDescription: String? {
-        switch self {
-        case .noSyncSnapshot:
-            return "No iCloud sync snapshot is available yet."
-        }
-    }
-}
-
 private extension MobileConnectionProfile {
     var connectionProfile: ConnectionProfile {
         ConnectionProfile(
@@ -290,8 +163,7 @@ private extension MobileConnectionProfile {
             favorite: favorite,
             tags: tags,
             color: color,
-            notes: notes,
-            networkOptions: networkOptions
+            notes: notes
         )
     }
 
@@ -311,8 +183,7 @@ private extension MobileConnectionProfile {
             folder: sharedProfile.folderPath,
             tags: sharedProfile.tags,
             color: sharedProfile.color,
-            notes: sharedProfile.notes,
-            networkOptions: sharedProfile.networkOptions
+            notes: sharedProfile.notes
         )
     }
 }

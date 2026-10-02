@@ -138,325 +138,6 @@ public struct OfflineSFTPFolderRecord: Codable, Identifiable, Hashable, Sendable
     }
 }
 
-public enum PortForwardKind: String, Codable, CaseIterable, Hashable, Sendable {
-    case local
-    case remote
-    case dynamicSocks
-
-    public var displayName: String {
-        switch self {
-        case .local:
-            return "Local"
-        case .remote:
-            return "Remote"
-        case .dynamicSocks:
-            return "SOCKS"
-        }
-    }
-
-    public var requiresDestination: Bool {
-        self != .dynamicSocks
-    }
-}
-
-public struct PortForwardProfileRecord: Codable, Identifiable, Hashable, Sendable {
-    public var id: String
-    public var profileId: String
-    public var name: String
-    public var kind: PortForwardKind
-    public var bindHost: String
-    public var bindPort: UInt16
-    public var destinationHost: String?
-    public var destinationPort: UInt16?
-    public var autoStart: Bool
-
-    public init(
-        id: String = UUID().uuidString,
-        profileId: String,
-        name: String,
-        kind: PortForwardKind,
-        bindHost: String = "127.0.0.1",
-        bindPort: UInt16,
-        destinationHost: String? = nil,
-        destinationPort: UInt16? = nil,
-        autoStart: Bool = false
-    ) {
-        self.id = id
-        self.profileId = profileId
-        self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.kind = kind
-        self.bindHost = bindHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.bindPort = bindPort
-        self.destinationHost = destinationHost?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.destinationPort = destinationPort
-        self.autoStart = autoStart
-    }
-
-    public var requiresDestination: Bool {
-        kind.requiresDestination
-    }
-
-    public var bindEndpoint: String {
-        "\(bindHost.isEmpty ? "127.0.0.1" : bindHost):\(bindPort)"
-    }
-
-    public var destinationEndpoint: String {
-        guard let destinationHost, let destinationPort else {
-            return kind == .dynamicSocks ? "SOCKS target" : "No destination"
-        }
-        return "\(destinationHost):\(destinationPort)"
-    }
-
-    public var routeSummary: String {
-        switch kind {
-        case .local:
-            return "\(bindEndpoint) -> \(destinationEndpoint)"
-        case .remote:
-            return "remote \(bindEndpoint) -> \(destinationEndpoint)"
-        case .dynamicSocks:
-            return "SOCKS on \(bindEndpoint)"
-        }
-    }
-
-    public var validationError: String? {
-        if profileId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Choose an SSH profile."
-        }
-        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Name is required."
-        }
-        if bindHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Bind host is required."
-        }
-        if requiresDestination {
-            if destinationHost?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                return "Destination host is required."
-            }
-            if destinationPort == nil || destinationPort == 0 {
-                return "Destination port is required."
-            }
-        }
-        return nil
-    }
-}
-
-public enum PortForwardRuntimeState: String, Codable, CaseIterable, Hashable, Sendable {
-    case starting
-    case running
-    case stopped
-    case failed
-    case unsupported
-
-    public var isActive: Bool {
-        self == .starting || self == .running
-    }
-}
-
-public struct PortForwardRuntimeRecord: Codable, Identifiable, Equatable, Sendable {
-    public var id: String
-    public var profileId: String
-    public var connectionId: String
-    public var name: String
-    public var kind: PortForwardKind
-    public var state: PortForwardRuntimeState
-    public var bindHost: String
-    public var requestedBindPort: UInt16
-    public var boundPort: UInt16?
-    public var destinationHost: String?
-    public var destinationPort: UInt16?
-    public var startedAt: Date?
-    public var updatedAt: Date
-    public var bytesIn: UInt64
-    public var bytesOut: UInt64
-    public var connectionCount: UInt64
-    public var lastError: String?
-
-    public init(
-        id: String,
-        profileId: String,
-        connectionId: String,
-        name: String,
-        kind: PortForwardKind,
-        state: PortForwardRuntimeState,
-        bindHost: String,
-        requestedBindPort: UInt16,
-        boundPort: UInt16? = nil,
-        destinationHost: String? = nil,
-        destinationPort: UInt16? = nil,
-        startedAt: Date? = nil,
-        updatedAt: Date = Date(),
-        bytesIn: UInt64 = 0,
-        bytesOut: UInt64 = 0,
-        connectionCount: UInt64 = 0,
-        lastError: String? = nil
-    ) {
-        self.id = id
-        self.profileId = profileId
-        self.connectionId = connectionId
-        self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.kind = kind
-        self.state = state
-        self.bindHost = bindHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.requestedBindPort = requestedBindPort
-        self.boundPort = boundPort
-        self.destinationHost = destinationHost?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.destinationPort = destinationPort
-        self.startedAt = startedAt
-        self.updatedAt = updatedAt
-        self.bytesIn = bytesIn
-        self.bytesOut = bytesOut
-        self.connectionCount = connectionCount
-        self.lastError = lastError
-    }
-
-    public var effectiveBindPort: UInt16 {
-        boundPort ?? requestedBindPort
-    }
-
-    public var bindEndpoint: String {
-        "\(bindHost.isEmpty ? "127.0.0.1" : bindHost):\(effectiveBindPort)"
-    }
-
-    public var destinationEndpoint: String {
-        guard let destinationHost, let destinationPort else {
-            return kind == .dynamicSocks ? "SOCKS target" : "No destination"
-        }
-        return "\(destinationHost):\(destinationPort)"
-    }
-
-    public var summary: String {
-        switch state {
-        case .starting:
-            return "Starting \(bindEndpoint)"
-        case .running:
-            switch kind {
-            case .local:
-                return "\(bindEndpoint) -> \(destinationEndpoint)"
-            case .remote:
-                return "remote \(bindEndpoint) -> \(destinationEndpoint)"
-            case .dynamicSocks:
-                return "SOCKS on \(bindEndpoint)"
-            }
-        case .stopped:
-            return "Stopped"
-        case .failed:
-            return "Forward failed"
-        case .unsupported:
-            return "Forward type unsupported"
-        }
-    }
-
-    public static func stopped(from profile: PortForwardProfileRecord, connectionId: String = "") -> PortForwardRuntimeRecord {
-        PortForwardRuntimeRecord(
-            id: profile.id,
-            profileId: profile.profileId,
-            connectionId: connectionId,
-            name: profile.name,
-            kind: profile.kind,
-            state: .stopped,
-            bindHost: profile.bindHost,
-            requestedBindPort: profile.bindPort,
-            destinationHost: profile.destinationHost,
-            destinationPort: profile.destinationPort
-        )
-    }
-}
-
-public struct PortForwardRuntimeStoreData: Codable, Equatable, Sendable {
-    public var schemaVersion: Int
-    public var records: [PortForwardRuntimeRecord]
-
-    public static let empty = PortForwardRuntimeStoreData()
-
-    public init(
-        schemaVersion: Int = PlatformIntegrationSchema.currentVersion,
-        records: [PortForwardRuntimeRecord] = []
-    ) {
-        self.schemaVersion = schemaVersion
-        self.records = records
-    }
-}
-
-public final class PortForwardRuntimeStore: @unchecked Sendable {
-    private let store: SharedJSONFileStore<PortForwardRuntimeStoreData>
-
-    public init(
-        fileName: String = SharedAppStorageConfiguration.portForwardRuntimeFileName,
-        directoryURL: URL? = nil,
-        fileManager: FileManager = .default
-    ) {
-        self.store = SharedJSONFileStore(
-            fileName: fileName,
-            fileManager: fileManager,
-            directoryURL: directoryURL
-        )
-    }
-
-    public func load() throws -> PortForwardRuntimeStoreData {
-        try store.load(default: .empty)
-    }
-
-    public func save(_ data: PortForwardRuntimeStoreData) throws {
-        try store.save(data)
-    }
-
-    public func upsert(_ record: PortForwardRuntimeRecord) throws {
-        var data = try load()
-        if let index = data.records.firstIndex(where: { $0.id == record.id }) {
-            data.records[index] = record
-        } else {
-            data.records.append(record)
-        }
-        data.records.sort { lhs, rhs in
-            lhs.updatedAt > rhs.updatedAt
-        }
-        try save(data)
-    }
-
-    public func remove(id: String) throws {
-        var data = try load()
-        data.records.removeAll { $0.id == id }
-        try save(data)
-    }
-
-    public func replace(records matchingProfileId: String, with records: [PortForwardRuntimeRecord]) throws {
-        var data = try load()
-        data.records.removeAll { $0.profileId == matchingProfileId }
-        data.records.append(contentsOf: records)
-        data.records.sort { lhs, rhs in
-            lhs.updatedAt > rhs.updatedAt
-        }
-        try save(data)
-    }
-}
-
-public enum CloudServerProvider: String, Codable, CaseIterable, Hashable, Sendable {
-    case digitalOcean
-    case hetzner
-}
-
-public struct CloudServerAccountRecord: Codable, Identifiable, Hashable, Sendable {
-    public var id: String
-    public var provider: CloudServerProvider
-    public var displayName: String
-    public var keychainAccount: String
-    public var lastRefreshedAt: Date?
-
-    public init(
-        id: String = UUID().uuidString,
-        provider: CloudServerProvider,
-        displayName: String,
-        keychainAccount: String,
-        lastRefreshedAt: Date? = nil
-    ) {
-        self.id = id
-        self.provider = provider
-        self.displayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.keychainAccount = keychainAccount
-        self.lastRefreshedAt = lastRefreshedAt
-    }
-}
-
 public enum AdvancedAuthIdentityKind: String, Codable, CaseIterable, Hashable, Sendable {
     case secureEnclaveKey
     case securityKey
@@ -710,8 +391,6 @@ public struct PlatformIntegrationStoreData: Codable, Equatable, Sendable {
     public var schemaVersion: Int
     public var snippets: [SharedSnippetRecord]
     public var offlineFolders: [OfflineSFTPFolderRecord]
-    public var portForwards: [PortForwardProfileRecord]
-    public var cloudAccounts: [CloudServerAccountRecord]
     public var authIdentities: [AdvancedAuthIdentityRecord]
     public var automationPolicies: [AutomationCredentialPolicyRecord]
     public var shortcutServers: [ShortcutServerRecord]
@@ -721,8 +400,6 @@ public struct PlatformIntegrationStoreData: Codable, Equatable, Sendable {
         case schemaVersion
         case snippets
         case offlineFolders
-        case portForwards
-        case cloudAccounts
         case authIdentities
         case automationPolicies
         case shortcutServers
@@ -735,8 +412,6 @@ public struct PlatformIntegrationStoreData: Codable, Equatable, Sendable {
         schemaVersion: Int = PlatformIntegrationSchema.currentVersion,
         snippets: [SharedSnippetRecord] = [],
         offlineFolders: [OfflineSFTPFolderRecord] = [],
-        portForwards: [PortForwardProfileRecord] = [],
-        cloudAccounts: [CloudServerAccountRecord] = [],
         authIdentities: [AdvancedAuthIdentityRecord] = [],
         automationPolicies: [AutomationCredentialPolicyRecord] = [],
         shortcutServers: [ShortcutServerRecord] = [],
@@ -745,8 +420,6 @@ public struct PlatformIntegrationStoreData: Codable, Equatable, Sendable {
         self.schemaVersion = schemaVersion
         self.snippets = snippets
         self.offlineFolders = offlineFolders
-        self.portForwards = portForwards
-        self.cloudAccounts = cloudAccounts
         self.authIdentities = authIdentities
         self.automationPolicies = automationPolicies
         self.shortcutServers = shortcutServers
@@ -820,8 +493,6 @@ public struct PlatformIntegrationStoreData: Codable, Equatable, Sendable {
             ?? PlatformIntegrationSchema.currentVersion
         snippets = try container.decodeIfPresent([SharedSnippetRecord].self, forKey: .snippets) ?? []
         offlineFolders = try container.decodeIfPresent([OfflineSFTPFolderRecord].self, forKey: .offlineFolders) ?? []
-        portForwards = try container.decodeIfPresent([PortForwardProfileRecord].self, forKey: .portForwards) ?? []
-        cloudAccounts = try container.decodeIfPresent([CloudServerAccountRecord].self, forKey: .cloudAccounts) ?? []
         authIdentities = try container.decodeIfPresent([AdvancedAuthIdentityRecord].self, forKey: .authIdentities) ?? []
         automationPolicies = try container.decodeIfPresent([AutomationCredentialPolicyRecord].self, forKey: .automationPolicies) ?? []
         shortcutServers = try container.decodeIfPresent([ShortcutServerRecord].self, forKey: .shortcutServers) ?? []

@@ -589,20 +589,6 @@ struct MobileContentView: View {
 
         Divider()
 
-        if FeatureFlags.cloudSync.isEnabled {
-            Button {
-                publishSyncSnapshot()
-            } label: {
-                Label("Publish Sync Snapshot", systemImage: "icloud.and.arrow.up")
-            }
-
-            Button {
-                applySyncSnapshot()
-            } label: {
-                Label("Apply Latest Sync", systemImage: "icloud.and.arrow.down")
-            }
-        }
-
         Button {
             importingConnectionsCSV = true
         } label: {
@@ -657,57 +643,6 @@ struct MobileContentView: View {
         connectionCSVDocument = MobileTextDocument(text: connectionStore.exportConnectionsCSV())
         exportingConnectionsCSV = true
         syncStatusMessage = "Prepared \(connectionStore.connections.count) connection\(connectionStore.connections.count == 1 ? "" : "s") for export."
-    }
-
-    @MainActor
-    private func publishSyncSnapshot() {
-        do {
-            let report = try connectionStore.publishCloudSync(terminalSettings: currentTerminalSettingsRecord())
-            syncStatusMessage = "Published sync snapshot. \(report.summary)."
-        } catch {
-            connectionImportExportError = error.localizedDescription
-        }
-    }
-
-    @MainActor
-    private func applySyncSnapshot() {
-        do {
-            let result = try connectionStore.applyLatestCloudSync()
-            if let settings = result.terminalSettings {
-                applyTerminalSettings(settings)
-            }
-            syncStatusMessage = "Applied sync snapshot. \(result.report.summary)."
-        } catch {
-            connectionImportExportError = error.localizedDescription
-        }
-    }
-
-    private func currentTerminalSettingsRecord() -> SyncedTerminalSettingsRecord {
-        SyncedTerminalSettingsRecord(
-            defaultColumns: 100,
-            defaultRows: 30,
-            fontSize: terminalPreferences.fontSize,
-            themeId: terminalPreferences.themeId,
-            scrollbackLines: terminalPreferences.scrollbackLines,
-            cursorStyleId: terminalPreferences.cursorStyleId,
-            mouseReporting: terminalPreferences.mouseReporting,
-            optionAsMeta: terminalPreferences.optionAsMeta,
-            copyOnSelect: terminalPreferences.copyOnSelect,
-            accessoryKeyIds: terminalPreferences.accessoryKeyIds,
-            updatedAt: Date()
-        )
-    }
-
-    @MainActor
-    private func applyTerminalSettings(_ settings: SyncedTerminalSettingsRecord) {
-        terminalPreferences.fontSize = settings.fontSize
-        terminalPreferences.themeId = settings.themeId
-        terminalPreferences.scrollbackLines = settings.scrollbackLines
-        terminalPreferences.cursorStyleId = settings.cursorStyleId
-        terminalPreferences.mouseReporting = settings.mouseReporting
-        terminalPreferences.optionAsMeta = settings.optionAsMeta
-        terminalPreferences.copyOnSelect = settings.copyOnSelect
-        terminalPreferences.accessoryKeyIds = settings.accessoryKeyIds
     }
 
     private func beginCreateConnection() {

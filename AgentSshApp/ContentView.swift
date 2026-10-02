@@ -29,7 +29,6 @@ struct ContentView: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @StateObject private var connectionStore = ConnectionStoreManager.shared
     @StateObject private var transfersStore = TransferQueueStore()
-    @StateObject private var actuatorMonitor = ActuatorFleetMonitor.shared
     @State private var selectedConnection: ConnectionProfile?
     /// What the detail column's main pane shows. `.server` is the
     /// default: the active workspace tab's terminal + files split.
@@ -76,7 +75,6 @@ struct ContentView: View {
             // the test runner before it can attach. Keep the test host
             // inert.
             guard !ProcessInfo.isRunningTests else { return }
-            actuatorMonitor.start(tabsStore: tabsStore)
             await runAutoConnect()
         }
         .onChange(of: tabsStore.connectedSSHTabs.count) { _, count in
@@ -84,9 +82,6 @@ struct ContentView: View {
                 pendingAutoConnectDashboard = false
                 workspaceMode = .dashboard
             }
-        }
-        .onDisappear {
-            Task { await actuatorMonitor.stop() }
         }
         .sheet(isPresented: $showingCommandPalette) {
             CommandPaletteView(

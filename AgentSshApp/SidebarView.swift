@@ -527,12 +527,10 @@ struct SidebarView: View {
             handleConnect(conn)
         }
         .disabled(isConnecting(conn))
-        if FeatureFlags.serverDoctor.isEnabled {
-            Button("Diagnose Host") {
-                onDiagnose?(conn)
-            }
-            .disabled(!canDiagnose(conn))
+        Button("Diagnose Host") {
+            onDiagnose?(conn)
         }
+        .disabled(!canDiagnose(conn))
         Divider()
         Button("Show Details") {
             selectedConnection = conn
@@ -660,7 +658,6 @@ struct SidebarView: View {
     }
 
     private func securitySummary(_ conn: ConnectionProfile) -> SecurityPatchHostSummary? {
-        guard FeatureFlags.securityPatchMonitor.isEnabled else { return nil }
         return securityPatchSummaries.summary(
             profileId: conn.id,
             connectionId: openTab(for: conn)?.connectionId

@@ -20,10 +20,10 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 - `SSHKeyVault.swift`, `SSHKeyAccessCoordinator.swift` (macOS) / `MobileSSHKeyVault.swift`, `MobileSSHKeyImportStore.swift`, `MobileSSHKeyBootstrapInstaller.swift` (iPadOS)
 - Generated and imported private keys are encrypted in app storage; their encryption key lives in Keychain. Access coordinators batch per-key auth prompts so one session doesn't re-prompt repeatedly.
 
-### Advanced authentication (macOS, feature-flagged)
+### Advanced authentication (macOS)
 
 - `AdvancedAuthenticationView.swift`, `AdvancedAuthenticationStore.swift` (macOS) / `MobileAdvancedAuthenticationStore.swift` (iPadOS)
-- Secure Enclave identities, security keys, SSH certificate identities. Gated behind `FeatureFlags.advancedAuthentication`.
+- Secure Enclave identities, security keys, SSH certificate identities.
 
 ### Credentials
 
@@ -63,7 +63,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 ### Snippets & tmux (iPadOS)
 
 - `MobileSnippetsView.swift` — parameterized command snippets run against the active host.
-- `MobileTmuxSessionManagerView.swift` — tmux session list / create / attach (feature-flagged).
+- `MobileTmuxSessionManagerView.swift` — tmux session list / create / attach.
 
 ### Shell integration
 
@@ -96,7 +96,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 - `TransferQueueStore.swift`, `TransferProgressOverlay.swift` (macOS)
 - Queued + in-flight transfers with progress, cancel, and completion notifications.
 
-### Files.app provider & offline sync (iPadOS, feature-flagged)
+### Files.app provider & offline sync (iPadOS)
 
 - `AgentSshFileProvider/FileProviderExtension.swift` — `NSFileProviderReplicatedExtension`; SFTP hosts appear as Files.app locations. Backed by `MobileSFTPBridge.swift`, `Sources/AgentSshMacOS/OfflineSFTPFileProviderModels.swift`, `SharedUploadStagingStore.swift`.
 - `MobileOfflineSFTPSyncEngine.swift` — pinned remote folders cached for offline use (item-capped).
@@ -184,41 +184,9 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 ---
 
-## Port forwarding & network tools
-
-### Port forwarding (feature-flagged)
-
-- **macOS**: `PortForwardingView.swift` (coordinator + per-host panel inside the host monitor; auto-start on connect via `TerminalTabsStore.swift`), `BridgeManager+PortForwarding.swift`
-- **iPadOS**: `MobilePortForwardingView.swift`, `MobilePortForwardBridge.swift`
-- FFI: `rshell_port_forward_start` / `rshell_port_forward_stop` / `rshell_port_forward_status` / `rshell_port_forward_list`.
-
-### Network tools window (macOS)
-
-- `NetworkToolsWindow.swift`, `BridgeManager+Tools.swift` — separate window, operates over already-connected SSH tabs.
-
-| Tool | FFI | What it does |
-|------|-----|---------------|
-| **Git deploy-state** | `rshell_git_status` | Branch, HEAD, dirty flag, last commit of a remote repo |
-| **DNS** | `rshell_dns_resolve` | Multi-perspective resolution across all live hosts + the Mac |
-| **Listening ports** | `rshell_listening_ports` | `ss` / `netstat` inventory with PID + process name |
-| **tcpdump** | `rshell_tcpdump_start` / `rshell_tcpdump_stop` | Streaming `tcpdump -lnn` lines over the event bus |
-
-### Mobile network diagnostics (iPadOS)
+## Network diagnostics (iPadOS)
 
 - `MobileNetworkDiagnosticsView.swift` — listening ports, interface stats, DNS info, ARP table, connection summary.
-
-### Network polish (feature-flagged)
-
-- `NetworkPolishSettingsView.swift`, `Sources/AgentSshMacOS/NetworkPolishModels.swift` — Tailscale-aware resolution and Multipath TCP options.
-
----
-
-## Cloud accounts (feature-flagged, basic)
-
-- `CloudServerManagementView.swift`, `CloudServerTokenStore.swift` (API tokens in Keychain), `Sources/AgentSshMacOS/CloudProviderClients.swift`, `CloudServerProviderModels.swift`
-- DigitalOcean and Hetzner only. Honest scope: account management, server inventory list, create, reboot, delete. No resize, snapshots, firewalls, or networking management. Deleting a server does not delete generated SSH profiles.
-
----
 
 ## Shortcuts, widgets, Live Activities, watch
 
@@ -268,9 +236,8 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 ---
 
-## Licensing & feature flags
+## Licensing
 
-- `Sources/AgentSshMacOS/FeatureFlags.swift` — build-time flags gating non-v1 surfaces. Debug builds: everything on. Release builds enable only Shortcuts automation, Live Activity surfaces, Server Doctor, and Security Patch Monitor; everything else (remote desktop, standalone SFTP, FTP, drag-and-drop transfer, terminal images, GPU monitor, Files-app provider, share-sheet uploads, offline SFTP cache, iCloud sync, filename-aware terminal, tmux manager, port forwarding, advanced auth, cloud server management, network polish) stays hidden until flipped.
 - **macOS licensing** — `EntitlementsStore.swift`: free / pro / team tiers with signed license-key validation, surfaced in Settings → License. **Status only: nothing in the macOS app currently gates features on it.**
 - **iPadOS licensing** — `MobileEntitlementsStore.swift`: StoreKit lifetime Pro unlock. The free tier enforces limits on connection count and saved runbooks.
 

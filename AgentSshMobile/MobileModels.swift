@@ -102,7 +102,6 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
     var tags: [String]
     var color: String?
     var notes: String?
-    var networkOptions: NetworkConnectionOptions
 
     var keychainAccount: String {
         "\(username)@\(host):\(port)"
@@ -125,8 +124,7 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         folder: String? = nil,
         tags: [String] = [],
         color: String? = nil,
-        notes: String? = nil,
-        networkOptions: NetworkConnectionOptions = .default
+        notes: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -151,13 +149,12 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         self.tags = tags
         self.color = color
         self.notes = notes
-        self.networkOptions = networkOptions
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, host, port, username, authMethod, kind
         case privateKeyPath, sshKeyReference, createdAt, lastConnected, favorite
-        case autoConnect, folder, tags, color, notes, networkOptions
+        case autoConnect, folder, tags, color, notes
     }
 
     init(from decoder: Decoder) throws {
@@ -188,7 +185,6 @@ struct MobileConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         color = try c.decodeIfPresent(String.self, forKey: .color)
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
-        networkOptions = try c.decodeIfPresent(NetworkConnectionOptions.self, forKey: .networkOptions) ?? .default
     }
 
     func encode(to encoder: Encoder) throws {

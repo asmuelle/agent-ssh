@@ -376,31 +376,6 @@ RustBuffer uniffi_agent_ssh_fn_func_rshell_get_processes(RustBuffer connection_i
 RustBuffer uniffi_agent_ssh_fn_func_rshell_get_system_stats(RustBuffer connection_id, RustCallStatus *_Nonnull out_status
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_SIGNAL_PROCESS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_SIGNAL_PROCESS
-void uniffi_agent_ssh_fn_func_rshell_signal_process(RustBuffer connection_id, uint32_t pid, RustBuffer signal, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_LIST
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_LIST
-RustBuffer uniffi_agent_ssh_fn_func_rshell_port_forward_list(RustBuffer connection_id, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_START
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_START
-RustBuffer uniffi_agent_ssh_fn_func_rshell_port_forward_start(RustBuffer config, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_STATUS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_STATUS
-RustBuffer uniffi_agent_ssh_fn_func_rshell_port_forward_status(RustBuffer id, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_STOP
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PORT_FORWARD_STOP
-void uniffi_agent_ssh_fn_func_rshell_port_forward_stop(RustBuffer id, RustCallStatus *_Nonnull out_status
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PG_CLOSE_QUERY
 #define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_PG_CLOSE_QUERY
 RustBuffer uniffi_agent_ssh_fn_func_rshell_pg_close_query(RustBuffer connection_id, RustBuffer session_id, RustBuffer cursor_id, RustCallStatus *_Nonnull out_status
@@ -564,31 +539,6 @@ RustBuffer uniffi_agent_ssh_fn_func_rshell_sftp_resolve_uid(RustBuffer connectio
 #ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_SFTP_UPLOAD
 #define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_SFTP_UPLOAD
 uint64_t uniffi_agent_ssh_fn_func_rshell_sftp_upload(RustBuffer transfer_id, RustBuffer connection_id, RustBuffer local_path, RustBuffer remote_path, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_DNS_RESOLVE
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_DNS_RESOLVE
-RustBuffer uniffi_agent_ssh_fn_func_rshell_dns_resolve(RustBuffer name, RustBuffer record_type, RustBuffer perspectives, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_GIT_STATUS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_GIT_STATUS
-RustBuffer uniffi_agent_ssh_fn_func_rshell_git_status(RustBuffer connection_id, RustBuffer repo_path, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_LISTENING_PORTS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_LISTENING_PORTS
-RustBuffer uniffi_agent_ssh_fn_func_rshell_listening_ports(RustBuffer connection_id, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_TCPDUMP_START
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_TCPDUMP_START
-uint64_t uniffi_agent_ssh_fn_func_rshell_tcpdump_start(RustBuffer connection_id, RustBuffer interface, RustBuffer filter, RustBuffer snaplen, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_TCPDUMP_STOP
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_FN_FUNC_RSHELL_TCPDUMP_STOP
-void uniffi_agent_ssh_fn_func_rshell_tcpdump_stop(uint64_t capture_id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_AGENT_SSH_RUSTBUFFER_ALLOC
@@ -983,36 +933,6 @@ uint16_t uniffi_agent_ssh_checksum_func_rshell_get_system_stats(void
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_SIGNAL_PROCESS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_SIGNAL_PROCESS
-uint16_t uniffi_agent_ssh_checksum_func_rshell_signal_process(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_LIST
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_LIST
-uint16_t uniffi_agent_ssh_checksum_func_rshell_port_forward_list(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_START
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_START
-uint16_t uniffi_agent_ssh_checksum_func_rshell_port_forward_start(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_STATUS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_STATUS
-uint16_t uniffi_agent_ssh_checksum_func_rshell_port_forward_status(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_STOP
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PORT_FORWARD_STOP
-uint16_t uniffi_agent_ssh_checksum_func_rshell_port_forward_stop(void
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PG_CLOSE_QUERY
 #define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_PG_CLOSE_QUERY
 uint16_t uniffi_agent_ssh_checksum_func_rshell_pg_close_query(void
@@ -1208,36 +1128,6 @@ uint16_t uniffi_agent_ssh_checksum_func_rshell_sftp_resolve_uid(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_SFTP_UPLOAD
 #define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_SFTP_UPLOAD
 uint16_t uniffi_agent_ssh_checksum_func_rshell_sftp_upload(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_DNS_RESOLVE
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_DNS_RESOLVE
-uint16_t uniffi_agent_ssh_checksum_func_rshell_dns_resolve(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_GIT_STATUS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_GIT_STATUS
-uint16_t uniffi_agent_ssh_checksum_func_rshell_git_status(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_LISTENING_PORTS
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_LISTENING_PORTS
-uint16_t uniffi_agent_ssh_checksum_func_rshell_listening_ports(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_TCPDUMP_START
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_TCPDUMP_START
-uint16_t uniffi_agent_ssh_checksum_func_rshell_tcpdump_start(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_TCPDUMP_STOP
-#define UNIFFI_FFIDEF_UNIFFI_AGENT_SSH_CHECKSUM_FUNC_RSHELL_TCPDUMP_STOP
-uint16_t uniffi_agent_ssh_checksum_func_rshell_tcpdump_stop(void
     
 );
 #endif
