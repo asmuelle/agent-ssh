@@ -123,36 +123,6 @@ public struct LiveActivitySnapshot: Codable, Identifiable, Equatable, Sendable {
         )
     }
 
-    public static func portForward(
-        _ record: PortForwardRuntimeRecord,
-        now: Date = Date()
-    ) -> LiveActivitySnapshot {
-        LiveActivitySnapshot(
-            id: "tunnel:\(record.id)",
-            profileId: record.profileId,
-            connectionId: record.connectionId,
-            kind: .tunnel,
-            title: record.name,
-            subtitle: record.summary,
-            state: liveActivityState(for: record.state),
-            createdAt: record.startedAt ?? record.updatedAt,
-            startedAt: record.startedAt,
-            updatedAt: record.updatedAt,
-            endedAt: record.state.isActive ? nil : record.updatedAt,
-            errorMessage: record.lastError,
-            openURL: "agent-ssh://monitoring/\(record.profileId)",
-            metadata: [
-                "portForwardId": record.id,
-                "kind": record.kind.rawValue,
-                "bindHost": record.bindHost,
-                "boundPort": String(record.effectiveBindPort),
-                "bytesIn": String(record.bytesIn),
-                "bytesOut": String(record.bytesOut),
-                "connectionCount": String(record.connectionCount),
-            ]
-        )
-    }
-
     public static func shellIntegration(
         _ command: ShellIntegrationCommand,
         connectionId: String?,
@@ -210,17 +180,6 @@ public struct LiveActivitySnapshot: Codable, Identifiable, Equatable, Sendable {
             return .failed
         case .cancelled:
             return .cancelled
-        }
-    }
-
-    private static func liveActivityState(for state: PortForwardRuntimeState) -> LiveActivityOperationState {
-        switch state {
-        case .starting, .running:
-            return .running
-        case .stopped:
-            return .cancelled
-        case .failed, .unsupported:
-            return .failed
         }
     }
 

@@ -66,14 +66,10 @@ final class MobileSSHKeyBootstrapInstaller: @unchecked Sendable {
         let publicKey = publicKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !publicKey.isEmpty else { throw MobileSSHKeyBootstrapError.missingPublicKey }
 
-        let resolution = try NetworkPolishResolver.resolve(
-            host: profile.host,
-            port: profile.port,
-            options: profile.networkOptions
-        )
+        let connectHost = profile.host.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let bootstrapConnectionId = try rshellConnect(config: FfiConnectConfig(
-            host: resolution.connectHost,
+            host: connectHost,
             port: profile.port,
             username: profile.username,
             password: password,
@@ -105,7 +101,7 @@ final class MobileSSHKeyBootstrapInstaller: @unchecked Sendable {
         let verifiedConnectionId: String
         do {
             verifiedConnectionId = try rshellConnect(config: FfiConnectConfig(
-                host: resolution.connectHost,
+                host: connectHost,
                 port: profile.port,
                 username: profile.username,
                 password: nil,

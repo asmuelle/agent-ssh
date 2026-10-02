@@ -18,17 +18,6 @@ class ConnectionStoreManager: ObservableObject {
     @Published var connections: [ConnectionProfile] = []
     @Published var folders: [ConnectionFolder] = []
 
-    enum SyncError: LocalizedError {
-        case noSnapshot
-
-        var errorDescription: String? {
-            switch self {
-            case .noSnapshot:
-                return "No iCloud sync snapshot is available yet."
-            }
-        }
-    }
-
     private static var storeFileURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent("com.mc-ssh")
@@ -426,120 +415,6 @@ class ConnectionStoreManager: ObservableObject {
         return plan
     }
 
-    // MARK: - Cloud provider import
-
-    @discardableResult
-    func importCloudServerProfiles(
-        _ servers: [CloudServerRecord],
-        account: CloudServerAccountRecord,
-        options: CloudServerProfileGenerationOptions = CloudServerProfileGenerationOptions()
-    ) -> CloudServerProfileImportReport {
-        var report = CloudServerProfileImportReport()
-        var byId = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0) })
-
-        for server in servers {
-            let generatedId = "cloud-\(server.provider.rawValue)-\(server.accountId)-\(server.providerServerId)"
-            let existing = byId[generatedId]
-            guard let profile = CloudServerProfileGenerator.profile(
-                from: server,
-                account: account,
-                options: options,
-                preserving: existing
-            ) else {
-                report.skippedServers += 1
-                continue
-            }
-
-            if existing == nil {
-                report.insertedProfiles += 1
-            } else if profile != existing {
-                report.updatedProfiles += 1
-            }
-            byId[profile.id] = profile
-        }
-
-        connections = byId.values.sorted {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
-        ensureFolders(for: connections)
-        save()
-        return report
-    }
-
-    // MARK: - Cloud sync
-
-    func makeCloudSyncSnapshot(
-        terminalSettings: SyncedTerminalSettingsRecord? = nil,
-        generatedAt: Date = Date()
-    ) throws -> CloudSyncSnapshot {
-        let integrations = try PlatformIntegrationStore().load()
-        return CloudSyncSnapshot(
-            generatedAt: generatedAt,
-            profiles: connections.map { SyncedConnectionProfileRecord(profile: $0, updatedAt: generatedAt) },
-            snippets: integrations.snippets.filter(\.syncEnabled),
-            terminalSettings: terminalSettings
-        )
-    }
-
-    @discardableResult
-    func publishCloudSync(
-        terminalSettings: SyncedTerminalSettingsRecord? = nil,
-        store: CloudSyncStore = CloudSyncStore()
-    ) throws -> CloudSyncMergeReport {
-        let local = try makeCloudSyncSnapshot(terminalSettings: terminalSettings)
-        let existing = try store.loadLatest() ?? .empty
-        let (merged, report) = CloudSyncMergeEngine.merge(local: existing, incoming: local)
-        try store.save(merged)
-        return report
-    }
-
-    @discardableResult
-    func applyLatestCloudSync(
-        store: CloudSyncStore = CloudSyncStore()
-    ) throws -> (report: CloudSyncMergeReport, terminalSettings: SyncedTerminalSettingsRecord?) {
-        guard let snapshot = try store.loadLatest() else {
-            throw SyncError.noSnapshot
-        }
-        return try applyCloudSyncSnapshot(snapshot)
-    }
-
-    @discardableResult
-    func applyCloudSyncSnapshot(
-        _ snapshot: CloudSyncSnapshot
-    ) throws -> (report: CloudSyncMergeReport, terminalSettings: SyncedTerminalSettingsRecord?) {
-        var report = CloudSyncMergeReport()
-        var byId = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0) })
-
-        for record in snapshot.profiles {
-            if let existing = byId[record.id] {
-                let updated = record.connectionProfile(preserving: existing)
-                if updated == existing {
-                    report.skippedProfiles += 1
-                } else {
-                    byId[record.id] = updated
-                    report.updatedProfiles += 1
-                }
-            } else {
-                byId[record.id] = record.connectionProfile()
-                report.insertedProfiles += 1
-            }
-        }
-
-        for tombstone in snapshot.tombstones where tombstone.collection == .profile {
-            if byId.removeValue(forKey: tombstone.recordId) != nil {
-                report.deletedRecords += 1
-            }
-        }
-
-        connections = byId.values.sorted {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
-        ensureFolders(for: connections)
-        try mergeSyncedSnippets(snapshot.snippets, tombstones: snapshot.tombstones, report: &report)
-        save()
-        return (report, snapshot.terminalSettings)
-    }
-
     // MARK: - Persistence
 
     /// Snapshot the in-memory store and hand it to the off-main persister.
@@ -552,45 +427,6 @@ class ConnectionStoreManager: ObservableObject {
         let seq = saveSeq
         let snapshot = ConnectionStoreData(connections: connections, folders: folders)
         Task { await persister.save(snapshot, seq: seq) }
-    }
-
-    private func mergeSyncedSnippets(
-        _ incoming: [SharedSnippetRecord],
-        tombstones: [CloudSyncTombstoneRecord],
-        report: inout CloudSyncMergeReport
-    ) throws {
-        let store = PlatformIntegrationStore()
-        var data = try store.load()
-        var byId = Dictionary(uniqueKeysWithValues: data.snippets.map { ($0.id, $0) })
-
-        for snippet in incoming {
-            if tombstones.contains(where: {
-                $0.collection == .snippet && $0.recordId == snippet.id && $0.deletedAt >= snippet.updatedAt
-            }) {
-                report.skippedSnippets += 1
-                continue
-            }
-            if let existing = byId[snippet.id] {
-                if snippet.updatedAt > existing.updatedAt {
-                    byId[snippet.id] = snippet
-                    report.updatedSnippets += 1
-                } else {
-                    report.skippedSnippets += 1
-                }
-            } else {
-                byId[snippet.id] = snippet
-                report.insertedSnippets += 1
-            }
-        }
-
-        for tombstone in tombstones where tombstone.collection == .snippet {
-            if byId.removeValue(forKey: tombstone.recordId) != nil {
-                report.deletedRecords += 1
-            }
-        }
-
-        data.snippets = byId.values.sorted { $0.updatedAt > $1.updatedAt }
-        try store.save(data)
     }
 
     private func ensureFolders(for profiles: [ConnectionProfile]) {

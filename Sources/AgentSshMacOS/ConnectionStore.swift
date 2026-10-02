@@ -139,7 +139,6 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
     public var tags: [String]
     public var color: String?
     public var notes: String?
-    public var networkOptions: NetworkConnectionOptions
     public var monitoredSystemdServices: [String]
 
     public init(
@@ -160,7 +159,6 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         tags: [String] = [],
         color: String? = nil,
         notes: String? = nil,
-        networkOptions: NetworkConnectionOptions = .default,
         monitoredSystemdServices: [String] = []
     ) {
         self.id = id
@@ -186,7 +184,6 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         self.tags = tags
         self.color = color
         self.notes = notes
-        self.networkOptions = networkOptions
         self.monitoredSystemdServices = monitoredSystemdServices
     }
 
@@ -198,7 +195,7 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, name, host, port, username, authMethod, kind, folderPath
         case privateKeyPath, sshKeyReference, createdAt, lastConnected, favorite, autoConnect, tags, color, notes
-        case networkOptions, monitoredSystemdServices
+        case monitoredSystemdServices
     }
 
     public init(from decoder: Decoder) throws {
@@ -226,7 +223,6 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         self.tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.color = try c.decodeIfPresent(String.self, forKey: .color)
         self.notes = try c.decodeIfPresent(String.self, forKey: .notes)
-        self.networkOptions = try c.decodeIfPresent(NetworkConnectionOptions.self, forKey: .networkOptions) ?? .default
         self.monitoredSystemdServices = try c.decodeIfPresent([String].self, forKey: .monitoredSystemdServices) ?? []
     }
 
@@ -249,7 +245,6 @@ public struct ConnectionProfile: Codable, Identifiable, Hashable, Sendable {
         try c.encode(tags, forKey: .tags)
         try c.encodeIfPresent(color, forKey: .color)
         try c.encodeIfPresent(notes, forKey: .notes)
-        try c.encode(networkOptions, forKey: .networkOptions)
         try c.encode(monitoredSystemdServices, forKey: .monitoredSystemdServices)
     }
 }

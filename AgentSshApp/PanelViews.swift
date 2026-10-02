@@ -130,37 +130,27 @@ struct MainPanel: View {
             VSplitView {
                 TerminalPane(tab: tab, isActive: isActive)
 
-                if FeatureFlags.securityPatchMonitor.isEnabled {
-                    TabView {
-                        DualPaneFileBrowserView(
-                            connectionId: tab.connectionId,
-                            connectionLabel: tab.profile.name,
-                            canEditPermissions: true,
-                            canRunRemoteCommands: true
-                        )
-                        .tabItem {
-                            Label("Files", systemImage: "folder")
-                        }
-
-                        SecurityPatchMonitorView(
-                            connectionId: tab.connectionId,
-                            profileId: tab.profile.id,
-                            connectionLabel: tab.profile.name
-                        )
-                        .tabItem {
-                            Label("Security", systemImage: "shield.lefthalf.filled")
-                        }
-                    }
-                    .frame(minHeight: 220, idealHeight: 300)
-                } else {
+                TabView {
                     DualPaneFileBrowserView(
                         connectionId: tab.connectionId,
                         connectionLabel: tab.profile.name,
                         canEditPermissions: true,
                         canRunRemoteCommands: true
                     )
-                    .frame(minHeight: 180, idealHeight: 260)
+                    .tabItem {
+                        Label("Files", systemImage: "folder")
+                    }
+
+                    SecurityPatchMonitorView(
+                        connectionId: tab.connectionId,
+                        profileId: tab.profile.id,
+                        connectionLabel: tab.profile.name
+                    )
+                    .tabItem {
+                        Label("Security", systemImage: "shield.lefthalf.filled")
+                    }
                 }
+                .frame(minHeight: 220, idealHeight: 300)
             }
         }
     }
@@ -1029,8 +1019,6 @@ struct DashboardPanel: View {
             profile.id,
             profile.host,
             String(profile.port),
-            profile.networkOptions.tailscaleResolutionMode.rawValue,
-            profile.networkOptions.tailscaleHostOverride ?? "",
         ].joined(separator: "|")
     }
 
@@ -1062,19 +1050,8 @@ struct DashboardPanel: View {
 
     private nonisolated static func resolveDashboardIPAddresses(for profile: ConnectionProfile) async -> [String] {
         await Task.detached(priority: .utility) {
-            let host = Self.dashboardConnectHost(for: profile)
-            if TailscaleAddressClassifier.isTailscaleAddress(host) {
-                return [host]
-            }
-            return NetworkPolishHostLookup.systemAddresses(for: host, port: profile.port)
+            HostAddressLookup.systemAddresses(for: profile.host, port: profile.port)
         }.value
-    }
-
-    private nonisolated static func dashboardConnectHost(for profile: ConnectionProfile) -> String {
-        guard profile.networkOptions.tailscaleResolutionMode != .system else {
-            return profile.host
-        }
-        return profile.networkOptions.tailscaleHostOverride ?? profile.host
     }
 
     private var savedHostInventory: some View {

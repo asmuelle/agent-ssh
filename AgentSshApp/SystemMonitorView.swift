@@ -136,7 +136,6 @@ struct SystemMonitorView: View {
     @State var showingConfidence = false
     @State var servicesExpanded = false
     @State var activityExpanded = false
-    @State var portsExpanded = false
     @State var mapExpanded = false
     /// Dashboard cards collapse the per-mount disk list to the fullest
     /// mount (plus any near-full ones) until expanded.

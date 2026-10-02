@@ -158,36 +158,6 @@ public struct WidgetMonitorSnapshot: Codable, Identifiable, Equatable, Sendable 
         )
     }
 
-    public static func portForward(
-        _ record: PortForwardRuntimeRecord,
-        now: Date = Date()
-    ) -> WidgetMonitorSnapshot {
-        let state: WidgetMonitorState
-        switch record.state {
-        case .running:
-            state = .up
-        case .starting:
-            state = .unknown
-        case .stopped:
-            state = .paused
-        case .failed:
-            state = .down
-        case .unsupported:
-            state = .degraded
-        }
-
-        return WidgetMonitorSnapshot(
-            id: "port-forward:\(record.id)",
-            displayName: record.name,
-            kind: .tunnel,
-            state: state,
-            lastCheckedAt: record.state == .starting ? nil : now,
-            lastChangedAt: record.updatedAt,
-            summary: record.summary,
-            detail: record.lastError,
-            openURL: "agent-ssh://monitoring/\(record.profileId)"
-        )
-    }
 }
 
 public struct WidgetMonitorSnapshotFile: Codable, Equatable, Sendable {

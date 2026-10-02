@@ -38,9 +38,6 @@ struct MobileConnectionEditorView: View {
     @State private var folder: String
     @State private var tagsText: String
     @State private var notes: String
-    @State private var tailscaleResolutionMode: TailscaleResolutionMode
-    @State private var tailscaleHostOverride: String
-    @State private var multipathTCPMode: MultipathTCPMode
 
     init(
         profile: MobileConnectionProfile?,
@@ -68,9 +65,6 @@ struct MobileConnectionEditorView: View {
         _folder = State(initialValue: profile?.folder ?? "")
         _tagsText = State(initialValue: profile?.tags.joined(separator: ", ") ?? "")
         _notes = State(initialValue: profile?.notes ?? "")
-        _tailscaleResolutionMode = State(initialValue: profile?.networkOptions.tailscaleResolutionMode ?? .system)
-        _tailscaleHostOverride = State(initialValue: profile?.networkOptions.tailscaleHostOverride ?? "")
-        _multipathTCPMode = State(initialValue: profile?.networkOptions.multipathTCPMode ?? .system)
     }
 
     var body: some View {
@@ -115,30 +109,6 @@ struct MobileConnectionEditorView: View {
                     Section("Key Setup") {
                         passwordBootstrapControls
                     }
-                }
-
-                Section("Network") {
-                    Picker("Tailnet", selection: $tailscaleResolutionMode) {
-                        ForEach(TailscaleResolutionMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-
-                    TextField("Tailnet host", text: $tailscaleHostOverride)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .disabled(tailscaleResolutionMode == .system)
-
-                    Picker("Multipath TCP", selection: $multipathTCPMode) {
-                        ForEach(MultipathTCPMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .disabled(!NetworkPolishAuditReport.current.sshMultipathTCP.isSupported)
-
-                    Label("SSH transport uses standard TCP in this build.", systemImage: "network.slash")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section("Metadata") {
@@ -496,12 +466,7 @@ struct MobileConnectionEditorView: View {
             folder: normalizedOptional(folder),
             tags: normalizedTags,
             color: profile?.color,
-            notes: normalizedOptional(notes),
-            networkOptions: NetworkConnectionOptions(
-                tailscaleResolutionMode: tailscaleResolutionMode,
-                tailscaleHostOverride: tailscaleHostOverride,
-                multipathTCPMode: multipathTCPMode
-            )
+            notes: normalizedOptional(notes)
         )
     }
 
@@ -516,12 +481,7 @@ struct MobileConnectionEditorView: View {
             username: username.trimmingCharacters(in: .whitespacesAndNewlines),
             authMethod: .password,
             kind: kind,
-            createdAt: profile?.createdAt ?? Date(),
-            networkOptions: NetworkConnectionOptions(
-                tailscaleResolutionMode: tailscaleResolutionMode,
-                tailscaleHostOverride: tailscaleHostOverride,
-                multipathTCPMode: multipathTCPMode
-            )
+            createdAt: profile?.createdAt ?? Date()
         )
     }
 

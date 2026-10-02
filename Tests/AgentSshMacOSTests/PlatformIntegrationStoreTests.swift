@@ -191,25 +191,6 @@ final class PlatformIntegrationStoreTests: XCTestCase {
                     remotePath: "/var/log"
                 ),
             ],
-            portForwards: [
-                PortForwardProfileRecord(
-                    id: "pg",
-                    profileId: "profile-1",
-                    name: "Postgres",
-                    kind: .local,
-                    bindPort: 15432,
-                    destinationHost: "127.0.0.1",
-                    destinationPort: 5432
-                ),
-            ],
-            cloudAccounts: [
-                CloudServerAccountRecord(
-                    id: "do",
-                    provider: .digitalOcean,
-                    displayName: "DigitalOcean",
-                    keychainAccount: "cloud:do"
-                ),
-            ],
             authIdentities: [
                 AdvancedAuthIdentityRecord(
                     id: "enclave",

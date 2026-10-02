@@ -62,8 +62,6 @@ struct MobileServerDetailView: View {
                         snippetsSection
                             .id(MobileServerDetailSection.snippets)
                         sessionResilienceCard
-                        portForwardingSection
-                            .id(MobileServerDetailSection.forwards)
                         if horizontalSizeClass != .compact {
                             splitWorkPane
                         } else {
@@ -375,10 +373,6 @@ struct MobileServerDetailView: View {
                             scroll(to: .snippets, with: scrollProxy)
                         }
 
-                        toolbarActionButton(title: "Forwards", systemImage: "point.3.connected.trianglepath.dotted", tint: .mint) {
-                            scroll(to: .forwards, with: scrollProxy)
-                        }
-
                         if profile.kind.supportsTerminal {
                             toolbarActionButton(title: "Terminal", systemImage: "terminal", tint: .green) {
                                 scroll(to: .terminal, with: scrollProxy)
@@ -438,16 +432,6 @@ struct MobileServerDetailView: View {
                 connectionId: connectionId,
                 profile: profile,
                 currentDirectory: nil
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var portForwardingSection: some View {
-        if case .connected(let connectionId) = status {
-            MobilePortForwardingView(
-                profile: profile,
-                connectionId: connectionId
             )
         }
     }
@@ -1029,31 +1013,7 @@ struct MobileServerDetailView: View {
                 "bytesTransferred": String(summary.byteCount),
             ]
 
-        case .portForward:
-            let forwardId = operation.metadata?["portForwardId"]
-                ?? operation.itemIdentifier
-                ?? operation.remotePath
-            guard let forwardId else {
-                throw MobileShortcutOperationError.missingMetadata("portForwardId")
-            }
-            let integrations = try PlatformIntegrationStore().load()
-            guard let forward = integrations.portForwards.first(where: {
-                $0.id == forwardId && $0.profileId == profile.id
-            }) else {
-                throw MobileShortcutOperationError.missingMetadata("port forward")
-            }
-            let runtime = try await MobilePortForwardBridge.shared.start(
-                profile: forward,
-                connectionId: connectionId
-            )
-            return [
-                "action": "portForward",
-                "portForwardId": forward.id,
-                "boundPort": String(runtime.effectiveBindPort),
-                "kind": forward.kind.rawValue,
-            ]
-
-        case .fileProviderFetch:
+        case .portForward, .fileProviderFetch:
             throw MobileShortcutOperationError.unsupported(operation.kind.rawValue)
         }
     }
@@ -1242,7 +1202,6 @@ struct MobileServerDetailView: View {
 private enum MobileServerDetailSection: Hashable {
     case dashboard
     case snippets
-    case forwards
     case terminal
     case files
 
@@ -1250,7 +1209,7 @@ private enum MobileServerDetailSection: Hashable {
         switch self {
         case .dashboard:
             return .inspect
-        case .snippets, .forwards, .terminal, .files:
+        case .snippets, .terminal, .files:
             return .work
         }
     }

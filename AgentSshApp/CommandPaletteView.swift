@@ -48,15 +48,13 @@ struct CommandPaletteView: View {
                 isEnabled: true,
                 run: onCloseActive
             ))
-            if FeatureFlags.serverDoctor.isEnabled {
-                result.append(PaletteAction(
-                    title: "Doctor: Diagnose Active Host",
-                    subtitle: activeTab.profile.name,
-                    icon: "stethoscope",
-                    isEnabled: activeTab.effectiveKind.supportsTerminal && activeTab.status == .connected,
-                    run: onDiagnoseActive
-                ))
-            }
+            result.append(PaletteAction(
+                title: "Doctor: Diagnose Active Host",
+                subtitle: activeTab.profile.name,
+                icon: "stethoscope",
+                isEnabled: activeTab.effectiveKind.supportsTerminal && activeTab.status == .connected,
+                run: onDiagnoseActive
+            ))
         }
 
         result.append(PaletteAction(

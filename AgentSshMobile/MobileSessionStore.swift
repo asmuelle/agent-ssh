@@ -91,7 +91,6 @@ final class MobileSessionStore: ObservableObject {
             password: password,
             preparedKey: preparedKey,
             passphrase: passphrase,
-            networkOptions: profile.networkOptions,
             sessionId: sessionId
         ) { [weak self] result in
             Task { @MainActor in
@@ -284,7 +283,6 @@ final class MobileSessionStore: ObservableObject {
         password: String?,
         preparedKey: PreparedMobileSSHKey?,
         passphrase: String?,
-        networkOptions: NetworkConnectionOptions,
         sessionId: String,
         completion: @escaping @Sendable (Result<MobileConnectOutcome, Error>) -> Void
     ) {
@@ -293,20 +291,8 @@ final class MobileSessionStore: ObservableObject {
                 preparedKey?.stop()
             }
 
-            let resolution: TailscaleHostResolution
-            do {
-                resolution = try NetworkPolishResolver.resolve(
-                    host: host,
-                    port: port,
-                    options: networkOptions
-                )
-            } catch {
-                completion(.failure(error))
-                return
-            }
-
             let config = FfiConnectConfig(
-                host: resolution.connectHost,
+                host: host.trimmingCharacters(in: .whitespacesAndNewlines),
                 port: port,
                 username: username,
                 password: password,

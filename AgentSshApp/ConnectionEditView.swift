@@ -112,9 +112,6 @@ struct ConnectionEditView: View {
     @State private var autoConnect: Bool = false
     @State private var tags: String = ""
     @State private var notes: String = ""
-    @State private var tailscaleResolutionMode: TailscaleResolutionMode = .system
-    @State private var tailscaleHostOverride: String = ""
-    @State private var multipathTCPMode: MultipathTCPMode = .system
     @State private var monitoredSystemdServices: String = ""
 
     private let logger = Logger(subsystem: "com.mc-ssh", category: "connection-edit")
@@ -226,9 +223,6 @@ struct ConnectionEditView: View {
                 autoConnect = p.autoConnect
                 tags = p.tags.joined(separator: ", ")
                 notes = p.notes ?? ""
-                tailscaleResolutionMode = p.networkOptions.tailscaleResolutionMode
-                tailscaleHostOverride = p.networkOptions.tailscaleHostOverride ?? ""
-                multipathTCPMode = p.networkOptions.multipathTCPMode
                 monitoredSystemdServices = p.monitoredSystemdServices.joined(separator: ", ")
             } else {
                 kind = initialKind
@@ -365,60 +359,8 @@ struct ConnectionEditView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if FeatureFlags.networkPolish.isEnabled {
-                networkOptionsSection
-            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
-    private var networkOptionsSection: some View {
-        GroupBox("Network") {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Tailnet:").frame(width: 80, alignment: .trailing)
-                    Picker("", selection: $tailscaleResolutionMode) {
-                        ForEach(TailscaleResolutionMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                }
-
-                HStack {
-                    Text("Host:").frame(width: 80, alignment: .trailing)
-                    TextField("optional tailnet host", text: $tailscaleHostOverride)
-                        .disabled(tailscaleResolutionMode == .system)
-                }
-
-                HStack {
-                    Text("MPTCP:").frame(width: 80, alignment: .trailing)
-                    Picker("", selection: $multipathTCPMode) {
-                        ForEach(MultipathTCPMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .disabled(!NetworkPolishAuditReport.current.sshMultipathTCP.isSupported)
-                    Label("SSH transport: standard TCP", systemImage: "network.slash")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Text("KEX:").frame(width: 80, alignment: .trailing)
-                    Label("Post-quantum algorithms unavailable in current Rust SSH stack", systemImage: "lock.trianglebadge.exclamationmark")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var actionBar: some View {
@@ -594,11 +536,6 @@ struct ConnectionEditView: View {
             autoConnect: autoConnect,
             tags: tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
             notes: notes,
-            networkOptions: NetworkConnectionOptions(
-                tailscaleResolutionMode: tailscaleResolutionMode,
-                tailscaleHostOverride: tailscaleHostOverride,
-                multipathTCPMode: multipathTCPMode
-            ),
             monitoredSystemdServices: parseMonitoredSystemdServices()
         )
 

@@ -11,7 +11,6 @@ mod bridge;
 mod doctor;
 mod ffi;
 mod monitor;
-mod port_forward;
 mod security_patch;
 
 uniffi::setup_scaffolding!();

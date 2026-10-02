@@ -147,35 +147,10 @@ final class BridgeManager: @unchecked Sendable {
         agentIdentityHint: String? = nil,
         sessionId: String? = nil
     ) async throws -> String {
-        let networkResolution: TailscaleHostResolution
-        do {
-            networkResolution = try await NetworkPolishResolver.resolveWithSystemLookup(
-                host: profile.host,
-                port: profile.port,
-                options: profile.networkOptions
-            )
-        } catch let error as TailscaleResolutionError {
-            throw BridgeError.network(error.localizedDescription)
-        }
-
-        if networkResolution.usedHostOverride {
-            logger.info(
-                "Using Tailnet host override \(networkResolution.connectHost, privacy: .private(mask: .hash)) for \(profile.host, privacy: .private(mask: .hash))"
-            )
-        } else if networkResolution.isTailnetRoute {
-            logger.info(
-                "Tailscale route resolved for \(profile.host, privacy: .private(mask: .hash)): \(networkResolution.tailnetAddress ?? profile.host, privacy: .private(mask: .hash))"
-            )
-        }
-
-        if profile.networkOptions.multipathTCPMode != .system {
-            logger.info(
-                "Multipath TCP mode \(profile.networkOptions.multipathTCPMode.rawValue, privacy: .public) requested for SSH, but current russh transport is standard TCP"
-            )
-        }
+        let connectHost = profile.host.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let config = FfiConnectConfig(
-            host: networkResolution.connectHost,
+            host: connectHost,
             port: profile.port,
             username: profile.username,
             password: password,
@@ -197,7 +172,7 @@ final class BridgeManager: @unchecked Sendable {
             switch err {
             case .HostKeyMismatch(let detail):
                 throw BridgeError.hostKeyMismatch(
-                    host: networkResolution.connectHost,
+                    host: connectHost,
                     port: profile.port,
                     detail: detail
                 )

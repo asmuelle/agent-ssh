@@ -383,8 +383,6 @@ pub(crate) use postgres::*;
 
 mod keychain;
 
-mod port_forward_ffi;
-
 mod doctor_ffi;
 
 mod security_patch_ffi;
