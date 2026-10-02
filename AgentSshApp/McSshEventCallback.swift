@@ -34,21 +34,9 @@ final class AgentSshEventCallback: FfiEventCallback {
                 )
 
             case "event_bus_lagged":
-                // Only monitoring events (status, progress, tcpdump) travel on
+                // Only monitoring events (status, progress) travel on
                 // the bus; PTY bytes are delivered directly and are unaffected.
                 self.logger.warning("Rust event bus overflowed; monitoring events dropped: \(event.payload, privacy: .public)")
-
-            case "tcpdump_line":
-                // Payload shape: {"captureId": Number, "line": String, "isStderr": Bool}
-                if let data = event.payload.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let id = (json["captureId"] as? NSNumber)?.uint64Value,
-                   let line = json["line"] as? String {
-                    let isStderr = (json["isStderr"] as? Bool) ?? false
-                    AgentSshEventBus.shared.events.send(
-                        .tcpdumpLine(captureId: id, line: line, isStderr: isStderr)
-                    )
-                }
 
             default:
                 self.logger.warning("Unknown event type: \(event.ty, privacy: .public)")

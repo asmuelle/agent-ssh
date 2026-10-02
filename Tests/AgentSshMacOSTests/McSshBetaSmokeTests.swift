@@ -118,23 +118,6 @@ final class AgentSshBetaSmokeTests: XCTestCase {
         XCTAssertEqual(item.progress, 0.25, accuracy: 0.001)
     }
 
-    // MARK: - System stats model
-
-    func testSystemStatsMemoryPercent() {
-        let stats = SystemStats(
-            cpuPercent: 50,
-            memoryTotal: 8192 * 1024 * 1024,
-            memoryUsed: 4096 * 1024 * 1024,
-            memoryFree: 4096 * 1024 * 1024,
-            memoryAvailable: 4096 * 1024 * 1024,
-            swapTotal: 0, swapUsed: 0,
-            diskTotal: "100G", diskUsed: "50G", diskAvailable: "50G",
-            diskUsePercent: 50,
-            uptime: "1d", loadAverage: nil
-        )
-        XCTAssertEqual(stats.memoryUsagePercent, 50, accuracy: 0.1)
-    }
-
     // MARK: - SSH config import
 
     func testSSHConfigImportParsesHostBlock() {

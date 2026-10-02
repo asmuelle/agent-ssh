@@ -285,12 +285,6 @@ final class BridgeManager: @unchecked Sendable {
         }
     }
 
-    func signalProcess(connectionId: String, pid: UInt32, signal: FfiSignal) async throws {
-        try await runOnUtilityQueue {
-            try rshellSignalProcess(connectionId: connectionId, pid: pid, signal: signal)
-        }
-    }
-
     func sftpListDir(connectionId: String, path: String) async throws -> [FfiFileEntry] {
         try await runOnUtilityQueue {
             try rshellSftpListDir(connectionId: connectionId, path: path)

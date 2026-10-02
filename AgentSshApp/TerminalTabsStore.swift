@@ -72,7 +72,7 @@ final class TerminalTabsStore: ObservableObject {
                 forConnectionId: connectionId
             )
 
-        case .transferProgress, .showCommandPalette, .showDashboard, .tcpdumpLine:
+        case .transferProgress, .showCommandPalette, .showDashboard:
             break
         }
     }
