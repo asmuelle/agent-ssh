@@ -72,7 +72,7 @@ final class TerminalTabsStore: ObservableObject {
                 forConnectionId: connectionId
             )
 
-        case .transferProgress, .showCommandPalette, .showDashboard:
+        case .transferProgress, .showCommandPalette, .showHostSection, .showFleetTool, .selectAdjacentHost:
             break
         }
     }
@@ -577,16 +577,6 @@ final class TerminalTabsStore: ObservableObject {
     func setActive(_ tabId: UUID) {
         guard tabs.contains(where: { $0.id == tabId }) else { return }
         activeTabId = tabId
-    }
-
-    func selectAdjacentTab(forward: Bool) {
-        guard tabs.count > 1 else { return }
-        let sorted = tabs.sorted { $0.order < $1.order }
-        let currentIndex = sorted.firstIndex { $0.id == activeTabId } ?? 0
-        let nextIndex = forward
-            ? (currentIndex + 1) % sorted.count
-            : (currentIndex - 1 + sorted.count) % sorted.count
-        activeTabId = sorted[nextIndex].id
     }
 
     /// Set or clear the per-tab theme override. `nil` falls back to the

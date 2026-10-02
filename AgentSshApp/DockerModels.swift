@@ -656,3 +656,9 @@ struct DockerDiskSnapshot {
         return Int64(value * multiplier)
     }
 }
+
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}

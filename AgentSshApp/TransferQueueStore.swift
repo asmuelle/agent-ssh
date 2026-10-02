@@ -66,9 +66,7 @@ final class TransferQueueStore: ObservableObject {
         connectionId: String,
         remotePath: String,
         localPath: String,
-        expectedSize: UInt64,
-        revealsInFinder: Bool = true,
-        onCompleted: ((Bool) -> Void)? = nil
+        expectedSize: UInt64
     ) {
         let transfer = Transfer(
             id: UUID(),
@@ -78,9 +76,7 @@ final class TransferQueueStore: ObservableObject {
             localPath: localPath,
             totalBytes: expectedSize,
             bytesTransferred: 0,
-            status: .queued,
-            revealsInFinder: revealsInFinder,
-            onCompleted: onCompleted
+            status: .queued
         )
         transfers.append(transfer)
         publishLiveActivity(for: transfer)
@@ -90,8 +86,7 @@ final class TransferQueueStore: ObservableObject {
     func enqueueUpload(
         connectionId: String,
         localPath: String,
-        remotePath: String,
-        onCompleted: ((Bool) -> Void)? = nil
+        remotePath: String
     ) {
         // Stat client-side so the queue UI can show a total even before
         // the first progress event arrives. Falls back to 0 (indeterminate
@@ -111,8 +106,7 @@ final class TransferQueueStore: ObservableObject {
             localPath: localPath,
             totalBytes: totalBytes,
             bytesTransferred: 0,
-            status: .queued,
-            onCompleted: onCompleted
+            status: .queued
         )
         transfers.append(transfer)
         publishLiveActivity(for: transfer)
@@ -134,8 +128,7 @@ final class TransferQueueStore: ObservableObject {
         switch transfers[idx].status {
         case .queued:
             removeLiveActivity(for: transfers[idx])
-            let removed = transfers.remove(at: idx)
-            removed.onCompleted?(false)
+            transfers.remove(at: idx)
         case .inProgress:
             // Fire-and-forget: the running transfer's Task observes
             // `SftpError::Cancelled` and flips status to `.cancelled`.
@@ -203,12 +196,9 @@ final class TransferQueueStore: ObservableObject {
             // downloads finish within the debounce window they get
             // batched into a single Finder activation with all files
             // selected, instead of fronting Finder once per file.
-            // Relay legs of a server→server copy land in a temp dir
-            // the user never asked to see, so they opt out.
-            if transfer.kind == .download && transfer.revealsInFinder {
+            if transfer.kind == .download {
                 scheduleReveal(URL(fileURLWithPath: transfer.localPath))
             }
-            transfers[idx].onCompleted?(true)
         } catch let error as SftpError {
             guard let idx = transfers.firstIndex(where: { $0.id == transfer.id }) else { return }
             switch error {
@@ -222,14 +212,12 @@ final class TransferQueueStore: ObservableObject {
                 publishLiveActivity(for: transfers[idx])
                 logger.error("Transfer failed for \(transfer.remotePath, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private(mask: .hash))")
             }
-            transfers[idx].onCompleted?(false)
         } catch {
             guard let idx = transfers.firstIndex(where: { $0.id == transfer.id }) else { return }
             transfers[idx].status = .failed
             transfers[idx].error = error.localizedDescription
             publishLiveActivity(for: transfers[idx])
             logger.error("Transfer failed for \(transfer.remotePath, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private(mask: .hash))")
-            transfers[idx].onCompleted?(false)
         }
     }
 
@@ -369,16 +357,6 @@ struct Transfer: Identifiable {
     var bytesTransferred: UInt64
     var status: Status
     var error: String?
-    /// Downloads front Finder with the result by default; relay legs
-    /// of a server→server copy (temp-dir destinations) turn this off.
-    var revealsInFinder: Bool = true
-    /// Fired exactly once when the transfer reaches a terminal state:
-    /// `true` for `.completed`, `false` for `.failed` / `.cancelled`
-    /// (including queued items removed before they ever ran). Used by
-    /// `RemoteCopyCoordinator` to chain the upload leg of a
-    /// server→server copy onto its download leg and to clean up temp
-    /// files. Runs on the main actor.
-    var onCompleted: ((Bool) -> Void)?
 
     var progress: Double {
         totalBytes > 0 ? Double(bytesTransferred) / Double(totalBytes) : 0

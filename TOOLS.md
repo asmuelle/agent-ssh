@@ -53,8 +53,8 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 ### Workspace layout (macOS)
 
-- `ContentView.swift`, `PanelViews.swift`, `WorkspaceTabStripView.swift`, `WorkspaceSplitController.swift`, `LayoutManager.swift`
-- Per-tab main panel (terminal + Files / Security sub-tabs), inspector panel (host monitor), plus workspace-wide panels toggled from the tab strip: Dashboard (saved-host inventory and multi-host monitor grid), Agent (triage), Files (multi-host file grid).
+- `ContentView.swift`, `SidebarView.swift`, `HostWorkspaceView.swift`, `HostDetailsView.swift`, `PanelViews.swift`, `LayoutManager.swift`
+- Hosts + Doctor: the sidebar lists hosts, with any that have an open "Fix this week" or worse attention item first under "Needs Attention". Selecting a host shows it on one screen: Diagnosis (Server Doctor health check and security updates), Terminal and Files (⌘1 / ⌘2 / ⌘3). Connecting lands on Diagnosis. A host that isn't connected shows its last known health, details and SSH algorithms, with Connect. The inspector (⌘M) shows the System Monitor for the selected host.
 
 ### Command palettes
 
@@ -80,11 +80,6 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 - Side-by-side local / remote, chmod / chown / chgrp, rename, mkdir, delete.
 - FFI: `rshell_sftp_list_dir`, `rshell_sftp_upload` / `rshell_sftp_download` (with `TransferProgress` events), `rshell_sftp_rename`, `rshell_sftp_chmod` / `rshell_sftp_chown` / `rshell_sftp_chgrp`, `rshell_sftp_create_dir`, `rshell_sftp_delete_file` / `rshell_sftp_delete_dir`, `rshell_sftp_cancel`, `rshell_sftp_resolve_uid` / `rshell_sftp_resolve_gid`.
 
-### Multi-host Files workspace (macOS)
-
-- `FilesPanel.swift` — one browser pane per connected host in a grid; rows drag between panes for cross-server copy.
-- `DirectServerCopy.swift`, `RemoteCopyCoordinator.swift` — server→server copy pushes the file straight from source to destination over SFTP with an ephemeral keypair; bytes never relay through the Mac.
-
 ### File edit & safe config save
 
 - **macOS**: `FileEditView.swift`, `FileDiffReviewSheet.swift`, `SafeConfigSave.swift`
@@ -109,8 +104,7 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 ### Host monitor
 
 - `SystemMonitorView.swift` (+ `+Content` / `+Header` / `+Health` / `+Polling`), `MonitorPollingManager.swift`, `MonitorSharedViews.swift`
-- CPU, memory, load, per-mount disk, UFW status badge; per-host poller. Lives in the inspector panel per tab and tiled in the Dashboard panel (`PanelViews.swift`).
-- The Dashboard starts from all saved profiles, including disconnected hosts. `FleetHealthStore` persists the latest observation per profile and labels fresh, stale, and never-observed state so a disconnected server does not disappear from fleet awareness.
+- CPU, memory, load, per-mount disk, UFW status badge; per-host poller. Lives in the inspector for the selected host; a headless poller per connected host (`AgentTriagePollers`) keeps attention data fresh for the rest.
 - FFI: `rshell_get_system_stats`.
 - `SystemMonitorView+Health.swift` + `HostHealthNarrator.swift` — one-line plain-language host verdict, on-device FoundationModels when available, deterministic fallback otherwise.
 - `ConnectionWorldMapView.swift` — map of the host's outbound peers by geolocated IP.
@@ -160,10 +154,10 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 - FFI: `rshell_security_patch_preview` (show commands first), `rshell_security_patch_scan`. Read-only scan profiles: OS release, package manager (apt / dnf / yum / zypper / pacman / apk / homebrew), reboot-required, sshd hardening, network exposure.
 - **CISA KEV correlation**: `SecurityPatchAdvisoryStore` fetches and caches the CISA Known Exploited Vulnerabilities catalog; CVE ids extracted from scan evidence are matched against it and escalate to critical findings.
 
-## Agent triage panel (macOS)
+## Attention triage (macOS)
 
-- `AgentPanel.swift`, `AgentTriageStore.swift`
-- Exception-based alternative to the dashboard ("dark cockpit"): near-empty when healthy, reorganizes around problems when not. Aggregates the dashboard health pipeline (CPU / memory / disk / UFW / monitor errors) and tab connection state; per-kind confirmation delays and snoozes prevent one-sample spikes from crying wolf. Badges the workspace tab strip.
+- `AgentTriageStore.swift`, `AttentionInboxIngest.swift`
+- Aggregates monitor health (CPU / memory / disk / UFW / monitor errors), connection state, Server Doctor and security findings into one attention inbox; per-kind confirmation delays keep one-sample spikes from crying wolf. Orders the sidebar's "Needs Attention" section and drives alert notifications.
 
 ## MCP server & AI command gate (macOS)
 
@@ -177,9 +171,8 @@ What agent-ssh actually does, surface by surface. Pair with [`AGENTS.md`](AGENTS
 
 ## Runbooks (both platforms)
 
-- **macOS**: `RunbooksPanelView.swift` — saved command sequences with per-runbook risk labels (read-only / changes server / dangerous).
-- **macOS fleet execution**: `FleetRunbookView.swift` + `Sources/AgentSshMacOS/FleetRunbookExecutor.swift` — explicit host selection, literal command disclosure, mandatory confirmation, sequential canaries, bounded rollout concurrency, optional verification, and per-host rollback after failed verification. A failed canary aborts the remaining rollout.
-- **macOS stack audit**: `FleetStackAuditView.swift` + `Sources/AgentSshMacOS/StackDiagnostics.swift` — a read-only, bounded-concurrency probe for Docker Compose, Spring Boot/JVM, Next.js/PM2, nginx/Caddy/Traefik, UFW/firewalld/nftables, and PostgreSQL readiness. Raw command evidence remains visible beside the structured result.
+- **macOS fleet execution** (Host menu › Run on Several Hosts…, or ⌘K): `FleetRunbookView.swift` + `Sources/AgentSshMacOS/FleetRunbookExecutor.swift` — explicit host selection, literal command disclosure, mandatory confirmation, sequential canaries, bounded rollout concurrency, optional verification, and per-host rollback after failed verification. A failed canary aborts the remaining rollout.
+- **macOS stack audit** (Host menu › Audit Stacks…, or ⌘K): `FleetStackAuditView.swift` + `Sources/AgentSshMacOS/StackDiagnostics.swift` — a read-only, bounded-concurrency probe for Docker Compose, Spring Boot/JVM, Next.js/PM2, nginx/Caddy/Traefik, UFW/firewalld/nftables, and PostgreSQL readiness. Raw command evidence remains visible beside the structured result.
 - **iPadOS**: `MobileRunbooksView.swift` — built-in runbooks with a single templated variable (e.g. service name) plus user-saved ones; `MobileRunbookStores.swift` persists saved runbooks and an execution history with exit codes and output previews.
 
 ---

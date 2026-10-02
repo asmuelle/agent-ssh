@@ -4,10 +4,10 @@ import SwiftUI
 
 // MARK: - Triage issue model
 
-/// One thing that needs the user's attention in the Agent view.
+/// One thing that needs the user's attention.
 ///
 /// Aggregated from two sources:
-/// - the dashboard health pipeline (CPU / memory / disk / UFW /
+/// - the monitor health pipeline (CPU / memory / disk / UFW /
 ///   monitor errors) via hidden `SystemMonitorView` pollers, and
 /// - tab connection status straight from `TerminalTabsStore`.
 struct TriageIssue: Identifiable, Equatable {
@@ -16,7 +16,7 @@ struct TriageIssue: Identifiable, Equatable {
         /// confirmed immediately.
         case connection
         /// CPU / memory / disk threshold crossings. Flappy — must
-        /// persist before the Agent view is allowed to be loud.
+        /// persist before it is allowed to be loud.
         case metric
         /// UFW exposure, monitor errors, unsupported OS. Slow-moving;
         /// short confirmation to absorb transient command failures.
@@ -55,7 +55,7 @@ struct TriageIssue: Identifiable, Equatable {
 
 /// Aggregates raw health signals into confirmed, snooze-aware triage
 /// issues and forwards them to the persistent attention inbox, which is
-/// what the Agent view and the workspace-strip badge now render. Its own
+/// what the sidebar's "Needs Attention" section and alert notifications read. Its own
 /// query surface below has no remaining callers.
 ///
 /// Candidates are keyed by stable issue id (`<tabId>:<signal>`), so
@@ -105,8 +105,8 @@ final class AgentTriageStore: ObservableObject {
 
         for issue in fresh {
             let id = triageIssueId(tabId: tabId, signal: issue.id)
-            // Dashboard titles arrive as "<host>: <category>"; the Agent
-            // view shows the host separately, so keep just the category.
+            // Monitor titles arrive as "<host>: <category>"; the host is
+            // stored separately, so keep just the category.
             let hostPrefix = "\(snapshot.hostName): "
             let title = issue.title.hasPrefix(hostPrefix)
                 ? String(issue.title.dropFirst(hostPrefix.count))
@@ -246,45 +246,39 @@ final class AgentTriageStore: ObservableObject {
 // MARK: - Hidden pollers
 
 /// Headless `SystemMonitorView` per connected SSH host, mounted in
-/// the detail column's background so triage data (and the strip
-/// badge) stay fresh whether or not the Agent view is open. Reuses
-/// the exact polling pipeline the dashboard renders visibly, but via
-/// `headless: true` so no chart/table UI is built — a zero-sized
+/// the detail column's background so triage data (the sidebar's
+/// "Needs Attention" ordering and alert notifications) stays fresh
+/// whichever host is on screen. Reuses the System Monitor's polling
+/// pipeline via `headless: true` so no chart/table UI is built — a zero-sized
 /// `opacity(0)` monitor still pays full SwiftUI layout and Swift
 /// Charts rendering on every poll, which made the whole app feel
 /// sluggish once a few hosts were connected.
 struct AgentTriagePollers: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
-    /// The dashboard mounts its own monitors (which also feed the
-    /// triage store), so skip ours while it's open to avoid polling
-    /// every host twice.
-    let isSuspended: Bool
 
     var body: some View {
-        if !isSuspended {
-            ZStack {
-                ForEach(tabsStore.connectedSSHTabs) { tab in
-                    SystemMonitorView(
-                        connectionId: tab.connectionId,
-                        connectionLabel: tab.profile.name,
-                        profileId: tab.profile.id,
-                        sshPort: tab.profile.port,
-                        profile: tab.profile,
-                        connectionStatus: tab.status,
-                        isActive: true,
-                        dashboardMode: true,
-                        dashboardIdentity: tab.id.uuidString,
-                        onDashboardHealthChange: { snapshot in
-                            AgentTriageStore.shared.ingest(snapshot: snapshot, tabId: tab.id)
-                        },
-                        headless: true
-                    )
-                    .id(tab.id)
-                }
+        ZStack {
+            ForEach(tabsStore.connectedSSHTabs) { tab in
+                SystemMonitorView(
+                    connectionId: tab.connectionId,
+                    connectionLabel: tab.profile.name,
+                    profileId: tab.profile.id,
+                    sshPort: tab.profile.port,
+                    profile: tab.profile,
+                    connectionStatus: tab.status,
+                    isActive: true,
+                    dashboardMode: true,
+                    dashboardIdentity: tab.id.uuidString,
+                    onDashboardHealthChange: { snapshot in
+                        AgentTriageStore.shared.ingest(snapshot: snapshot, tabId: tab.id)
+                    },
+                    headless: true
+                )
+                .id(tab.id)
             }
-            .frame(width: 0, height: 0)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
         }
+        .frame(width: 0, height: 0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

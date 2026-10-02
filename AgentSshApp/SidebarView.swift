@@ -2,13 +2,13 @@ import SwiftUI
 import AgentSshMacOS
 import UniformTypeIdentifiers
 
-/// Sidebar showing the Connection Manager (top, scrollable) and a
-/// Connection Details panel (bottom, fixed) for the currently-selected
-/// profile. Mirrors the Tauri layout's left column. Connection Details
-/// is empty when nothing is selected.
+/// The host list: hosts that need attention first, then every saved
+/// host in its folder. Selecting a host shows it in the detail column;
+/// double-clicking connects.
 struct SidebarView: View {
     @ObservedObject var storeManager: ConnectionStoreManager
     @ObservedObject private var securityPatchSummaries = SecurityPatchMonitorSummaryStore.shared
+    @ObservedObject private var inbox = AttentionInboxIngest.shared
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @Environment(\.openWindow) private var openWindow
     @Binding var selectedConnection: ConnectionProfile?
@@ -30,7 +30,6 @@ struct SidebarView: View {
     /// hierarchy reads as fully open on first launch — the user
     /// collapses what they don't need.
     @State private var expandedFolders: [String: Bool] = [:]
-    @State private var detailsExpanded = true
     /// Folder mutation prompts (create / rename) and last error.
     @State private var folderPrompt: FolderPrompt?
     @State private var folderError: String?
@@ -66,29 +65,10 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        VSplitView {
-            VStack(spacing: 0) {
-                connectionsHeader
-                Divider()
-                connectionList
-            }
-            .frame(minHeight: 180)
-
-            if detailsExpanded {
-                ConnectionDetailsPanel(
-                    profile: selectedConnection,
-                    status: selectedConnection.flatMap(connectionStatus),
-                    onCollapse: { detailsExpanded = false }
-                )
-                    .frame(minHeight: 140, idealHeight: 200, maxHeight: 320)
-            } else {
-                CollapsedConnectionDetailsBar(
-                    profile: selectedConnection,
-                    status: selectedConnection.flatMap(connectionStatus),
-                    onExpand: { detailsExpanded = true }
-                )
-                .frame(height: 34)
-            }
+        VStack(spacing: 0) {
+            connectionsHeader
+            Divider()
+            connectionList
         }
         .frame(minWidth: LayoutConstants.minSidebarWidth)
         .serverActionConfirmation($pendingConfirmation)
@@ -257,6 +237,19 @@ struct SidebarView: View {
                         .font(MidnightMacDesign.FontToken.caption)
                 }
             } else {
+                // Hosts that need a look lead the list, worst first. They
+                // also stay in their folders below, so the folder tree
+                // never reshuffles as health changes.
+                if !isSearchActive, !attentionHosts.isEmpty {
+                    Section {
+                        ForEach(attentionHosts) { conn in
+                            connectionRow(conn)
+                        }
+                    } header: {
+                        SidebarSectionHeader(title: "Needs Attention")
+                    }
+                }
+
                 Section {
                     // Root-level (uncategorized) profiles first.
                     let rootConns = filteredConnections(in: nil)
@@ -282,6 +275,10 @@ struct SidebarView: View {
                     // drop target needs to be a body row.
                     if !storeManager.folders.isEmpty {
                         rootDropRow
+                    }
+                } header: {
+                    if !isSearchActive, !attentionHosts.isEmpty {
+                        SidebarSectionHeader(title: "All Hosts")
                     }
                 }
 
@@ -529,15 +526,14 @@ struct SidebarView: View {
             handleConnect(conn)
         }
         .disabled(isConnecting(conn))
-        Button("Diagnose Host") {
-            onDiagnose?(conn)
+        if conn.kind.supportsTerminal {
+            Button("Diagnose Host") {
+                selectedConnection = conn
+                onDiagnose?(conn)
+            }
+            .disabled(isConnecting(conn))
         }
-        .disabled(!canDiagnose(conn))
         Divider()
-        Button("Show Details") {
-            selectedConnection = conn
-            detailsExpanded = true
-        }
         Button("Edit…") {
             editingProfile = EditTarget(profile: conn)
         }
@@ -672,349 +668,16 @@ struct SidebarView: View {
         ServerDoctorSummaryStore().summary(profileId: conn.id)
     }
 
-    private func canDiagnose(_ conn: ConnectionProfile) -> Bool {
-        guard let tab = openTab(for: conn) else { return false }
-        return tab.status == .connected && tab.effectiveKind.supportsTerminal
+    private var attentionHosts: [ConnectionProfile] {
+        HostAttentionOrder.hosts(
+            storeManager.connections,
+            items: inbox.snapshot.activeItems(now: Date())
+        )
     }
 
     private func disconnect(_ conn: ConnectionProfile) {
         guard let tab = openTab(for: conn) else { return }
         tabsStore.closeTab(tab.id)
-    }
-}
-
-// MARK: - Connection details panel
-
-/// Bottom half of the sidebar — shows static metadata for the selected
-/// profile. Mirrors the Tauri "Host Details" card. Empty state
-/// renders a hint instead of an empty form.
-private struct ConnectionDetailsPanel: View {
-    let profile: ConnectionProfile?
-    let status: TerminalConnectionStatus?
-    let onCollapse: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Host Details")
-                    .font(MidnightMacDesign.FontToken.label)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
-                Button(action: onCollapse) {
-                    Image(systemName: "chevron.down")
-                        .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
-                        .frame(width: 18, height: 18)
-                }
-                .buttonStyle(.plain)
-                .help("Collapse host details")
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-
-            Divider()
-
-            if let profile {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 6) {
-                        detailRow("Name", profile.name)
-                        detailRow("Host", profile.host)
-                        detailRow("Port", "\(profile.port)")
-                        detailRow("User", profile.username)
-                        if let status {
-                            statusRow(status)
-                        }
-                        detailRow("Protocol", profile.kind.displayName)
-                        detailRow("Auth", profile.authMethod.displayName)
-                        detailRow("Key", profile.sshKeyReference != nil ? "Configured" : "Not configured")
-                        if let folderPath = profile.folderPath {
-                            detailRow("Folder", folderPath)
-                        }
-                        if let last = profile.lastConnected {
-                            detailRow(
-                                "Last Connected",
-                                last.formatted(.relative(presentation: .named))
-                            )
-                        }
-                        if !profile.tags.isEmpty {
-                            detailRow("Tags", profile.tags.joined(separator: ", "))
-                        }
-
-                        SSHAlgorithmsSection(profile: profile)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                }
-            } else {
-                VStack(spacing: 6) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 18, weight: .light))
-                        .foregroundStyle(.tertiary)
-                    Text("Select a host to see its details.")
-                        .font(MidnightMacDesign.FontToken.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(12)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func detailRow(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label)
-                .font(MidnightMacDesign.FontToken.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: 78, alignment: .leading)
-            Text(value)
-                .font(MidnightMacDesign.FontToken.metadataMono.monospacedDigit())
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func statusRow(_ status: TerminalConnectionStatus) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("State")
-                .font(MidnightMacDesign.FontToken.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: 78, alignment: .leading)
-            HStack(spacing: 5) {
-                Image(systemName: status.sidebarSymbol)
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(status.sidebarColor)
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 12, height: 12)
-                Text(status.sidebarLabel)
-                    .font(MidnightMacDesign.FontToken.metadataMono.monospacedDigit())
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-}
-
-// MARK: - SSH algorithms section
-
-/// Server-offered key exchange algorithms and MACs, read from the
-/// plaintext `SSH_MSG_KEXINIT` via `SSHAlgorithmProbe`. Probed once
-/// per host:port per app session; weak algorithms are flagged.
-private struct SSHAlgorithmsSection: View {
-    let profile: ConnectionProfile
-    @ObservedObject private var cache = SSHAlgorithmProbeCache.shared
-    /// Non-nil while the explainer sheet for a clicked orange row is up.
-    @State private var advice: SSHWeakAlgorithmAdvice?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Divider()
-                .padding(.vertical, 2)
-
-            HStack {
-                Text("SSH Algorithms")
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
-                if case .loaded = cache.state(host: profile.host, port: profile.port) {
-                    Button {
-                        cache.probeIfNeeded(host: profile.host, port: profile.port, force: true)
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(MidnightMacDesign.FontToken.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.tertiary)
-                    .help("Probe \(profile.host) again")
-                }
-            }
-
-            switch cache.state(host: profile.host, port: profile.port) {
-            case nil, .loading:
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Probing \(profile.host)…")
-                        .font(MidnightMacDesign.FontToken.caption)
-                        .foregroundStyle(.tertiary)
-                }
-
-            case .failed(let message):
-                HStack(spacing: 6) {
-                    Text("Unavailable — \(message)")
-                        .font(MidnightMacDesign.FontToken.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(2)
-                    Button("Retry") {
-                        cache.probeIfNeeded(host: profile.host, port: profile.port, force: true)
-                    }
-                    .buttonStyle(.plain)
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(Color.accentColor)
-                }
-
-            case .loaded(let algorithms):
-                VStack(alignment: .leading, spacing: 8) {
-                    serverRow(algorithms.serverBanner)
-                    algorithmGroup(
-                        "Key Exchange",
-                        algorithms.kexAlgorithms,
-                        category: .kex,
-                        isWeak: SSHAlgorithmStrength.isWeakKex
-                    )
-                    algorithmGroup(
-                        "MACs",
-                        algorithms.macs,
-                        category: .mac,
-                        isWeak: SSHAlgorithmStrength.isWeakMac
-                    )
-                }
-            }
-        }
-        .task(id: SSHAlgorithmProbeCache.key(host: profile.host, port: profile.port)) {
-            cache.probeIfNeeded(host: profile.host, port: profile.port)
-        }
-        .sheet(item: $advice) { advice in
-            SSHWeakAlgorithmSheet(
-                advice: advice,
-                host: profile.host,
-                onRecheck: {
-                    cache.probeIfNeeded(
-                        host: profile.host,
-                        port: profile.port,
-                        force: true
-                    )
-                    self.advice = nil
-                },
-                onDismiss: { self.advice = nil }
-            )
-        }
-    }
-
-    private func serverRow(_ banner: String) -> some View {
-        // "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3" → "OpenSSH_9.6p1 Ubuntu-3"
-        let software = banner
-            .split(separator: "-", maxSplits: 2)
-            .dropFirst(2)
-            .joined(separator: "-")
-
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Server")
-                .font(MidnightMacDesign.FontToken.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 78, alignment: .leading)
-            Text(software.isEmpty ? banner : software)
-                .font(MidnightMacDesign.FontToken.metadataMono)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(banner)
-        }
-    }
-
-    private func algorithmGroup(
-        _ label: String,
-        _ algorithms: [String],
-        category: SSHWeakAlgorithmAdvice.Category,
-        isWeak: @escaping (String) -> Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(MidnightMacDesign.FontToken.caption)
-                .foregroundStyle(.secondary)
-
-            ForEach(algorithms, id: \.self) { algorithm in
-                if isWeak(algorithm) {
-                    Button {
-                        advice = SSHWeakAlgorithmAdvice.advice(
-                            for: algorithm,
-                            category: category
-                        )
-                    } label: {
-                        algorithmRow(algorithm, isWeak: true)
-                    }
-                    .buttonStyle(.plain)
-                    .help("\(algorithm) is deprecated or weakened — click for why, and how to disable it")
-                    .accessibilityHint("Opens an explanation and the sshd_config fix")
-                } else {
-                    algorithmRow(algorithm, isWeak: false)
-                }
-            }
-
-            if algorithms.isEmpty {
-                Text("none offered")
-                    .font(MidnightMacDesign.FontToken.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    private func algorithmRow(_ algorithm: String, isWeak: Bool) -> some View {
-        HStack(spacing: 5) {
-            Text(algorithm)
-                .font(MidnightMacDesign.FontToken.metadataMono)
-                .foregroundStyle(isWeak ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            if isWeak {
-                Text("weak")
-                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
-                    .foregroundStyle(MidnightMacDesign.StatusTone.warning.color)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        Capsule().fill(Color.orange.opacity(0.12))
-                    )
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.orange.opacity(0.7))
-            }
-            Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
-    }
-}
-
-private struct CollapsedConnectionDetailsBar: View {
-    let profile: ConnectionProfile?
-    let status: TerminalConnectionStatus?
-    let onExpand: () -> Void
-
-    var body: some View {
-        Button(action: onExpand) {
-            HStack(spacing: 7) {
-                if let status {
-                    Image(systemName: status.sidebarSymbol)
-                        .font(MidnightMacDesign.FontToken.caption)
-                        .foregroundStyle(status.sidebarColor)
-                        .symbolRenderingMode(.hierarchical)
-                } else {
-                    Image(systemName: "info.circle")
-                        .font(MidnightMacDesign.FontToken.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(profile?.name ?? "Host Details")
-                    .font(MidnightMacDesign.FontToken.caption.weight(.medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up")
-                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Show host details")
     }
 }
 
@@ -1192,39 +855,78 @@ struct ConnectionRow<Actions: View>: View {
         isHovering || isSelected
     }
 
-    /// The single health signal for the row: whichever of the Security
-    /// Patch / Server Doctor verdicts is worse, mapped onto one severity
-    /// ramp so the row shows at most one colored dot. Returns nil when
-    /// both sources are quiet (healthy / not stale), so a calm host shows
-    /// no badge at all.
-    private var consolidatedHealth: (symbol: String, color: Color, help: String, accessibilityLabel: String)? {
-        var candidates: [(rank: Int, source: SidebarHealthSource)] = []
-        if let securitySummary, securitySummary.shouldShowSidebarSecurityBadge {
-            candidates.append((securitySummary.severity.attentionRank, .security(securitySummary)))
-        }
-        if let doctorSummary, doctorSummary.showsSidebarBadge {
-            candidates.append((doctorSummary.overallSeverity.attentionRank, .doctor(doctorSummary)))
-        }
-        guard let worst = candidates.max(by: { $0.rank < $1.rank }) else { return nil }
-
-        switch worst.source {
-        case .security(let s):
-            return (s.sidebarSecuritySymbol, s.sidebarSecurityColor, s.sidebarSecurityHelp, s.sidebarSecurityAccessibilityLabel)
-        case .doctor(let d):
-            return (d.sidebarSymbol, d.sidebarColor, d.sidebarHelp, d.sidebarAccessibilityLabel)
-        }
+    private var consolidatedHealth: HostHealth? {
+        HostHealth(security: securitySummary, doctor: doctorSummary)
     }
 }
 
-/// Which health subsystem produced the row's consolidated badge. Hoisted
-/// out of the `consolidatedHealth` getter because Swift can't nest a type
-/// inside a generic-function-getter.
-private enum SidebarHealthSource {
-    case security(SecurityPatchHostSummary)
-    case doctor(ServerDoctorHostSummary)
+/// Which hosts lead the sidebar under "Needs Attention": any with an
+/// open attention item of "Fix this week" or worse (failed connections,
+/// monitor alerts, Server Doctor and security findings alike), most
+/// urgent first, then by name. Reads the same inbox that drives alert
+/// notifications, so the two never disagree.
+enum HostAttentionOrder {
+    static func hosts(_ connections: [ConnectionProfile], items: [AttentionItem]) -> [ConnectionProfile] {
+        var worstTier: [String: AttentionTier] = [:]
+        for item in items where item.tier >= .fixThisWeek {
+            worstTier[item.profileId] = max(worstTier[item.profileId] ?? item.tier, item.tier)
+        }
+        return connections
+            .compactMap { conn in worstTier[conn.id].map { (conn, $0) } }
+            .sorted { a, b in
+                if a.1 != b.1 { return a.1 > b.1 }
+                return a.0.name.localizedCaseInsensitiveCompare(b.0.name) == .orderedAscending
+            }
+            .map(\.0)
+    }
 }
 
-private extension TerminalConnectionStatus {
+/// The single health signal for a host: whichever of the Security
+/// Patch / Server Doctor verdicts is worse, mapped onto one severity
+/// ramp so a row shows at most one colored dot. Nil when both sources
+/// are quiet (healthy / not stale), so a calm host shows no badge and
+/// stays out of "Needs Attention".
+struct HostHealth {
+    let rank: Int
+    let symbol: String
+    let color: Color
+    let help: String
+    let accessibilityLabel: String
+
+    init?(security: SecurityPatchHostSummary?, doctor: ServerDoctorHostSummary?) {
+        var candidates: [HostHealth] = []
+        if let s = security, s.shouldShowSidebarSecurityBadge {
+            candidates.append(HostHealth(
+                rank: s.severity.attentionRank,
+                symbol: s.sidebarSecuritySymbol,
+                color: s.sidebarSecurityColor,
+                help: s.sidebarSecurityHelp,
+                accessibilityLabel: s.sidebarSecurityAccessibilityLabel
+            ))
+        }
+        if let d = doctor, d.showsSidebarBadge {
+            candidates.append(HostHealth(
+                rank: d.overallSeverity.attentionRank,
+                symbol: d.sidebarSymbol,
+                color: d.sidebarColor,
+                help: d.sidebarHelp,
+                accessibilityLabel: d.sidebarAccessibilityLabel
+            ))
+        }
+        guard let worst = candidates.max(by: { $0.rank < $1.rank }) else { return nil }
+        self = worst
+    }
+
+    private init(rank: Int, symbol: String, color: Color, help: String, accessibilityLabel: String) {
+        self.rank = rank
+        self.symbol = symbol
+        self.color = color
+        self.help = help
+        self.accessibilityLabel = accessibilityLabel
+    }
+}
+
+extension TerminalConnectionStatus {
     var sidebarLabel: String {
         switch self {
         case .connected: return "Connected"

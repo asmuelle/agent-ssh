@@ -5,7 +5,7 @@ import Foundation
 /// producers. One instance owns all writing so slices stay consistent:
 ///
 /// - metric / advisory issues arrive through `AgentTriageStore.ingest`
-///   (both the hidden pollers and the dashboard funnel through it),
+///   (fed by the hidden per-host pollers),
 /// - connection state arrives through `AgentTriageStore.syncTabs`,
 /// - Server Doctor and Security Patch verdicts are reconciled from their
 ///   persisted summary stores — on a throttle from tab syncs (which also
