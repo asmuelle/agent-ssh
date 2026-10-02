@@ -479,7 +479,8 @@ struct DashboardPanel: View {
                     MonitorDrillDownSheet(
                         connectionId: connectionId,
                         drillDown: target,
-                        sshPort: sshPort
+                        sshPort: sshPort,
+                        hostLabel: tabs.first { $0.connectionId == connectionId }?.profile.name ?? "this host"
                     )
                 case .service(let kind, let connectionId, let profileId, let label):
                     ServiceModalSheet(

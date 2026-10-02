@@ -14,7 +14,7 @@ struct FleetRunbookSheet: View {
     @State private var selectedProfileIds: Set<String> = []
     @State private var canaryCount = 1
     @State private var maxConcurrency = 3
-    @State private var showingConfirmation = false
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var isRunning = false
     @State private var result: FleetRunbookResult?
 
@@ -60,18 +60,7 @@ struct FleetRunbookSheet: View {
             clampPolicyValues()
         }
         .onChange(of: selectedProfileIds) { clampPolicyValues() }
-        .confirmationDialog(
-            "Run on \(selectedTabs.count) hosts?",
-            isPresented: $showingConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Run Canary, Then Rollout", role: .destructive) {
-                Task { await execute() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(confirmationSummary)
-        }
+        .serverActionConfirmation($pendingConfirmation)
     }
 
     private var header: some View {
@@ -238,7 +227,7 @@ struct FleetRunbookSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Execution Preview", systemImage: "doc.text.magnifyingglass")
                     .font(.headline)
-                Text(confirmationSummary)
+                Text(executionPreview)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -254,20 +243,41 @@ struct FleetRunbookSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Button("Review and Run") { showingConfirmation = true }
+            Button("Review and Run") { requestRun() }
                 .buttonStyle(.borderedProminent)
                 .disabled(!canRun)
         }
         .padding(14)
     }
 
-    private var confirmationSummary: String {
+    private func requestRun() {
         let names = selectedTabs.map(\.profile.name).joined(separator: ", ")
-        var lines = [
+        pendingConfirmation = PendingServerAction(
+            title: "Run on \(selectedTabs.count) hosts?",
+            confirmLabel: "Run Canary, Then Rollout",
+            target: names.isEmpty ? "no hosts" : names,
+            command: commandPlan,
+            detail: "Canary hosts: \(min(canaryCount, selectedTabs.count)), then up to \(maxConcurrency) at a time.",
+            isDestructive: true
+        ) {
+            await execute()
+        }
+    }
+
+    private var executionPreview: String {
+        let names = selectedTabs.map(\.profile.name).joined(separator: ", ")
+        return [
             "Canary hosts: \(min(canaryCount, selectedTabs.count))",
             "Maximum rollout concurrency: \(maxConcurrency)",
             "Targets: \(names.isEmpty ? "none" : names)",
             "",
+            commandPlan,
+        ].joined(separator: "\n")
+    }
+
+    /// The commands exactly as the runbook will run them.
+    private var commandPlan: String {
+        var lines = [
             "$ \(command.trimmingCharacters(in: .whitespacesAndNewlines))",
         ]
         if !verificationCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

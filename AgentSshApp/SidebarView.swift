@@ -20,6 +20,7 @@ struct SidebarView: View {
     @State private var showImport = false
     @State private var importResultMessage: String?
     @State private var search = ""
+    @State private var pendingConfirmation: PendingServerAction?
     /// When non-nil, presents the edit sheet for the wrapped profile.
     /// Driving via `.sheet(item:)` rather than a Bool + separate state
     /// gives SwiftUI an identity-stable handle so flipping between
@@ -90,6 +91,7 @@ struct SidebarView: View {
             }
         }
         .frame(minWidth: LayoutConstants.minSidebarWidth)
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(isPresented: $showNewConnection) {
             ConnectionEditView(
                 storeManager: storeManager,
@@ -547,7 +549,9 @@ struct SidebarView: View {
         }
         moveToMenu(for: conn)
         Divider()
-        Button("Delete", role: .destructive) { storeManager.delete(conn) }
+        Button("Delete…", role: .destructive) {
+            pendingConfirmation = storeManager.deleteConfirmation(for: [conn])
+        }
     }
 
     /// "Move to" submenu listing every folder plus a "(Root)" entry.

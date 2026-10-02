@@ -3,8 +3,10 @@ import UIKit
 
 struct MobileDevOpsPanelsView: View {
     let connectionId: String
+    let hostLabel: String
 
     @State private var mode = Mode.logs
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var logs = ""
     @State private var services: [MobileSystemdUnit] = []
     @State private var search = ""
@@ -64,6 +66,7 @@ struct MobileDevOpsPanelsView: View {
             search = ""
             Task { await refresh() }
         }
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(item: $serviceActionResult) { result in
             MobileServiceActionResultSheet(result: result)
         }
@@ -254,29 +257,29 @@ struct MobileDevOpsPanelsView: View {
         .padding(.vertical, 5)
         .contextMenu {
             if service.active == "active" {
-                Button { Task { await performServiceAction(.stop, on: service) } } label: {
+                Button { requestServiceAction(.stop, on: service) } label: {
                     Label("Stop", systemImage: "stop.circle")
                 }
-                Button { Task { await performServiceAction(.restart, on: service) } } label: {
+                Button { requestServiceAction(.restart, on: service) } label: {
                     Label("Restart", systemImage: "arrow.clockwise")
                 }
             } else {
-                Button { Task { await performServiceAction(.start, on: service) } } label: {
+                Button { requestServiceAction(.start, on: service) } label: {
                     Label("Start", systemImage: "play.circle")
                 }
             }
 
             if ["enabled", "enabled-runtime"].contains(service.sub) || service.sub.hasPrefix("static") {
-                Button { Task { await performServiceAction(.disable, on: service) } } label: {
+                Button { requestServiceAction(.disable, on: service) } label: {
                     Label("Disable", systemImage: "togglepower")
                 }
             } else {
-                Button { Task { await performServiceAction(.enable, on: service) } } label: {
+                Button { requestServiceAction(.enable, on: service) } label: {
                     Label("Enable", systemImage: "togglepower")
                 }
             }
 
-            Button { Task { await performServiceAction(.mask, on: service) } } label: {
+            Button { requestServiceAction(.mask, on: service) } label: {
                 Label("Mask", systemImage: "eye.slash")
             }
 
@@ -292,25 +295,25 @@ struct MobileDevOpsPanelsView: View {
         .swipeActions(edge: .trailing) {
             if service.active == "active" {
                 Button("Stop", systemImage: "stop.circle") {
-                    Task { await performServiceAction(.stop, on: service) }
+                    requestServiceAction(.stop, on: service)
                 }
                 .tint(.red)
                 Button("Restart", systemImage: "arrow.clockwise") {
-                    Task { await performServiceAction(.restart, on: service) }
+                    requestServiceAction(.restart, on: service)
                 }
                 .tint(.orange)
             } else if service.active == "failed" {
                 Button("Start", systemImage: "play.circle") {
-                    Task { await performServiceAction(.start, on: service) }
+                    requestServiceAction(.start, on: service)
                 }
                 .tint(.green)
                 Button("Restart", systemImage: "arrow.clockwise") {
-                    Task { await performServiceAction(.restart, on: service) }
+                    requestServiceAction(.restart, on: service)
                 }
                 .tint(.orange)
             } else {
                 Button("Start", systemImage: "play.circle") {
-                    Task { await performServiceAction(.start, on: service) }
+                    requestServiceAction(.start, on: service)
                 }
                 .tint(.green)
             }
@@ -543,10 +546,22 @@ struct MobileDevOpsPanelsView: View {
         }
     }
 
-    private func performServiceAction(_ action: MobileServiceAction, on service: MobileSystemdUnit) async {
-        serviceActionInProgress = service.name
-        defer { serviceActionInProgress = nil }
+    /// Ask before changing a unit. The dialog shows the exact command that
+    /// `performServiceAction` then runs.
+    private func requestServiceAction(_ action: MobileServiceAction, on service: MobileSystemdUnit) {
+        let (cmd, label) = serviceCommand(action, for: service)
+        pendingConfirmation = PendingServerAction(
+            title: "\(label)?",
+            confirmLabel: action.rawValue.capitalized,
+            target: hostLabel,
+            command: cmd,
+            isDestructive: action.isDestructive
+        ) {
+            await performServiceAction(action, on: service, command: cmd, label: label)
+        }
+    }
 
+    private func serviceCommand(_ action: MobileServiceAction, for service: MobileSystemdUnit) -> (command: String, label: String) {
         let cmd: String
         let label: String
 
@@ -570,6 +585,17 @@ struct MobileDevOpsPanelsView: View {
             cmd = "sudo -n systemctl mask \(shellQuote(service.name)) 2>&1"
             label = "Mask \(service.name)"
         }
+        return (cmd, label)
+    }
+
+    private func performServiceAction(
+        _ action: MobileServiceAction,
+        on service: MobileSystemdUnit,
+        command cmd: String,
+        label: String
+    ) async {
+        serviceActionInProgress = service.name
+        defer { serviceActionInProgress = nil }
 
         do {
             let output = try await MobileMonitorBridge.shared.executeCommand(
@@ -677,6 +703,14 @@ private enum MobileServiceAction: String {
     case enable
     case disable
     case mask
+
+    /// Stopping, restarting, disabling, or masking takes a service down.
+    var isDestructive: Bool {
+        switch self {
+        case .stop, .restart, .disable, .mask: return true
+        case .start, .enable: return false
+        }
+    }
 }
 
 private struct MobileServiceActionResult: Identifiable {

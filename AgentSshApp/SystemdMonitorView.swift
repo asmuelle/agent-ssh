@@ -348,7 +348,7 @@ struct SystemdMonitorView: View {
     @State var wrapJournalLines = true
     @State var journalPriority: JournalPriority = .all
     @State var journalTail: Int = 200
-    @State var pendingAction: UnitAction?
+    @State var pendingAction: PendingServerAction?
     @State var unitDetailTab: UnitDetailTab = .overview
     /// Set when the user arrives at the Logs tab via an Errors-column
     /// badge: the tab then shows only classifier-matched error/warning
@@ -464,23 +464,7 @@ struct SystemdMonitorView: View {
         .onChange(of: serviceScope) {
             ensureVisibleSelection()
         }
-        .confirmationDialog(
-            "Confirm systemd action",
-            isPresented: Binding(
-                get: { pendingAction != nil },
-                set: { if !$0 { pendingAction = nil } }
-            ),
-            presenting: pendingAction
-        ) { action in
-            Button("\(action.verb.rawValue) \(action.unit)", role: action.destructive ? .destructive : nil) {
-                Task { await run(action) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { action in
-            // The literal command, not a description of it: consent is
-            // only meaningful if it is consent to what will actually run.
-            Text("Run on \(connectionLabel):\n\n\(action.rendered.command)")
-        }
+        .serverActionConfirmation($pendingAction)
     }
 
     var header: some View {

@@ -55,8 +55,7 @@ struct DockerMonitorView: View {
     @State var loading = false
     @State var liveLogs = false
     @State var liveEvents = false
-    @State var pendingAction: DockerAction?
-    @State var pendingBatch: DockerBatch?
+    @State var pendingConfirmation: PendingServerAction?
     @State var dockerOperation: RemoteOperationFeedback?
     @State var dockerOperationOutput: RemoteOperationFeedback?
 
@@ -69,6 +68,8 @@ struct DockerMonitorView: View {
         var destructive: Bool {
             ["stop", "restart", "kill", "rm", "pause"].contains(verb)
         }
+        /// Exactly what runs; the confirmation shows this string.
+        var script: String { "docker \(verb) \(RemoteCommandRunner.shellQuote(target))" }
     }
 
     enum BatchScope {
@@ -90,6 +91,13 @@ struct DockerMonitorView: View {
         let destructive: Bool
         let scope: BatchScope
         var targets: [String] = []
+
+        /// Exactly what runs: one script per target, or the single command
+        /// for target-less operations such as prune.
+        var scripts: [String] {
+            guard !targets.isEmpty else { return [command] }
+            return targets.map { "\(command) \(RemoteCommandRunner.shellQuote($0))" }
+        }
     }
 
     var body: some View {
@@ -120,36 +128,7 @@ struct DockerMonitorView: View {
                 await eventsLoop()
             }
         }
-        .confirmationDialog(
-            "Confirm Docker action",
-            isPresented: Binding(
-                get: { pendingAction != nil },
-                set: { if !$0 { pendingAction = nil } }
-            ),
-            presenting: pendingAction
-        ) { action in
-            Button("docker \(action.verb) \(action.target)", role: action.destructive ? .destructive : nil) {
-                Task { await run(action) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("This runs on \(connectionLabel).")
-        }
-        .confirmationDialog(
-            "Confirm batch action",
-            isPresented: Binding(
-                get: { pendingBatch != nil },
-                set: { if !$0 { pendingBatch = nil } }
-            ),
-            presenting: pendingBatch
-        ) { batch in
-            Button(batch.title, role: batch.destructive ? .destructive : nil) {
-                Task { await runBatch(batch) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { batch in
-            Text("\(batch.summary)\n\nRuns on \(connectionLabel).")
-        }
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(item: $dockerOperationOutput) { operation in
             RemoteOperationOutputSheet(operation: operation)
         }
@@ -248,17 +227,17 @@ struct DockerMonitorView: View {
                 count: checkedContainerIds.count,
                 clear: { checkedContainerIds.removeAll() }
             ) {
-                Button("Start") { pendingBatch = containerBatch(verb: "start", destructive: false) }
+                Button("Start") { requestBatch(containerBatch(verb: "start", destructive: false)) }
                     .disabled(checkedContainerIds.isEmpty || isDockerOperationRunning)
-                Button("Stop") { pendingBatch = containerBatch(verb: "stop", destructive: true) }
+                Button("Stop") { requestBatch(containerBatch(verb: "stop", destructive: true)) }
                     .disabled(checkedContainerIds.isEmpty || isDockerOperationRunning)
-                Button("Restart") { pendingBatch = containerBatch(verb: "restart", destructive: true) }
+                Button("Restart") { requestBatch(containerBatch(verb: "restart", destructive: true)) }
                     .disabled(checkedContainerIds.isEmpty || isDockerOperationRunning)
-                Button("Pause") { pendingBatch = containerBatch(verb: "pause", destructive: true) }
+                Button("Pause") { requestBatch(containerBatch(verb: "pause", destructive: true)) }
                     .disabled(checkedContainerIds.isEmpty || isDockerOperationRunning)
-                Button("Unpause") { pendingBatch = containerBatch(verb: "unpause", destructive: false) }
+                Button("Unpause") { requestBatch(containerBatch(verb: "unpause", destructive: false)) }
                     .disabled(checkedContainerIds.isEmpty || isDockerOperationRunning)
-                Button("Remove") { pendingBatch = containerBatch(verb: "rm", destructive: true) }
+                Button("Remove") { requestBatch(containerBatch(verb: "rm", destructive: true)) }
                     .disabled(checkedContainerIds.isEmpty || isDockerOperationRunning)
             }
             Divider()
@@ -343,23 +322,23 @@ struct DockerMonitorView: View {
     @ViewBuilder
     var imageBatchActions: some View {
         Button("Remove") {
-            pendingBatch = assetBatch(
+            requestBatch(assetBatch(
                 ids: Array(checkedImageIds),
                 command: "docker rmi -f",
                 noun: "image",
                 destructive: true,
                 scope: .images
-            )
+            ))
         }
         .disabled(checkedImageIds.isEmpty || isDockerOperationRunning)
         Button("Prune Unused") {
-            pendingBatch = DockerBatch(
+            requestBatch(DockerBatch(
                 title: "docker image prune",
                 summary: "Remove all dangling images.",
                 command: "docker image prune -f",
                 destructive: true,
                 scope: .images
-            )
+            ))
         }
         .disabled(isDockerOperationRunning)
     }
@@ -367,23 +346,23 @@ struct DockerMonitorView: View {
     @ViewBuilder
     var volumeBatchActions: some View {
         Button("Remove") {
-            pendingBatch = assetBatch(
+            requestBatch(assetBatch(
                 ids: Array(checkedVolumeIds),
                 command: "docker volume rm",
                 noun: "volume",
                 destructive: true,
                 scope: .volumes
-            )
+            ))
         }
         .disabled(checkedVolumeIds.isEmpty || isDockerOperationRunning)
         Button("Prune Unused") {
-            pendingBatch = DockerBatch(
+            requestBatch(DockerBatch(
                 title: "docker volume prune",
                 summary: "Remove all unused volumes.",
                 command: "docker volume prune -f",
                 destructive: true,
                 scope: .volumes
-            )
+            ))
         }
         .disabled(isDockerOperationRunning)
     }
@@ -391,23 +370,23 @@ struct DockerMonitorView: View {
     @ViewBuilder
     var networkBatchActions: some View {
         Button("Remove") {
-            pendingBatch = assetBatch(
+            requestBatch(assetBatch(
                 ids: Array(checkedNetworkIds),
                 command: "docker network rm",
                 noun: "network",
                 destructive: true,
                 scope: .networks
-            )
+            ))
         }
         .disabled(checkedNetworkIds.isEmpty || isDockerOperationRunning)
         Button("Prune Unused") {
-            pendingBatch = DockerBatch(
+            requestBatch(DockerBatch(
                 title: "docker network prune",
                 summary: "Remove all unused networks.",
                 command: "docker network prune -f",
                 destructive: true,
                 scope: .networks
-            )
+            ))
         }
         .disabled(isDockerOperationRunning)
     }

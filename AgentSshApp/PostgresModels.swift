@@ -46,11 +46,22 @@ struct PostgresSettings: Equatable {
         return runInConfiguredUser(command, binary: "psql")
     }
 
-    func dumpScript(path: String) -> String {
-        let command = (baseArgs(binary: "pg_dump") + [
+    /// The pg_dump invocation itself, as shown for consent.
+    func dumpCommand(path: String) -> String {
+        (baseArgs(binary: "pg_dump") + [
             "-f", RemoteCommandRunner.shellQuote(path),
         ]).joined(separator: " ")
-        return runInConfiguredUser(command, binary: "pg_dump")
+    }
+
+    func dumpScript(path: String) -> String {
+        runInConfiguredUser(dumpCommand(path: path), binary: "pg_dump")
+    }
+
+    /// How the command reaches the server, for the confirmation's detail.
+    var runsAsDescription: String? {
+        guard runAsPostgresUser else { return nil }
+        let user = osUser.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "Runs as OS user \(user.isEmpty ? "postgres" : user)."
     }
 
     func runInConfiguredUser(_ command: String, binary: String) -> String {

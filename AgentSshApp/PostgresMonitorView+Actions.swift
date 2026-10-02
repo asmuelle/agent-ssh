@@ -525,10 +525,23 @@ extension PostgresMonitorView {
         return (warningText + [header] + body).joined(separator: "\n")
     }
 
+    func requestBackendAction(_ action: BackendAction) {
+        let terminate = action.function.contains("terminate")
+        pendingConfirmation = PendingServerAction(
+            title: terminate ? "Terminate backend \(action.pid)?" : "Cancel the query in backend \(action.pid)?",
+            confirmLabel: terminate ? "Terminate" : "Cancel Query",
+            target: "\(connectionLabel) · database \(settings.database)",
+            command: action.sql,
+            detail: settings.runsAsDescription,
+            isDestructive: terminate
+        ) {
+            await runBackendAction(action)
+        }
+    }
+
     func runBackendAction(_ action: BackendAction) async {
-        pendingBackendAction = nil
         do {
-            _ = try await psql("select \(action.function)(\(action.pid));")
+            _ = try await psql(action.sql)
             await loadSessions()
         } catch {
             self.error = error.localizedDescription
@@ -536,17 +549,29 @@ extension PostgresMonitorView {
     }
 
     func queueVacuumAction(_ command: String, row: PGVacuumRow, destructive: Bool = false) {
-        pendingVacuumAction = VacuumAction(
+        let action = VacuumAction(
             title: "Run \(command)",
             sql: vacuumSQL(command, row: row),
             command: command,
             tableId: row.id,
             destructive: destructive
         )
+        let lockWarning = destructive
+            ? "VACUUM FULL rewrites the table and can hold stronger locks while it runs."
+            : nil
+        pendingConfirmation = PendingServerAction(
+            title: "Run \(command) on \(row.id)?",
+            confirmLabel: "Run \(command)",
+            target: "\(connectionLabel) · database \(settings.database)",
+            command: action.sql,
+            detail: [lockWarning, settings.runsAsDescription].compactMap { $0 }.joined(separator: " "),
+            isDestructive: destructive
+        ) {
+            await runVacuumAction(action)
+        }
     }
 
     func runVacuumAction(_ action: VacuumAction) async {
-        pendingVacuumAction = nil
         guard !isMaintenanceOperationRunning else { return }
         let operationId = startMaintenanceOperation(
             title: action.title,
@@ -657,6 +682,20 @@ extension PostgresMonitorView {
 
     func postgresIdentifier(_ value: String) -> String {
         "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+
+    func requestBackup(download: Bool) {
+        pendingConfirmation = PendingServerAction(
+            title: download ? "Back up and download \(settings.database)?" : "Back up \(settings.database)?",
+            confirmLabel: "Run pg_dump",
+            target: "\(connectionLabel) · database \(settings.database)",
+            command: settings.dumpCommand(path: backupPath),
+            detail: (["Writes \(backupPath) on the server, replacing any file there."]
+                + [settings.runsAsDescription].compactMap { $0 }).joined(separator: " "),
+            isDestructive: false
+        ) {
+            await runBackup(download: download)
+        }
     }
 
     func runBackup(download: Bool) async {

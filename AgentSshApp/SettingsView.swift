@@ -29,6 +29,7 @@ struct SettingsView: View {
     @State private var csvImportPlan: ConnectionCSVImportPlan?
     @State private var importExportError: String?
     @State private var sshConfigImportSummary: String?
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var syncStatus: String?
 
     @State private var selectedSection: SettingsSection? = .terminal
@@ -98,6 +99,7 @@ struct SettingsView: View {
                 .navigationTitle((selectedSection ?? .terminal).label)
         }
         .frame(minWidth: 880, idealWidth: 940, minHeight: 660, idealHeight: 720)
+        .serverActionConfirmation($pendingConfirmation)
         .confirmationDialog(
             "Import CSV",
             isPresented: Binding(
@@ -326,9 +328,9 @@ struct SettingsView: View {
                             .tag(conn.id)
                         }
                         .onDelete { indexSet in
-                            for idx in indexSet {
-                                connectionStore.delete(connectionStore.connections[idx])
-                            }
+                            pendingConfirmation = connectionStore.deleteConfirmation(
+                                for: indexSet.map { connectionStore.connections[$0] }
+                            )
                         }
                     }
                     .frame(minHeight: 140)
@@ -338,12 +340,10 @@ struct SettingsView: View {
             if !connectionStore.connections.isEmpty {
                 Section {
                     HStack {
-                        Button("Remove Selected") {
-                            for id in selectedConnections {
-                                if let conn = connectionStore.connection(withId: id) {
-                                    connectionStore.delete(conn)
-                                }
-                            }
+                        Button("Delete Selected Profiles…") {
+                            pendingConfirmation = connectionStore.deleteConfirmation(
+                                for: selectedConnections.compactMap { connectionStore.connection(withId: $0) }
+                            )
                             selectedConnections.removeAll()
                         }
                         .disabled(selectedConnections.isEmpty)

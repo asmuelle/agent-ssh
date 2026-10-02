@@ -319,7 +319,14 @@ extension SystemdMonitorView {
     /// leave the user pressing a button that appears broken.
     func requestAction(_ verb: SystemdVerb, unit: String) {
         do {
-            pendingAction = try UnitAction(verb: verb, unit: unit)
+            let action = try UnitAction(verb: verb, unit: unit)
+            pendingAction = verb.confirmation(
+                unit: unit,
+                host: connectionLabel,
+                command: SystemdVerb.script(for: action.rendered)
+            ) {
+                await run(action)
+            }
         } catch let templateError as CommandTemplateError {
             error = templateError.explanation
         } catch {
@@ -329,13 +336,12 @@ extension SystemdMonitorView {
 
     func run(_ action: UnitAction) async {
         guard let connectionId else { return }
-        pendingAction = nil
         // `runShell` already wraps the script in `( … ) 2>&1`, so stderr
         // is merged without the template carrying a redirection.
         do {
             _ = try await RemoteCommandRunner.runChecked(
                 connectionId: connectionId,
-                script: action.rendered.command
+                script: SystemdVerb.script(for: action.rendered)
             )
             await loadUnits()
         } catch {

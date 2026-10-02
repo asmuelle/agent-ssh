@@ -51,6 +51,20 @@ final class MobileConnectionStore: ObservableObject {
         save()
     }
 
+    /// The app's confirmation for deleting a saved connection. Its stored
+    /// credentials and any key used only by it go too.
+    func deleteConfirmation(for profile: MobileConnectionProfile) -> PendingServerAction {
+        PendingServerAction(
+            title: "Delete the connection \"\(profile.name)\"?",
+            confirmLabel: "Delete",
+            target: "This device",
+            detail: "Its saved password and any SSH key used only by this connection are removed. This cannot be undone.",
+            isDestructive: true
+        ) { [weak self] in
+            self?.delete(profile)
+        }
+    }
+
     func delete(_ profile: MobileConnectionProfile) {
         connections.removeAll { $0.id == profile.id }
         MobileKeychainManager.shared.deleteCredentials(for: profile)

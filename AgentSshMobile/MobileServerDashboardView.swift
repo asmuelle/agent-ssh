@@ -70,12 +70,12 @@ struct MobileServerDashboardView: View {
                 sshPort: sshPort
             )
             MobileServiceInspectorView(connectionId: connectionId)
-            MobileRunbooksView(connectionId: connectionId)
-            MobileDevOpsPanelsView(connectionId: connectionId)
+            MobileRunbooksView(connectionId: connectionId, hostLabel: profileName)
+            MobileDevOpsPanelsView(connectionId: connectionId, hostLabel: profileName)
             MobileDiskAnalyzerView(connectionId: connectionId)
             MobileNetworkDiagnosticsView(connectionId: connectionId)
             MobilePackageUpdatesView(connectionId: connectionId)
-            MobileRuntimePanelsView(connectionId: connectionId)
+            MobileRuntimePanelsView(connectionId: connectionId, hostLabel: profileName)
             MobileConnectionMapView(connectionId: connectionId)
         }
         .padding()

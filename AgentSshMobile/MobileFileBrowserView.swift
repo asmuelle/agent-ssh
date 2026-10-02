@@ -18,7 +18,7 @@ struct MobileFileBrowserView: View {
     @State private var editorDocument: MobileRemoteFileDocument?
     @State private var loadingEditorPath: String?
     @State private var namePrompt: MobileFileNamePrompt?
-    @State private var deleteTarget: MobileRemoteFileRow?
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var showingImporter = false
     @State private var exportItem: MobileFileExport?
 
@@ -104,29 +104,7 @@ struct MobileFileBrowserView: View {
         .sheet(item: $exportItem) { item in
             MobileShareSheet(url: item.url)
         }
-        .confirmationDialog(
-            "Delete item?",
-            isPresented: Binding(
-                get: { deleteTarget != nil },
-                set: { if !$0 { deleteTarget = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                guard let deleteTarget else { return }
-                self.deleteTarget = nil
-                delete(row: deleteTarget)
-            }
-            Button("Cancel", role: .cancel) {
-                deleteTarget = nil
-            }
-        } message: {
-            if deleteTarget?.entry.kind == .directory {
-                Text("Directories are removed recursively. This cannot be undone.")
-            } else {
-                Text("This cannot be undone.")
-            }
-        }
+        .serverActionConfirmation($pendingConfirmation)
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.item],
@@ -300,7 +278,7 @@ struct MobileFileBrowserView: View {
         }
 
         Button("Rename") { presentRenamePrompt(for: row) }
-        Button("Delete", role: .destructive) { deleteTarget = row }
+        Button("Delete", role: .destructive) { requestDelete(row) }
     }
 
     private var displayPath: String {
@@ -550,6 +528,23 @@ struct MobileFileBrowserView: View {
                     newPath: absolutePath(joining: name)
                 )
             }
+        }
+    }
+
+    /// Ask before deleting, naming the exact path. The old dialog did not
+    /// say which item it was about to delete.
+    private func requestDelete(_ row: MobileRemoteFileRow) {
+        pendingConfirmation = PendingServerAction(
+            title: "Delete \"\((row.remotePath as NSString).lastPathComponent)\"?",
+            confirmLabel: "Delete",
+            target: profileName,
+            command: row.remotePath,
+            detail: row.entry.kind == .directory
+                ? "The folder and everything in it are removed. This cannot be undone."
+                : "This cannot be undone.",
+            isDestructive: true
+        ) {
+            delete(row: row)
         }
     }
 

@@ -21,10 +21,10 @@ extension PostgresMonitorView {
                 .tag(session.pid)
                 .contextMenu {
                     Button("Cancel Query") {
-                        pendingBackendAction = BackendAction(function: "pg_cancel_backend", pid: session.pid)
+                        requestBackendAction(BackendAction(function: "pg_cancel_backend", pid: session.pid))
                     }
                     Button("Terminate Backend", role: .destructive) {
-                        pendingBackendAction = BackendAction(function: "pg_terminate_backend", pid: session.pid)
+                        requestBackendAction(BackendAction(function: "pg_terminate_backend", pid: session.pid))
                     }
                     Button("Copy Query") { RemoteCommandRunner.copy(session.query) }
                 }

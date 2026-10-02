@@ -7,6 +7,7 @@ struct AdvancedAuthenticationView: View {
     @StateObject private var store = AdvancedAuthenticationStore.shared
     @State private var secureEnclaveName = ""
     @State private var statusMessage: String?
+    @State private var pendingConfirmation: PendingServerAction?
 
     var body: some View {
         Form {
@@ -78,6 +79,7 @@ struct AdvancedAuthenticationView: View {
             }
         }
         .formStyle(.grouped)
+        .serverActionConfirmation($pendingConfirmation)
     }
 
     private var canCreateSecureEnclaveIdentity: Bool {
@@ -120,8 +122,16 @@ struct AdvancedAuthenticationView: View {
                         copy(publicKey)
                     }
                 }
-                Button("Delete", role: .destructive) {
-                    store.delete(identity)
+                Button("Delete…", role: .destructive) {
+                    pendingConfirmation = PendingServerAction(
+                        title: "Delete the identity \"\(identity.displayName)\"?",
+                        confirmLabel: "Delete",
+                        target: "This Mac",
+                        detail: "The private key lives only in this Mac's Secure Enclave and cannot be recovered. Servers that trust it will refuse it.",
+                        isDestructive: true
+                    ) {
+                        store.delete(identity)
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")

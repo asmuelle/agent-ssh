@@ -276,6 +276,7 @@ struct MobileRunbook: Identifiable, Sendable {
 
 struct MobileRunbooksView: View {
     let connectionId: String
+    let hostLabel: String
 
     @EnvironmentObject private var entitlementsStore: MobileEntitlementsStore
     @EnvironmentObject private var connectionStore: MobileConnectionStore
@@ -284,7 +285,7 @@ struct MobileRunbooksView: View {
 
     @State private var selected: MobileRunbook?
     @State private var variableValue = ""
-    @State private var pendingRunbook: PendingMobileRunbook?
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var isRunning = false
     @State private var errorMessage: String?
     @State private var result: MobileRemoteTaskResult?
@@ -315,25 +316,7 @@ struct MobileRunbooksView: View {
             savedSection
             historySection
         }
-        .confirmationDialog(
-            "Run runbook?",
-            isPresented: Binding(
-                get: { pendingRunbook != nil },
-                set: { if !$0 { pendingRunbook = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let pendingRunbook {
-                Button(pendingRunbook.risk == .dangerous ? "Run Dangerous Action" : "Run") {
-                    let runbook = pendingRunbook
-                    self.pendingRunbook = nil
-                    Task { await run(runbook) }
-                }
-            }
-            Button("Cancel", role: .cancel) { pendingRunbook = nil }
-        } message: {
-            Text(pendingRunbook?.detail ?? "")
-        }
+        .serverActionConfirmation($pendingConfirmation)
         .sheet(item: $result) { result in
             MobileRawOutputSheet(title: result.title, command: result.command, output: result.output)
         }
@@ -599,11 +582,22 @@ struct MobileRunbooksView: View {
         prepare(item)
     }
 
+    /// Read-only runbooks run straight away; anything that changes the
+    /// server asks first and shows the exact command.
     private func prepare(_ item: PendingMobileRunbook) {
-        if item.risk == .readOnly {
+        guard item.risk != .readOnly else {
             Task { await run(item) }
-        } else {
-            pendingRunbook = item
+            return
+        }
+        pendingConfirmation = PendingServerAction(
+            title: "Run \"\(item.title)\"?",
+            confirmLabel: item.risk == .dangerous ? "Run Dangerous Action" : "Run",
+            target: hostLabel,
+            command: item.command,
+            detail: item.detail,
+            isDestructive: item.risk == .dangerous
+        ) {
+            await run(item)
         }
     }
 

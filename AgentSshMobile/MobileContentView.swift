@@ -17,6 +17,7 @@ struct MobileContentView: View {
     @State private var compactPath = NavigationPath()
     @State private var connectionSearch = ""
     @State private var editorTarget: MobileConnectionProfile?
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var creatingConnection = false
     @State private var showingProUpgrade = false
     @State private var showingSecurityVault = false
@@ -157,6 +158,7 @@ struct MobileContentView: View {
             context: "a connection import/sync error message",
             message: $connectionImportExportError
         )
+        .serverActionConfirmation($pendingConfirmation)
         .confirmationDialog(
             "Import Connections CSV",
             isPresented: Binding(
@@ -610,8 +612,8 @@ struct MobileContentView: View {
             }
         }
         Button("Edit") { editorTarget = profile }
-        Button("Delete", role: .destructive) {
-            connectionStore.delete(profile)
+        Button("Delete…", role: .destructive) {
+            pendingConfirmation = connectionStore.deleteConfirmation(for: profile)
         }
     }
 

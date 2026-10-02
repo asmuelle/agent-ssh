@@ -11,7 +11,7 @@ struct MobileSnippetsView: View {
     @State private var isRunning = false
     @State private var runningId: String?
     @State private var result: MobileSnippetResult?
-    @State private var pendingCommand: MobilePendingSnippetCommand?
+    @State private var pendingConfirmation: PendingServerAction?
     @State private var sharedSnippets: [SharedSnippetRecord] = []
     @State private var showingSnippetEditor = false
     @State private var snippetStoreError: String?
@@ -60,27 +60,7 @@ struct MobileSnippetsView: View {
         } message: {
             Text(snippetStoreError ?? "")
         }
-        .confirmationDialog(
-            pendingCommand?.title ?? "Confirm Action",
-            isPresented: Binding(
-                get: { pendingCommand != nil },
-                set: { if !$0 { pendingCommand = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let pendingCommand {
-                Button(pendingCommand.confirmTitle, role: .destructive) {
-                    let command = pendingCommand
-                    self.pendingCommand = nil
-                    Task { await run(title: command.title, command: command.command, id: command.id) }
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                pendingCommand = nil
-            }
-        } message: {
-            Text(pendingCommand?.message ?? "")
-        }
+        .serverActionConfirmation($pendingConfirmation)
     }
 
     private var header: some View {
@@ -113,7 +93,7 @@ struct MobileSnippetsView: View {
 
     private func snippetButton(_ snippet: MobileSnippet) -> some View {
         Button {
-            Task { await run(snippet) }
+            requestRun(snippet)
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: snippet.systemImage)
@@ -209,12 +189,22 @@ struct MobileSnippetsView: View {
         serviceName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func run(_ snippet: MobileSnippet) async {
+    /// Snippets are arbitrary commands, so every run asks first and shows
+    /// the exact rendered command.
+    private func requestRun(_ snippet: MobileSnippet) {
         let command = TerminalSnippetRenderer.shellCommand(
             body: snippet.command,
             context: snippetContext
         )
-        await run(title: snippet.title, command: command, id: snippet.id)
+        pendingConfirmation = PendingServerAction(
+            title: "Run \"\(snippet.title)\"?",
+            confirmLabel: "Run",
+            target: profileName,
+            command: command,
+            isDestructive: false
+        ) {
+            await run(title: snippet.title, command: command, id: snippet.id)
+        }
     }
 
     @MainActor
@@ -252,13 +242,16 @@ struct MobileSnippetsView: View {
     private func confirmRestartService() {
         let name = normalizedServiceName
         guard !name.isEmpty else { return }
-        pendingCommand = MobilePendingSnippetCommand(
-            id: "restart-service:\(name)",
-            title: "Restart \(name)",
-            confirmTitle: "Restart Service",
-            message: "This will run sudo -n systemctl restart \(name) on \(profileName).",
-            command: "sudo -n systemctl restart \(shellQuote(name)) && systemctl status --no-pager --lines=20 \(shellQuote(name))"
-        )
+        let command = "sudo -n systemctl restart \(shellQuote(name)) && systemctl status --no-pager --lines=20 \(shellQuote(name))"
+        pendingConfirmation = PendingServerAction(
+            title: "Restart \(name)?",
+            confirmLabel: "Restart",
+            target: profileName,
+            command: command,
+            isDestructive: true
+        ) {
+            await run(title: "Restart \(name)", command: command, id: "restart-service:\(name)")
+        }
     }
 
     @MainActor
@@ -519,14 +512,6 @@ private struct MobileSnippet: Identifiable {
             """
         ),
     ]
-}
-
-private struct MobilePendingSnippetCommand: Identifiable {
-    let id: String
-    let title: String
-    let confirmTitle: String
-    let message: String
-    let command: String
 }
 
 private struct MobileSnippetResult: Identifiable {

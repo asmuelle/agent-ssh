@@ -9,6 +9,7 @@ struct MonitorDrillDownSheet: View {
     let connectionId: String?
     let drillDown: MonitorDrillDown
     let sshPort: UInt16?
+    let hostLabel: String
 
     @Environment(\.dismiss) var dismiss
     @State var rawOutput = ""
@@ -16,6 +17,7 @@ struct MonitorDrillDownSheet: View {
     @State var error: String?
     @State var notice: String?
     @State var isLoading = false
+    @State var pendingAction: PendingServerAction?
     @State var lastRefreshedAt: Date?
     @State var mode = DrillDownMode.overview
     @State var selectedProcessId: Int?
@@ -32,10 +34,11 @@ struct MonitorDrillDownSheet: View {
     @State var focusedOutput = ""
     @State var focusedLoading = false
 
-    init(connectionId: String?, drillDown: MonitorDrillDown, sshPort: UInt16?) {
+    init(connectionId: String?, drillDown: MonitorDrillDown, sshPort: UInt16?, hostLabel: String) {
         self.connectionId = connectionId
         self.drillDown = drillDown
         self.sshPort = sshPort
+        self.hostLabel = hostLabel
         _processSortOrder = State(initialValue: Self.defaultProcessSortOrder(for: drillDown))
         _mode = State(initialValue: Self.defaultMode(for: drillDown))
     }
@@ -83,6 +86,7 @@ struct MonitorDrillDownSheet: View {
         }
         .frame(minWidth: 860, idealWidth: 980, minHeight: 620, idealHeight: 720)
         .background(Color(nsColor: .windowBackgroundColor))
+        .serverActionConfirmation($pendingAction)
         .task(id: drillDown.id) {
             await refresh()
         }
@@ -188,7 +192,7 @@ struct MonitorDrillDownSheet: View {
         if case .systemdService(let unit) = drillDown {
             HStack(spacing: 6) {
                 Button {
-                    Task { await runSystemdAction(.start, unit: unit) }
+                    requestSystemdAction(.start, unit: unit)
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "play.fill")
@@ -201,7 +205,7 @@ struct MonitorDrillDownSheet: View {
                 .help("Start service")
 
                 Button {
-                    Task { await runSystemdAction(.stop, unit: unit) }
+                    requestSystemdAction(.stop, unit: unit)
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "stop.fill")
@@ -214,7 +218,7 @@ struct MonitorDrillDownSheet: View {
                 .help("Stop service")
 
                 Button {
-                    Task { await runSystemdAction(.restart, unit: unit) }
+                    requestSystemdAction(.restart, unit: unit)
                 } label: {
                     Image(systemName: "arrow.triangle.2.circlepath")
                 }
@@ -224,7 +228,7 @@ struct MonitorDrillDownSheet: View {
                 .help("Restart service")
 
                 Button {
-                    Task { await runSystemdAction(.reload, unit: unit) }
+                    requestSystemdAction(.reload, unit: unit)
                 } label: {
                     Image(systemName: "arrow.down.doc")
                 }
@@ -279,15 +283,16 @@ struct MonitorDrillDownSheet: View {
         }
     }
 
+    /// Render the action and ask for consent. The unit name came from the
+    /// host, so rendering may refuse it — refusing loudly beats running
+    /// something unvetted.
     @MainActor
-    func runSystemdAction(_ verb: SystemdVerb, unit: String) async {
-        guard let connectionId else {
+    func requestSystemdAction(_ verb: SystemdVerb, unit: String) {
+        guard connectionId != nil else {
             error = "No SSH connection selected."
             return
         }
 
-        // The unit name came from the host, so rendering may refuse it.
-        // Refusing loudly beats running something unvetted.
         let rendered: RenderedCommand
         do {
             rendered = try CommandTemplateRenderer.render(
@@ -302,23 +307,22 @@ struct MonitorDrillDownSheet: View {
             return
         }
 
+        let script = SystemdVerb.script(for: rendered)
+        pendingAction = verb.confirmation(unit: unit, host: hostLabel, command: script) {
+            await performSystemdAction(verb, unit: unit, script: script)
+        }
+    }
+
+    @MainActor
+    func performSystemdAction(_ verb: SystemdVerb, unit: String, script: String) async {
+        guard let connectionId else {
+            error = "No SSH connection selected."
+            return
+        }
         isLoading = true
         error = nil
         notice = nil
         defer { isLoading = false }
-
-        // The command itself is the vetted, validated render; only the
-        // surrounding preflight and privilege retry are author-written.
-        let script = """
-        command -v systemctl >/dev/null 2>&1 || { echo "systemctl is not available on this host."; exit 127; }
-        \(rendered.command)
-        status=$?
-        if [ "$status" -ne 0 ]; then
-          sudo -n \(rendered.command)
-          status=$?
-        fi
-        exit "$status"
-        """
 
         do {
             let result = try await RemoteCommandRunner.runShell(connectionId: connectionId, script: script)

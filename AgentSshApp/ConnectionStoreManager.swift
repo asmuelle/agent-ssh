@@ -42,6 +42,32 @@ class ConnectionStoreManager: ObservableObject {
         save()
     }
 
+    /// The app's confirmation for deleting saved profiles. Deleting also
+    /// removes their stored credentials, so it cannot be undone.
+    func deleteConfirmation(for profiles: [ConnectionProfile]) -> PendingServerAction? {
+        guard !profiles.isEmpty else { return nil }
+        let names = profiles.map(\.name)
+        let limit = 10
+        var shown = names.prefix(limit).joined(separator: "\n")
+        if names.count > limit {
+            shown += "\n… and \(names.count - limit) more"
+        }
+        return PendingServerAction(
+            title: profiles.count == 1
+                ? "Delete the profile \"\(profiles[0].name)\"?"
+                : "Delete \(profiles.count) profiles?",
+            confirmLabel: "Delete",
+            target: "This Mac",
+            command: shown,
+            detail: "Saved passwords and passphrases for \(profiles.count == 1 ? "it" : "them") are removed from the Keychain. This cannot be undone.",
+            isDestructive: true
+        ) { [weak self] in
+            for profile in profiles {
+                self?.delete(profile)
+            }
+        }
+    }
+
     func delete(_ profile: ConnectionProfile) {
         connections.removeAll { $0.id == profile.id }
         deleteCredentials(for: profile)

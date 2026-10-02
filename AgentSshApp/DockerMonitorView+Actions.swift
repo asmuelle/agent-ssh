@@ -223,13 +223,13 @@ extension DockerMonitorView {
 
     @ViewBuilder
     func dockerActions(_ container: DockerContainer) -> some View {
-        Button("Start") { pendingAction = DockerAction(verb: "start", target: container.id) }
-        Button("Stop", role: .destructive) { pendingAction = DockerAction(verb: "stop", target: container.id) }
-        Button("Restart", role: .destructive) { pendingAction = DockerAction(verb: "restart", target: container.id) }
-        Button("Pause", role: .destructive) { pendingAction = DockerAction(verb: "pause", target: container.id) }
-        Button("Unpause") { pendingAction = DockerAction(verb: "unpause", target: container.id) }
-        Button("Kill", role: .destructive) { pendingAction = DockerAction(verb: "kill", target: container.id) }
-        Button("Remove", role: .destructive) { pendingAction = DockerAction(verb: "rm", target: container.id) }
+        Button("Start") { requestAction(DockerAction(verb: "start", target: container.id)) }
+        Button("Stop", role: .destructive) { requestAction(DockerAction(verb: "stop", target: container.id)) }
+        Button("Restart", role: .destructive) { requestAction(DockerAction(verb: "restart", target: container.id)) }
+        Button("Pause", role: .destructive) { requestAction(DockerAction(verb: "pause", target: container.id)) }
+        Button("Unpause") { requestAction(DockerAction(verb: "unpause", target: container.id)) }
+        Button("Kill", role: .destructive) { requestAction(DockerAction(verb: "kill", target: container.id)) }
+        Button("Remove", role: .destructive) { requestAction(DockerAction(verb: "rm", target: container.id)) }
         Divider()
         Button("Show Logs") {
             selectedContainerId = container.id
@@ -409,7 +409,6 @@ extension DockerMonitorView {
 
     func run(_ action: DockerAction) async {
         guard let connectionId else { return }
-        pendingAction = nil
         guard !isDockerOperationRunning else { return }
         let title = "docker \(action.verb)"
         let operationId = startDockerOperation(
@@ -417,7 +416,7 @@ extension DockerMonitorView {
             detail: action.target,
             targets: [action.target]
         )
-        let script = "docker \(action.verb) \(RemoteCommandRunner.shellQuote(action.target)) 2>&1"
+        let script = action.script
         do {
             let output = try await RemoteCommandRunner.runChecked(
                 connectionId: connectionId,
@@ -464,7 +463,6 @@ extension DockerMonitorView {
 
     func runBatch(_ batch: DockerBatch) async {
         guard let connectionId else { return }
-        pendingBatch = nil
         guard !isDockerOperationRunning else { return }
         let operationId = startDockerOperation(
             title: batch.title,
@@ -480,7 +478,7 @@ extension DockerMonitorView {
         do {
             let output = try await RemoteCommandRunner.runChecked(
                 connectionId: connectionId,
-                script: "\(batch.command) 2>&1"
+                script: batch.command
             )
             switch batch.scope {
             case .containers: checkedContainerIds.removeAll()
@@ -536,7 +534,7 @@ extension DockerMonitorView {
         var succeededTargets: [String] = []
         let total = batch.targets.count
 
-        for (index, target) in batch.targets.enumerated() {
+        for (index, (target, script)) in zip(batch.targets, batch.scripts).enumerated() {
             let humanIndex = index + 1
             updateDockerOperation(
                 operationId,
@@ -544,7 +542,6 @@ extension DockerMonitorView {
                 completedCount: index
             )
 
-            let script = "\(batch.command) \(RemoteCommandRunner.shellQuote(target)) 2>&1"
             do {
                 let output = try await RemoteCommandRunner.runChecked(
                     connectionId: connectionId,
@@ -643,5 +640,41 @@ extension DockerMonitorView {
         guard let connectionId else { return }
         guard let data = "\(execShellCommand(container))\n".data(using: .utf8) else { return }
         TerminalSessionManager.shared.sendInput(connectionId: connectionId, data: data)
+    }
+}
+
+extension DockerMonitorView {
+    /// Ask before running a single-container action.
+    func requestAction(_ action: DockerAction) {
+        pendingConfirmation = PendingServerAction(
+            title: "\(action.verb.capitalized) container \(action.target)?",
+            confirmLabel: action.verb.capitalized,
+            target: connectionLabel,
+            command: action.script,
+            isDestructive: action.destructive
+        ) {
+            await run(action)
+        }
+    }
+
+    /// Ask before running a batch. Long target lists are shortened in the
+    /// dialog; every line shown is a command that will run.
+    func requestBatch(_ batch: DockerBatch?) {
+        guard let batch else { return }
+        let scripts = batch.scripts
+        let limit = 10
+        var command = scripts.prefix(limit).joined(separator: "\n")
+        if scripts.count > limit {
+            command += "\n… and \(scripts.count - limit) more like these"
+        }
+        pendingConfirmation = PendingServerAction(
+            title: batch.summary.hasSuffix(".") ? "\(batch.summary.dropLast())?" : "\(batch.summary)?",
+            confirmLabel: batch.title,
+            target: connectionLabel,
+            command: command,
+            isDestructive: batch.destructive
+        ) {
+            await runBatch(batch)
+        }
     }
 }
