@@ -9,9 +9,9 @@ enum ServerDoctorBridgeError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .connectionNotFound(let id): return "Connection not found: \(id)"
-        case .invalidRequest(let message): return "Invalid Doctor request: \(message)"
-        case .collectorFailed(let message): return "Doctor collection failed: \(message)"
+        case .connectionNotFound: return "This host is no longer connected. Reconnect, then run Server Doctor again."
+        case .invalidRequest(let message): return "Server Doctor couldn't start this check: \(message)"
+        case .collectorFailed(let message): return "Server Doctor couldn't collect evidence from the host: \(message)"
         case .other(let message): return message
         }
     }

@@ -34,9 +34,9 @@ struct MobileSSHIdentityListView: View {
                 Section {
                     Label {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("One key, many connections")
+                            Text("One key, many hosts")
                                 .font(.subheadline.weight(.semibold))
-                            Text("An identity is an SSH keypair created on this device. Install its public key on a server once, then point any connection at it — instead of importing a key per connection.")
+                            Text("An identity is an SSH keypair created on this device. Install its public key on a server once, then point any host at it — instead of importing a key per connection.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -80,7 +80,7 @@ struct MobileSSHIdentityListView: View {
                                     onSelect(identity)
                                     dismiss()
                                 } label: {
-                                    Label("Use for this connection", systemImage: "checkmark.circle")
+                                    Label("Use for this host", systemImage: "checkmark.circle")
                                 }
                             }
                             if let publicKey = identity.publicKey {
@@ -269,7 +269,7 @@ struct MobileSSHPublicKeySection: View {
                     .controlSize(.small)
                 }
 
-                Text("Append this line to ~/.ssh/authorized_keys on the server, then point a connection at this identity.")
+                Text("Append this line to ~/.ssh/authorized_keys on the server, then point a host at this identity.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

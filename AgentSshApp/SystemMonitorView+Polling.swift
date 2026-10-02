@@ -257,7 +257,7 @@ extension SystemMonitorView {
                     level: .unknown,
                     statusText: "Unable to read UFW status",
                     extraOpenRules: [],
-                    error: "Remote command failed with exit code \(result.exitCode)."
+                    error: "The health check failed on the host (exit code \(result.exitCode))."
                 )
             } else {
                 ufwSummary = summarizeUFWStatusOutput(result.output, sshPort: sshPort)

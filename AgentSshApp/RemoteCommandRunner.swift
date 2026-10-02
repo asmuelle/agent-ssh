@@ -23,11 +23,11 @@ enum RemoteCommandError: LocalizedError {
         case .ffi(let detail):
             return detail
         case .missingExitMarker(let output):
-            return output.isEmpty ? "Remote command did not return an exit status." : output
+            return output.isEmpty ? "The host didn't report whether the command finished." : output
         case .failed(let result):
             let detail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
             return detail.isEmpty
-                ? "Remote command failed with exit code \(result.exitCode)."
+                ? "The command failed (exit code \(result.exitCode)) without printing an error."
                 : detail
         }
     }

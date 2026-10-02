@@ -116,7 +116,7 @@ struct MobileActivityTimelineView: View {
                 .font(.headline)
 
             if events.isEmpty {
-                Text("No activity recorded for this server in this app session.")
+                Text("No activity recorded for this host in this app session.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(10)

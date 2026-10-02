@@ -98,6 +98,7 @@ struct ConnectionWorkspaceStrip: View {
 /// When there's no tab, shows the "Connect to a host" placeholder.
 struct MainPanel: View {
     @EnvironmentObject var tabsStore: TerminalTabsStore
+    @ObservedObject private var connectionStore = ConnectionStoreManager.shared
 
     var body: some View {
         if tabsStore.tabs.isEmpty {
@@ -160,7 +161,11 @@ struct MainPanel: View {
             Image(systemName: "terminal")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(.secondary)
-            Text("Select a connection from the sidebar to open a workspace")
+            // One instruction: what to do next, which depends on whether
+            // anything is saved yet.
+            Text(connectionStore.connections.isEmpty
+                ? "Add a host with + at the top of the sidebar."
+                : "Select a host in the sidebar to connect.")
                 .font(MidnightMacDesign.FontToken.callout)
                 .foregroundStyle(.secondary)
         }
@@ -1139,9 +1144,9 @@ struct DashboardPanel: View {
         freshness: FleetObservationFreshness?,
         isConnected: Bool
     ) -> String {
-        guard let record else { return isConnected ? "Collecting first observation" : "Never observed" }
+        guard let record else { return isConnected ? "Checking…" : "Not checked yet" }
         if freshness == .stale {
-            return "Stale · last observed \(record.observedAt.formatted(date: .omitted, time: .shortened))"
+            return "Last checked \(record.observedAt.formatted(date: .omitted, time: .shortened))"
         }
         return isConnected ? record.summary : "Offline · \(record.summary)"
     }

@@ -484,19 +484,34 @@ enum BridgeError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .configInvalid(let msg):     return "Invalid configuration: \(msg)"
-        case .passphraseRequired(let msg): return "Key passphrase required: \(msg)"
-        case .authFailed(let msg):        return "Authentication failed: \(msg)"
-        case .hostKeyMismatch(_, _, let msg): return "Host key mismatch: \(msg)"
-        case .network(let msg):           return "Network error: \(msg)"
-        case .ptyStart(let msg):          return "Failed to start terminal: \(msg)"
-        case .notInitialized:             return "Rust bridge not initialized"
+        case .configInvalid(let msg):
+            return Self.explained("This host's settings aren't valid. Edit the host and check its address, port, and username.", msg)
+        case .passphraseRequired(let msg):
+            return Self.explained("This SSH key is protected by a passphrase. Enter it to connect.", msg)
+        case .authFailed(let msg):
+            return Self.explained("The host didn't accept these credentials. Check the username, password, or key.", msg)
+        case .hostKeyMismatch(_, _, let msg):
+            return Self.explained("The host's identity changed since you last connected. It may have been reinstalled, or someone may be intercepting the connection. Don't continue unless you know why.", msg)
+        case .network(let msg):
+            return Self.explained("Couldn't reach the host. Check the address and port, and that you're online.", msg)
+        case .ptyStart(let msg):
+            return Self.explained("The host didn't open a terminal.", msg)
+        case .notInitialized:
+            return "agent-ssh is still starting. Try again in a moment."
         case .operationFailed(let operation, let detail):
-            return "\(operation) failed: \(detail)"
+            return Self.explained("\(operation) didn't complete.", detail)
         case .malformedResponse(let operation, let detail):
-            return "\(operation) returned an unexpected response: \(detail)"
-        case .other(let msg):             return msg
+            return Self.explained("\(operation) returned something agent-ssh couldn't read.", detail)
+        case .other(let msg):
+            return msg
         }
+    }
+
+    /// A plain sentence first; the underlying detail after it, for anyone
+    /// diagnosing the problem.
+    private static func explained(_ sentence: String, _ detail: String) -> String {
+        let detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return detail.isEmpty ? sentence : "\(sentence)\n\nDetails: \(detail)"
     }
 
     static func from(_ err: ConnectError) -> BridgeError {

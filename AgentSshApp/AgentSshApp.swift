@@ -41,7 +41,7 @@ struct AgentSshApp: App {
 
                 Divider()
 
-                Button("Reconnect Active Connection") {
+                Button("Reconnect") {
                     Task { await tabsStore.reconnectActive() }
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])

@@ -202,7 +202,7 @@ struct ConnectionWorldMapView: View {
                 ),
                 updatedAt: Date()
             )
-            lastError = result.succeeded ? nil : "Remote IP scan exited with code \(result.exitCode)."
+            lastError = result.succeeded ? nil : "Couldn't list the host's connections (exit code \(result.exitCode))."
         } catch {
             lastError = error.localizedDescription
         }

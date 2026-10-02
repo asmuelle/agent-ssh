@@ -9,7 +9,7 @@ enum SecurityPatchBridgeError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .connectionNotFound(let id): return "Connection not found: \(id)"
+        case .connectionNotFound: return "This host is no longer connected. Reconnect, then scan again."
         case .invalidRequest(let message): return "Invalid security scan request: \(message)"
         case .collectorFailed(let message): return "Security scan failed: \(message)"
         case .other(let message): return message

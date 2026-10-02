@@ -1343,7 +1343,7 @@ private struct MobileConnectionConfidenceSheet: View {
                     .padding()
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("Connection Details")
+            .navigationTitle("Host Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

@@ -169,7 +169,7 @@ struct SidebarView: View {
     private var connectionsHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("Connections")
+                Text("Hosts")
                     .font(MidnightMacDesign.FontToken.label)
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -177,10 +177,10 @@ struct SidebarView: View {
                 Spacer(minLength: 0)
 
                 Menu {
-                    Button("New SSH Connection") {
+                    Button("New SSH Host") {
                         openNewConnection(kind: .ssh)
                     }
-                    Button("New SFTP Connection") {
+                    Button("New SFTP Host") {
                         openNewConnection(kind: .sftp)
                     }
 
@@ -197,7 +197,7 @@ struct SidebarView: View {
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
-                .help("Add connection or folder")
+                .help("Add a host or folder")
             }
 
             HStack(spacing: 6) {
@@ -205,7 +205,7 @@ struct SidebarView: View {
                     .font(MidnightMacDesign.FontToken.subheadline)
                     .foregroundStyle(.tertiary)
 
-                TextField("Search connections", text: $search)
+                TextField("Search hosts", text: $search)
                     .textFieldStyle(.plain)
                     .font(MidnightMacDesign.FontToken.callout)
 
@@ -426,7 +426,7 @@ struct SidebarView: View {
                     .font(MidnightMacDesign.FontToken.headline)
             }
 
-            Text("Add your first SSH or SFTP host to start a session, or import existing profiles.")
+            Text("Add your first SSH or SFTP host, or import the ones in ~/.ssh/config.")
                 .font(MidnightMacDesign.FontToken.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -686,7 +686,7 @@ struct SidebarView: View {
 // MARK: - Connection details panel
 
 /// Bottom half of the sidebar — shows static metadata for the selected
-/// profile. Mirrors the Tauri "Connection Details" card. Empty state
+/// profile. Mirrors the Tauri "Host Details" card. Empty state
 /// renders a hint instead of an empty form.
 private struct ConnectionDetailsPanel: View {
     let profile: ConnectionProfile?
@@ -696,7 +696,7 @@ private struct ConnectionDetailsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Connection Details")
+                Text("Host Details")
                     .font(MidnightMacDesign.FontToken.label)
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -707,7 +707,7 @@ private struct ConnectionDetailsPanel: View {
                         .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.plain)
-                .help("Collapse connection details")
+                .help("Collapse host details")
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
@@ -751,7 +751,7 @@ private struct ConnectionDetailsPanel: View {
                     Image(systemName: "info.circle")
                         .font(.system(size: 18, weight: .light))
                         .foregroundStyle(.tertiary)
-                    Text("Select a connection to see details.")
+                    Text("Select a host to see its details.")
                         .font(MidnightMacDesign.FontToken.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1000,7 +1000,7 @@ private struct CollapsedConnectionDetailsBar: View {
                         .font(MidnightMacDesign.FontToken.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(profile?.name ?? "Connection Details")
+                Text(profile?.name ?? "Host Details")
                     .font(MidnightMacDesign.FontToken.caption.weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -1014,7 +1014,7 @@ private struct CollapsedConnectionDetailsBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Show connection details")
+        .help("Show host details")
     }
 }
 
@@ -1135,7 +1135,7 @@ struct ConnectionRow<Actions: View>: View {
             .buttonStyle(.plain)
             .opacity(showsActionMenu ? 1 : 0)
             .disabled(!showsActionMenu)
-            .help("Connection actions")
+            .help("Host actions")
             .accessibilityLabel("Actions for \(profile.name)")
         }
         // Tighter vertical density to match Finder's ~24pt row

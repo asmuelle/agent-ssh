@@ -156,7 +156,7 @@ struct ActivityTimelineView: View {
             }
 
             if events.isEmpty {
-                Text("No activity recorded for this server in this session.")
+                Text("No activity recorded for this host in this session.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

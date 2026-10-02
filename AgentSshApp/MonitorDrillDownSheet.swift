@@ -274,7 +274,7 @@ struct MonitorDrillDownSheet: View {
             if result.succeeded {
                 error = nil
             } else {
-                error = "Diagnostics exited with code \(result.exitCode)."
+                error = "Some diagnostics failed on the host (exit code \(result.exitCode)). The output below shows what was collected."
             }
         } catch {
             self.error = error.localizedDescription
@@ -346,7 +346,7 @@ struct MonitorDrillDownSheet: View {
                     icon: "exclamationmark.triangle.fill",
                     severity: .critical
                 )
-                error = "\(verb.rawValue.capitalized) exited with code \(result.exitCode)."
+                error = "\(verb.label) failed on the host (exit code \(result.exitCode)). The output below shows why."
             }
         } catch {
             self.error = error.localizedDescription
@@ -369,7 +369,7 @@ struct MonitorDrillDownSheet: View {
             let result = try await RemoteCommandRunner.runShell(connectionId: connectionId, script: script)
             focusedOutput = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
             if !result.succeeded {
-                error = "Inspection exited with code \(result.exitCode)."
+                error = "The inspection failed on the host (exit code \(result.exitCode))."
             }
         } catch {
             self.error = error.localizedDescription

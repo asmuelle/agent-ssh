@@ -618,12 +618,12 @@ public struct ServerQuickCheckControl: ControlWidget {
 
     private func fetchCurrentScannerState() -> (title: String, iconName: String) {
         guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.agent-ssh.agent-ssh") else {
-            return ("Check Servers", "server.rack.status.badge.warning")
+            return ("Check Hosts", "server.rack.status.badge.warning")
         }
         let defaultsURL = container.appendingPathComponent("quick_check_status.plist")
         guard let dict = NSDictionary(contentsOf: defaultsURL) as? [String: Any],
               let status = dict["status"] as? String else {
-            return ("Check Servers", "server.rack.status.badge.warning")
+            return ("Check Hosts", "server.rack.status.badge.warning")
         }
 
         switch status.lowercased() {

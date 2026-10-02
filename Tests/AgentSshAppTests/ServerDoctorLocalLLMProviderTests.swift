@@ -100,7 +100,7 @@ final class ServerDoctorLocalLLMProviderTests: XCTestCase {
         XCTAssertThrowsError(
             try ServerDoctorLocalLLMResponseDecoder.decodeContent(from: Data(payload.utf8))
         ) { error in
-            XCTAssertTrue(error.localizedDescription.contains("not OpenAI-compatible or Ollama chat JSON"))
+            XCTAssertTrue(error.localizedDescription.contains("OpenAI or Ollama chat API"))
             XCTAssertTrue(error.localizedDescription.contains("not a chat completion"))
         }
     }

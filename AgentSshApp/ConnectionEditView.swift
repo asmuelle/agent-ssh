@@ -236,7 +236,7 @@ struct ConnectionEditView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Name:").frame(width: 80, alignment: .trailing)
-                        TextField("My Server", text: $name)
+                        TextField("My Host", text: $name)
                     }
                     HStack(alignment: .top) {
                         Text("Type:").frame(width: 80, alignment: .trailing)
@@ -331,7 +331,7 @@ struct ConnectionEditView: View {
                     }
                     HStack {
                         Toggle("Connect at launch", isOn: $autoConnect)
-                            .help("Connect this server automatically when the app starts. Only applies when saved credentials allow connecting without a prompt.")
+                            .help("Connect this host automatically when the app starts. Only applies when saved credentials allow connecting without a prompt.")
                         Spacer()
                     }
                     HStack {

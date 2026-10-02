@@ -57,7 +57,7 @@ struct MobileContentView: View {
             profile.folder?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         }
         let grouped = Dictionary(grouping: profiles) { profile in
-            guard hasFolders else { return "Connections" }
+            guard hasFolders else { return "Hosts" }
             return connectionFolderTitle(for: profile)
         }
 
@@ -160,7 +160,7 @@ struct MobileContentView: View {
         )
         .serverActionConfirmation($pendingConfirmation)
         .confirmationDialog(
-            "Import Connections CSV",
+            "Import Hosts CSV",
             isPresented: Binding(
                 get: { connectionCSVImportPlan != nil },
                 set: { if !$0 { connectionCSVImportPlan = nil } }
@@ -304,7 +304,7 @@ struct MobileContentView: View {
             ContentUnavailableView(
                 "Connection Removed",
                 systemImage: "trash",
-                description: Text("This saved connection is no longer available.")
+                description: Text("This host is no longer saved.")
             )
         }
     }
@@ -321,7 +321,7 @@ struct MobileContentView: View {
             }
         )) {
             Text("Dashboard").tag(LandingMode.dashboard)
-            Text("Connections").tag(LandingMode.connections)
+            Text("Hosts").tag(LandingMode.connections)
         }
         .pickerStyle(.segmented)
         .fixedSize()
@@ -348,7 +348,7 @@ struct MobileContentView: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .accessibilityLabel("Add connection")
+            .accessibilityLabel("Add host")
         }
     }
 
@@ -402,14 +402,14 @@ struct MobileContentView: View {
                     ContentUnavailableView(
                         "No Connections",
                         systemImage: "server.rack",
-                        description: Text("Add an SSH or SFTP profile to get started.")
+                        description: Text("Add an SSH or SFTP host to get started.")
                     )
                     .listRowSeparator(.hidden)
                 } else if filteredConnections.isEmpty {
                     ContentUnavailableView(
                         "No Matches",
                         systemImage: "magnifyingglass",
-                        description: Text("No saved connection matches this search.")
+                        description: Text("No host matches this search.")
                     )
                     .listRowSeparator(.hidden)
                 } else {
@@ -462,14 +462,14 @@ struct MobileContentView: View {
                     ContentUnavailableView(
                         "No Connections",
                         systemImage: "server.rack",
-                        description: Text("Add an SSH or SFTP profile to get started.")
+                        description: Text("Add an SSH or SFTP host to get started.")
                     )
                     .listRowSeparator(.hidden)
                 } else if filteredConnections.isEmpty {
                     ContentUnavailableView(
                         "No Matches",
                         systemImage: "magnifyingglass",
-                        description: Text("No saved connection matches this search.")
+                        description: Text("No host matches this search.")
                     )
                     .listRowSeparator(.hidden)
                 } else {
@@ -549,7 +549,7 @@ struct MobileContentView: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .accessibilityLabel("Add connection")
+            .accessibilityLabel("Add host")
         }
     }
 
@@ -594,13 +594,13 @@ struct MobileContentView: View {
         Button {
             importingConnectionsCSV = true
         } label: {
-            Label("Import Connections CSV", systemImage: "tray.and.arrow.down")
+            Label("Import Hosts CSV", systemImage: "tray.and.arrow.down")
         }
 
         Button {
             exportConnectionsCSV()
         } label: {
-            Label("Export Connections CSV", systemImage: "square.and.arrow.up")
+            Label("Export Hosts CSV", systemImage: "square.and.arrow.up")
         }
     }
 

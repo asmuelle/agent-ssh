@@ -64,8 +64,8 @@ struct CommandPaletteView: View {
             isEnabled: connectedHostCount >= 2,
             run: onOpenDashboard
         ))
-        result.append(PaletteAction(title: "Toggle Sidebar", subtitle: "Show or hide connections", icon: "sidebar.left", run: onToggleSidebar))
-        result.append(PaletteAction(title: "Toggle Inspector", subtitle: "System monitor and server health", icon: "sidebar.right", run: onToggleInspector))
+        result.append(PaletteAction(title: "Toggle Sidebar", subtitle: "Show or hide hosts", icon: "sidebar.left", run: onToggleSidebar))
+        result.append(PaletteAction(title: "Toggle Inspector", subtitle: "System monitor and host health", icon: "sidebar.right", run: onToggleInspector))
         result.append(PaletteAction(title: "Export Diagnostics", subtitle: "Create a redacted support bundle", icon: "square.and.arrow.up", run: onExportDiagnostics))
 
         for profile in connections.sorted(by: profileSort) {
@@ -97,7 +97,7 @@ struct CommandPaletteView: View {
             HStack(spacing: 8) {
                 Image(systemName: "command")
                     .foregroundStyle(.secondary)
-                TextField("Run a command or connect to a server", text: $query)
+                TextField("Run a command or connect to a host", text: $query)
                     .textFieldStyle(.plain)
                     .font(MidnightMacDesign.FontToken.title)
             }
