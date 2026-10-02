@@ -439,23 +439,7 @@ struct SecurityPatchMonitorView: View {
 }
 
 private extension SecurityPatchSeverity {
-    var color: Color {
-        switch self {
-        case .critical: return .red
-        case .high: return .orange
-        case .warning: return .yellow
-        case .info: return .green
-        case .unknown: return .secondary
-        }
-    }
+    var color: Color { tone.color }
 
-    var systemImage: String {
-        switch self {
-        case .critical: return "exclamationmark.octagon.fill"
-        case .high: return "exclamationmark.triangle.fill"
-        case .warning: return "exclamationmark.circle.fill"
-        case .info: return "checkmark.circle.fill"
-        case .unknown: return "questionmark.circle.fill"
-        }
-    }
+    var systemImage: String { tone.symbol }
 }

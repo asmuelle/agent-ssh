@@ -50,6 +50,8 @@ extension View {
             VisualEffectView(material: .sidebar, blendingMode: .behindWindow)
                 .ignoresSafeArea()
                 .overlay {
+                    // DESIGN.md `sidebar-tint-top` / `sidebar-tint-bottom`:
+                    // the one sanctioned gradient in the app.
                     LinearGradient(
                         colors: [
                             Color(red: 0.83, green: 0.87, blue: 0.96).opacity(0.20),

@@ -20,7 +20,7 @@ struct TerminalSearchBar: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .font(.system(size: 11))
 
             TextField("Search terminal…", text: $query)
@@ -31,7 +31,7 @@ struct TerminalSearchBar: View {
             if !query.isEmpty {
                 Text("\(currentMatch)/\(matchCount)")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .frame(minWidth: 32)
 
                 Button(action: onPrevious) {

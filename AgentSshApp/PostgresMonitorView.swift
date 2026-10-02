@@ -159,6 +159,8 @@ struct PostgresMonitorView: View {
             }
             .buttonStyle(.borderless)
             .disabled(connectionId == nil)
+            .help("Refresh")
+            .accessibilityLabel("Refresh")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

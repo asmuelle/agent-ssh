@@ -165,7 +165,7 @@ private struct TransferRow: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                 Text(transfer.sourceLabel)
-                    .font(.system(size: 9))
+                    .font(MidnightMacDesign.FontToken.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -178,7 +178,7 @@ private struct TransferRow: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                 Text(transfer.destinationLabel)
-                    .font(.system(size: 9))
+                    .font(MidnightMacDesign.FontToken.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -217,17 +217,17 @@ private struct TransferRow: View {
             HStack {
                 if transfer.status == .queued {
                     Text("Queued")
-                        .font(.system(size: 9))
+                        .font(MidnightMacDesign.FontToken.caption)
                         .foregroundStyle(.tertiary)
                 } else {
                     Text(transfer.formattedBytes)
-                        .font(.system(size: 9).monospacedDigit())
+                        .font(MidnightMacDesign.FontToken.caption.monospacedDigit())
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
                 if transfer.totalBytes > 0 {
                     Text(transfer.formattedTotal)
-                        .font(.system(size: 9).monospacedDigit())
+                        .font(MidnightMacDesign.FontToken.caption.monospacedDigit())
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -238,20 +238,21 @@ private struct TransferRow: View {
 
     private var statusIcon: String {
         switch transfer.status {
-        case .queued:    return "clock"
+        case .queued:    return MidnightMacDesign.StatusTone.pending.symbol
         case .inProgress: return "arrow.down.circle"
-        case .completed:  return "checkmark.circle.fill"
-        case .failed:     return "xmark.circle.fill"
+        case .completed:  return MidnightMacDesign.StatusTone.ok.symbol
+        case .failed:     return MidnightMacDesign.StatusTone.critical.symbol
         case .cancelled:  return "stop.circle.fill"
         }
     }
 
     private var statusColor: Color {
         switch transfer.status {
-        case .completed: return .green
-        case .failed:    return .red
-        case .cancelled: return .orange
-        default:         return .accentColor
+        case .completed: return MidnightMacDesign.StatusTone.ok.color
+        case .failed:    return MidnightMacDesign.StatusTone.critical.color
+        // Cancelling is the user's choice, not a problem.
+        case .cancelled: return MidnightMacDesign.StatusTone.inactive.color
+        default:         return MidnightMacDesign.StatusTone.pending.color
         }
     }
 

@@ -365,24 +365,24 @@ struct FleetRunbookSheet: View {
 
     private func stateColor(_ state: FleetTargetRunState) -> Color {
         switch state {
-        case .succeeded: return .green
-        case .skipped: return .secondary
-        case .rolledBack: return .orange
-        case .failed, .verificationFailed, .rollbackFailed: return .red
+        case .succeeded: return MidnightMacDesign.StatusTone.ok.color
+        case .skipped: return MidnightMacDesign.StatusTone.inactive.color
+        case .rolledBack: return MidnightMacDesign.StatusTone.warning.color
+        case .failed, .verificationFailed, .rollbackFailed: return MidnightMacDesign.StatusTone.critical.color
         }
     }
 
     private func stateIcon(_ state: FleetTargetRunState) -> String {
         switch state {
-        case .succeeded: return "checkmark.circle.fill"
+        case .succeeded: return MidnightMacDesign.StatusTone.ok.symbol
         case .skipped: return "forward.end.circle"
         case .rolledBack: return "arrow.uturn.backward.circle.fill"
-        case .failed, .verificationFailed, .rollbackFailed: return "xmark.octagon.fill"
+        case .failed, .verificationFailed, .rollbackFailed: return MidnightMacDesign.StatusTone.critical.symbol
         }
     }
 
     private func resultColor(_ result: FleetRunbookResult) -> Color {
-        result.results.allSatisfy { $0.state == .succeeded } ? .green : .orange
+        result.results.allSatisfy { $0.state == .succeeded } ? MidnightMacDesign.StatusTone.ok.color : MidnightMacDesign.StatusTone.warning.color
     }
 
     private func auditSeverity(_ state: FleetTargetRunState) -> ActivitySeverity {

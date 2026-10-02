@@ -97,15 +97,15 @@ extension DockerMonitorView {
     func dockerEventActionColor(_ action: String) -> Color {
         let lower = action.lowercased()
         if lower.contains("delete") || lower.contains("destroy") || lower.contains("die") || lower == "kill" || lower == "remove" {
-            return .red
+            return MidnightMacDesign.StatusTone.critical.color
         }
         if lower.contains("start") || lower.contains("create") || lower.contains("connect") || lower.contains("pull") {
-            return .green
+            return MidnightMacDesign.StatusTone.ok.color
         }
         if lower.contains("pause") || lower.contains("stop") || lower.contains("restart") || lower.contains("untag") {
-            return .orange
+            return MidnightMacDesign.StatusTone.warning.color
         }
-        return .secondary
+        return MidnightMacDesign.StatusTone.inactive.color
     }
 
     func dockerEventDetailSummary(_ event: DockerEvent) -> String {

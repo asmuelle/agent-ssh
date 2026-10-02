@@ -627,26 +627,24 @@ extension SystemdMonitorView {
         var accentColor: Color {
             switch self {
             case .info: return .clear
-            case .notice: return .blue.opacity(0.6)
-            case .warning: return .orange
-            case .error: return .red
-            case .critical: return .purple
+            case .notice: return MidnightMacDesign.StatusTone.info.color.opacity(0.6)
+            case .warning: return MidnightMacDesign.StatusTone.warning.color
+            case .error, .critical: return MidnightMacDesign.StatusTone.critical.color
             }
         }
         var foreground: Color {
             switch self {
             case .info, .notice: return .primary
-            case .warning: return .orange
-            case .error: return .red
-            case .critical: return .purple
+            case .warning: return MidnightMacDesign.StatusTone.warning.color
+            case .error, .critical: return MidnightMacDesign.StatusTone.critical.color
             }
         }
         var background: Color {
             switch self {
             case .info, .notice: return .clear
-            case .warning: return Color.orange.opacity(0.06)
-            case .error: return Color.red.opacity(0.07)
-            case .critical: return Color.purple.opacity(0.1)
+            case .warning: return MidnightMacDesign.StatusTone.warning.color.opacity(0.06)
+            case .error: return MidnightMacDesign.StatusTone.critical.color.opacity(0.07)
+            case .critical: return MidnightMacDesign.StatusTone.critical.color.opacity(0.1)
             }
         }
     }

@@ -104,55 +104,55 @@ func systemdIndicatorColor(active: String, sub: String) -> Color {
     let active = active.lowercased()
     let sub = sub.lowercased()
     if active == "failed" || sub == "failed" {
-        return .red
+        return MidnightMacDesign.StatusTone.critical.color
     }
     if active == "active" {
-        return .green
+        return MidnightMacDesign.StatusTone.ok.color
     }
     if active == "activating" || active == "deactivating" || active == "reloading"
         || sub == "reloading" || sub == "auto-restart" || sub == "start" || sub == "stop" {
-        return .orange
+        return MidnightMacDesign.StatusTone.pending.color
     }
-    return .secondary
+    return MidnightMacDesign.StatusTone.inactive.color
 }
 
 func systemdStateColor(_ value: String, unit: SystemdUnit) -> Color {
     let lower = value.lowercased()
     if unit.isFailed || lower == "failed" {
-        return .red
+        return MidnightMacDesign.StatusTone.critical.color
     }
     if unit.isTransitional || lower == "activating" || lower == "deactivating" || lower == "reloading" {
-        return .orange
+        return MidnightMacDesign.StatusTone.pending.color
     }
     if unit.isActive || lower == "running" || lower == "listening" {
-        return .green
+        return MidnightMacDesign.StatusTone.ok.color
     }
-    return .secondary
+    return MidnightMacDesign.StatusTone.inactive.color
 }
 
 func systemdLoadColor(_ value: String) -> Color {
     switch value.lowercased() {
     case "loaded":
-        return .secondary
+        return MidnightMacDesign.StatusTone.inactive.color
     case "not-found", "error", "bad-setting", "masked":
-        return .red
+        return MidnightMacDesign.StatusTone.critical.color
     default:
-        return .orange
+        return MidnightMacDesign.StatusTone.warning.color
     }
 }
 
 func systemdFileStateColor(_ value: String) -> Color {
     switch value.lowercased() {
     case "enabled", "enabled-runtime", "linked", "linked-runtime", "alias":
-        return .green
+        return MidnightMacDesign.StatusTone.ok.color
     case "masked", "bad":
-        return .red
+        return MidnightMacDesign.StatusTone.critical.color
     case "disabled":
-        return .secondary
+        return MidnightMacDesign.StatusTone.inactive.color
     case "static", "generated", "transient", "indirect":
-        return .blue
+        return MidnightMacDesign.StatusTone.info.color
     default:
-        return .secondary
+        return MidnightMacDesign.StatusTone.inactive.color
     }
 }
 

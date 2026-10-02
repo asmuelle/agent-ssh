@@ -24,8 +24,8 @@ enum MonitorJournalSeverity: String, CaseIterable, Hashable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .error: return "xmark.octagon.fill"
-        case .warn:  return "exclamationmark.triangle.fill"
+        case .error: return MidnightMacDesign.StatusTone.critical.symbol
+        case .warn:  return MidnightMacDesign.StatusTone.warning.symbol
         case .info:  return "circle.fill"
         case .debug: return "ladybug.fill"
         }
@@ -33,10 +33,11 @@ enum MonitorJournalSeverity: String, CaseIterable, Hashable, Identifiable {
 
     var color: Color {
         switch self {
-        case .error: return .red
-        case .warn:  return .orange
-        case .info:  return .secondary
-        case .debug: return .secondary
+        case .error: return MidnightMacDesign.StatusTone.critical.color
+        case .warn:  return MidnightMacDesign.StatusTone.warning.color
+        // Low-emphasis metadata stays gray (DESIGN.md).
+        case .info:  return MidnightMacDesign.StatusTone.inactive.color
+        case .debug: return MidnightMacDesign.StatusTone.inactive.color
         }
     }
 

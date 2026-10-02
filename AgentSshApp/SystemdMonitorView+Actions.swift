@@ -14,28 +14,28 @@ extension SystemdMonitorView {
         Button {
             requestAction(.start, unit: unit.name)
         } label: {
-            Label("Start", systemImage: "play.fill")
+            Label("Start", systemImage: SystemdVerb.start.symbol)
         }
         .disabled(unit.isActive || unit.isTransitional || !unit.isLoaded)
 
         Button(role: .destructive) {
             requestAction(.stop, unit: unit.name)
         } label: {
-            Label("Stop", systemImage: "stop.fill")
+            Label("Stop", systemImage: SystemdVerb.stop.symbol)
         }
         .disabled(!unit.isActive && !unit.isTransitional)
 
         Button(role: .destructive) {
             requestAction(.restart, unit: unit.name)
         } label: {
-            Label("Restart", systemImage: "arrow.clockwise")
+            Label("Restart", systemImage: SystemdVerb.restart.symbol)
         }
         .disabled(!unit.isLoaded)
 
         Button {
             requestAction(.reload, unit: unit.name)
         } label: {
-            Label("Reload", systemImage: "arrow.triangle.2.circlepath")
+            Label("Reload", systemImage: SystemdVerb.reload.symbol)
         }
         .disabled(!unit.isActive)
 
@@ -44,14 +44,14 @@ extension SystemdMonitorView {
         Button {
             requestAction(.enable, unit: unit.name)
         } label: {
-            Label("Enable", systemImage: "checkmark.circle")
+            Label("Enable", systemImage: SystemdVerb.enable.symbol)
         }
         .disabled(unit.isEnabled || unit.unitFileState.lowercased() == "static" || unit.unitFileState.lowercased() == "generated")
 
         Button(role: .destructive) {
             requestAction(.disable, unit: unit.name)
         } label: {
-            Label("Disable", systemImage: "slash.circle")
+            Label("Disable", systemImage: SystemdVerb.disable.symbol)
         }
         .disabled(!unit.isEnabled)
 

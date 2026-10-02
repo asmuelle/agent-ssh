@@ -702,11 +702,7 @@ extension SystemMonitorView {
     /// exceptional: on a fleet dashboard the one hot bar should be
     /// the only loud one.
     func progressTint(_ value: Double) -> Color {
-        switch value {
-        case ..<0.6:  return .green.opacity(0.55)
-        case ..<0.85: return .orange
-        default:      return .red
-        }
+        MidnightMacDesign.utilizationTint(value)
     }
 
 }

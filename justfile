@@ -67,8 +67,13 @@ lint:
     cargo fmt --all --check
     cargo clippy --all-targets -- -D warnings
 
+# DESIGN.md rules a script can check (deprecated modifiers, gradients,
+# color literals, text below the 10 pt floor) for the macOS UI.
+design-check:
+    python3 scripts/check_design.py
+
 # Local equivalent of CI checks that don't need signing certs.
-ci-local: cargo-deny-check advisory-ignore-check lint check test-rust bindings-check mac-ci-build mac-test ios-ci-build ios-test
+ci-local: cargo-deny-check advisory-ignore-check lint design-check check test-rust bindings-check mac-ci-build mac-test ios-ci-build ios-test
     @echo "✅ Local CI checks completed"
 
 # Match the hosted cargo-deny advisory, license, and source policy locally.

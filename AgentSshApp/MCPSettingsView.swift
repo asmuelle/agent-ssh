@@ -13,24 +13,18 @@ struct MCPSettingsView: View {
             // Header Card
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 16) {
-                    // Modern AI Pulse Icon
-                    ZStack {
-                        Circle()
-                            .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(width: 44, height: 44)
-                            .shadow(color: .purple.opacity(0.3), radius: 8, x: 0, y: 4)
-                        
-                        Image(systemName: "cpu.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                    }
+                    Image(systemName: "cpu")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.tint)
+                        .frame(width: 44, height: 44)
+                        .accessibilityHidden(true)
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text("AI Assistants")
                             .font(.title3.weight(.bold))
                         Text("Let AI coding assistants work with your hosts, with your approval for every change.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     
                     Spacer()
@@ -52,7 +46,7 @@ struct MCPSettingsView: View {
                         HStack {
                             Image(systemName: "circle.fill")
                                 .font(.system(size: 8))
-                                .foregroundColor(.green)
+                                .foregroundStyle(.green)
                             Text("Listening for AI assistants at:")
                                 .font(.caption.weight(.medium))
                             Spacer()
@@ -60,7 +54,7 @@ struct MCPSettingsView: View {
                         
                         Text(mcpManager.socketPath)
                             .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .padding(6)
                             .background(Color(NSColor.controlBackgroundColor))
                             .cornerRadius(6)
@@ -79,7 +73,7 @@ struct MCPSettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Assistants connect through a small helper that ships with the app.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         
                         TabView {
                             // Claude Desktop configuration
@@ -124,7 +118,7 @@ struct MCPSettingsView: View {
 
                                 Text("The bridge helper ships inside the app bundle — no PATH setup needed. Keep agent-ssh running while the editor is connected.")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                             }
                             .padding()
                             .tabItem { Text("Cursor Editor") }
@@ -142,10 +136,10 @@ struct MCPSettingsView: View {
                         VStack(spacing: 8) {
                             Image(systemName: "list.bullet.rectangle.portrait")
                                 .font(.system(size: 24))
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                             Text("No AI activities recorded yet.")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, minHeight: 120)
                         .background(Color(NSColor.windowBackgroundColor).opacity(0.3))
@@ -158,12 +152,12 @@ struct MCPSettingsView: View {
                                         // Timestamp
                                         Text(event.timestamp.formatted(.dateTime.hour().minute().second()))
                                             .font(.caption.monospacedDigit())
-                                            .foregroundColor(.secondary)
+                                            .foregroundStyle(.secondary)
                                         
                                         // Tool name tag
                                         Text(event.tool)
                                             .font(.caption.weight(.bold))
-                                            .foregroundColor(.primary)
+                                            .foregroundStyle(.primary)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
                                             .background(Color.purple.opacity(0.1))
@@ -174,7 +168,7 @@ struct MCPSettingsView: View {
                                         // Connection Label
                                         Text(event.connectionId)
                                             .font(.caption.monospaced())
-                                            .foregroundColor(.secondary)
+                                            .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                             .frame(maxWidth: 160, alignment: .trailing)
                                         
@@ -187,7 +181,7 @@ struct MCPSettingsView: View {
                                             if let reason = event.reason {
                                                 Text("Why it asked: \(reason)")
                                                     .font(.caption.weight(.medium))
-                                                    .foregroundColor(.orange)
+                                                    .foregroundStyle(.orange)
                                             }
                                             
                                             Text("Arguments:")
@@ -231,7 +225,7 @@ struct MCPSettingsView: View {
                                 mcpManager.auditLog.removeAll()
                             }
                             .buttonStyle(.plain)
-                            .foregroundColor(.accentColor)
+                            .foregroundStyle(Color.accentColor)
                             .font(.caption)
                         }
                     }
@@ -293,7 +287,7 @@ struct MCPSettingsView: View {
         
         return Text(text)
             .font(.system(size: 10, weight: .bold))
-            .foregroundColor(color)
+            .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color.opacity(0.12))
@@ -324,11 +318,9 @@ struct MCPSettingsView: View {
                 Spacer()
                 Text(toastMessage)
                     .font(.caption.weight(.medium))
-                    .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.85))
-                    .cornerRadius(20)
+                    .background(.regularMaterial, in: Capsule())
                     .shadow(radius: 5)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .padding(.bottom, 24)

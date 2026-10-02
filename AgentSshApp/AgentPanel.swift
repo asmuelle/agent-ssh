@@ -308,7 +308,7 @@ struct AgentPanel: View {
 
     private func tierTag(_ tier: AttentionTier) -> some View {
         Text(tier.tagText)
-            .font(.system(size: 9, weight: .bold))
+            .font(MidnightMacDesign.FontToken.caption.weight(.bold))
             .tracking(0.8)
             .foregroundStyle(tier.textColor)
             .padding(.horizontal, 5)

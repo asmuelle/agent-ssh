@@ -106,6 +106,9 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
+      - name: Design check (DESIGN.md rules)
+        run: just design-check
+
       - name: Build app (unsigned, compiler validation)
         run: just mac-ci-build
 

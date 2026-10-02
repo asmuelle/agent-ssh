@@ -34,6 +34,18 @@ enum SystemdVerb: String, CaseIterable {
         return "\(rendered.command) || sudo -n \(rendered.command)"
     }
 
+    /// One symbol per verb, the same in the Systemd tab and the detail sheet.
+    var symbol: String {
+        switch self {
+        case .start: return "play.fill"
+        case .stop: return "stop.fill"
+        case .restart: return "arrow.clockwise.circle"
+        case .reload: return "arrow.triangle.2.circlepath"
+        case .enable: return "checkmark.circle"
+        case .disable: return "slash.circle"
+        }
+    }
+
     /// "Restart", for titles and buttons.
     var label: String { rawValue.capitalized }
 

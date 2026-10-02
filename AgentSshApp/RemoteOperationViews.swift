@@ -226,23 +226,18 @@ enum RemoteOperationState {
     case warning
     case failed
 
-    var color: Color {
+    var tone: MidnightMacDesign.StatusTone {
         switch self {
-        case .running: return .blue
-        case .succeeded: return .green
-        case .warning: return .orange
-        case .failed: return .red
+        case .running: return .pending
+        case .succeeded: return .ok
+        case .warning: return .warning
+        case .failed: return .critical
         }
     }
 
-    var systemImage: String {
-        switch self {
-        case .running: return "hourglass"
-        case .succeeded: return "checkmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .failed: return "xmark.octagon.fill"
-        }
-    }
+    var color: Color { tone.color }
+
+    var systemImage: String { tone.symbol }
 }
 
 struct RemoteOperationFeedback: Identifiable {
@@ -454,12 +449,18 @@ func rowOperationIndicator(isActive: Bool) -> some View {
     }
 }
 
-func statusColor(_ value: String) -> Color {
+/// Tone for a state reported as text by Docker, Postgres or systemd.
+func statusTone(_ value: String) -> MidnightMacDesign.StatusTone {
     let lower = value.lowercased()
-    if lower.contains("running") || lower == "active" || lower == "healthy" { return .green }
-    if lower.contains("failed") || lower.contains("exited") || lower.contains("dead") || lower == "unhealthy" { return .red }
-    if lower.contains("activating") || lower.contains("restarting") || lower.contains("paused") { return .orange }
-    return .secondary
+    if lower.contains("running") || lower == "active" || lower == "healthy" { return .ok }
+    if lower.contains("failed") || lower.contains("exited") || lower.contains("dead") || lower == "unhealthy" { return .critical }
+    if lower.contains("activating") || lower.contains("restarting") { return .pending }
+    if lower.contains("paused") { return .warning }
+    return .inactive
+}
+
+func statusColor(_ value: String) -> Color {
+    statusTone(value).color
 }
 
 // MARK: - UFW

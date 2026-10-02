@@ -147,13 +147,8 @@ extension SystemMonitorView {
     }
 
     var connectionStatusColor: Color {
-        switch connectionStatus {
-        case .connected:    return .green
-        case .connecting:   return .orange
-        case .disconnected: return Color(nsColor: .tertiaryLabelColor)
-        case .error:        return .red
-        case nil:           return .secondary
-        }
+        guard let connectionStatus else { return MidnightMacDesign.StatusTone.unknown.color }
+        return MidnightMacDesign.statusColor(connectionStatus)
     }
 
     var ufwStatusBadge: some View {
@@ -187,13 +182,11 @@ extension SystemMonitorView {
     func ufwProtectionColor(_ summary: UFWProtectionSummary) -> Color {
         switch summary.level {
         case .protected:
-            return .green
+            return MidnightMacDesign.StatusTone.ok.color
         case .inactive, .open:
-            return .orange
-        case .unknown:
-            return .yellow
-        case .loading, .unavailable:
-            return .secondary
+            return MidnightMacDesign.StatusTone.warning.color
+        case .unknown, .loading, .unavailable:
+            return MidnightMacDesign.StatusTone.unknown.color
         }
     }
 

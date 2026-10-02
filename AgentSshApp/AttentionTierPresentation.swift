@@ -8,12 +8,15 @@ import SwiftUI
 extension AttentionTier {
     /// Accent used for fills, bands, icons and strokes, where low
     /// contrast is fine because the shape carries the meaning.
-    var color: Color {
+    var color: Color { tone.color }
+
+    /// Tiers ramp on the shared palette; their symbols and tags (below)
+    /// tell "decide" from "fix this week".
+    var tone: MidnightMacDesign.StatusTone {
         switch self {
-        case .actNow: return .red
-        case .needsDecision: return .orange
-        case .fixThisWeek: return .yellow
-        case .fyi: return .secondary
+        case .actNow: return .critical
+        case .needsDecision, .fixThisWeek: return .warning
+        case .fyi: return .info
         }
     }
 

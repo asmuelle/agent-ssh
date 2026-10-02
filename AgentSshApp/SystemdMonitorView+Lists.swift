@@ -264,7 +264,7 @@ extension SystemdMonitorView {
             Button {
                 requestAction(.start, unit: unit.name)
             } label: {
-                Image(systemName: "play.fill")
+                Image(systemName: SystemdVerb.start.symbol)
             }
             .disabled(unit.isActive || unit.isTransitional || !unit.isLoaded)
             .help("Start \(unit.name)")
@@ -272,7 +272,7 @@ extension SystemdMonitorView {
             Button {
                 requestAction(.stop, unit: unit.name)
             } label: {
-                Image(systemName: "stop.fill")
+                Image(systemName: SystemdVerb.stop.symbol)
             }
             .disabled(!unit.isActive && !unit.isTransitional)
             .help("Stop \(unit.name)")
@@ -280,7 +280,7 @@ extension SystemdMonitorView {
             Button {
                 requestAction(.restart, unit: unit.name)
             } label: {
-                Image(systemName: "arrow.clockwise")
+                Image(systemName: SystemdVerb.restart.symbol)
             }
             .disabled(!unit.isLoaded)
             .help("Restart \(unit.name)")

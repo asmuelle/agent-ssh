@@ -10,10 +10,10 @@ enum ActivitySeverity: String, Codable, CaseIterable {
 
     var color: Color {
         switch self {
-        case .info: return .blue
-        case .success: return .green
-        case .warning: return .orange
-        case .critical: return .red
+        case .info: return MidnightMacDesign.StatusTone.info.color
+        case .success: return MidnightMacDesign.StatusTone.ok.color
+        case .warning: return MidnightMacDesign.StatusTone.warning.color
+        case .critical: return MidnightMacDesign.StatusTone.critical.color
         }
     }
 

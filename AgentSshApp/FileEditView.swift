@@ -23,7 +23,7 @@ struct FileEditView: View {
             HStack {
                 Text(path)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 Spacer()
@@ -31,7 +31,7 @@ struct FileEditView: View {
                 if isModified {
                     Text("Modified")
                         .font(.caption)
-                        .foregroundColor(.orange)
+                        .foregroundStyle(.orange)
                 }
                 if isSaving {
                     ProgressView()
