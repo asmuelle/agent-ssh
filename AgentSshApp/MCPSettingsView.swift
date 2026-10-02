@@ -26,9 +26,9 @@ struct MCPSettingsView: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Secure AI Command Center")
+                        Text("AI Assistants")
                             .font(.title3.weight(.bold))
-                        Text("Integrate external AI coding assistants securely with your remote servers.")
+                        Text("Let AI coding assistants work with your hosts, with your approval for every change.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -53,7 +53,7 @@ struct MCPSettingsView: View {
                             Image(systemName: "circle.fill")
                                 .font(.system(size: 8))
                                 .foregroundColor(.green)
-                            Text("Active and listening on App Group Socket:")
+                            Text("Listening for AI assistants at:")
                                 .font(.caption.weight(.medium))
                             Spacer()
                         }
@@ -77,7 +77,7 @@ struct MCPSettingsView: View {
                 
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("AI Clients communicate via a lightweight stdio-to-UDS helper CLI.")
+                        Text("Assistants connect through a small helper that ships with the app.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
@@ -185,7 +185,7 @@ struct MCPSettingsView: View {
                                     if expandedEventId == event.id {
                                         VStack(alignment: .leading, spacing: 6) {
                                             if let reason = event.reason {
-                                                Text("Gate Reason: \(reason)")
+                                                Text("Why it asked: \(reason)")
                                                     .font(.caption.weight(.medium))
                                                     .foregroundColor(.orange)
                                             }
@@ -224,7 +224,7 @@ struct MCPSettingsView: View {
                     }
                 } header: {
                     HStack {
-                        Text("AI Audit Timeline")
+                        Text("AI Activity")
                         Spacer()
                         if !mcpManager.auditLog.isEmpty {
                             Button("Clear Log") {

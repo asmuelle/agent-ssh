@@ -55,10 +55,10 @@ final class MobileConnectionStore: ObservableObject {
     /// credentials and any key used only by it go too.
     func deleteConfirmation(for profile: MobileConnectionProfile) -> PendingServerAction {
         PendingServerAction(
-            title: "Delete the connection \"\(profile.name)\"?",
+            title: "Delete the host \"\(profile.name)\"?",
             confirmLabel: "Delete",
             target: "This device",
-            detail: "Its saved password and any SSH key used only by this connection are removed. This cannot be undone.",
+            detail: "Its saved password and any SSH key used only by this host are removed. This cannot be undone.",
             isDestructive: true
         ) { [weak self] in
             self?.delete(profile)
@@ -147,7 +147,7 @@ final class MobileConnectionStore: ObservableObject {
             try store.save(data)
             return nil
         } catch {
-            return "Could not update Shortcuts server index: \(error.localizedDescription)"
+            return "Could not update the hosts list for Shortcuts: \(error.localizedDescription)"
         }
     }
 

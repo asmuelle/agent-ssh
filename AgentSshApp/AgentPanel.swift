@@ -182,7 +182,7 @@ struct AgentPanel: View {
     private func quietEvidence(now: Date) -> String {
         let hosts = watchedHosts
         guard !hosts.isEmpty else {
-            return "No connected hosts to watch. Connect a server and the Agent starts checking it."
+            return "No connected hosts to watch. Connect a host and the Agent starts checking it."
         }
 
         let checks = hosts.compactMap { inbox.lastCheckedAt[$0.profile.id] }

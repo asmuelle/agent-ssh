@@ -54,8 +54,8 @@ class ConnectionStoreManager: ObservableObject {
         }
         return PendingServerAction(
             title: profiles.count == 1
-                ? "Delete the profile \"\(profiles[0].name)\"?"
-                : "Delete \(profiles.count) profiles?",
+                ? "Delete the host \"\(profiles[0].name)\"?"
+                : "Delete \(profiles.count) hosts?",
             confirmLabel: "Delete",
             target: "This Mac",
             command: shown,

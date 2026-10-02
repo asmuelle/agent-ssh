@@ -251,14 +251,14 @@ struct FilePermissionsEditor: View {
             do {
                 try await BridgeManager.shared.sftpChmod(connectionId: connId, path: path, mode: mode)
             } catch {
-                failures.append("chmod: \(error.localizedDescription)")
+                failures.append("Permissions: \(error.localizedDescription)")
             }
 
             if !owner.isEmpty && owner != currentOwner {
                 do {
                     try await BridgeManager.shared.sftpChown(connectionId: connId, path: path, uid: owner)
                 } catch {
-                    failures.append("chown: \(error.localizedDescription)")
+                    failures.append("Owner: \(error.localizedDescription)")
                 }
             }
 
@@ -266,7 +266,7 @@ struct FilePermissionsEditor: View {
                 do {
                     try await BridgeManager.shared.sftpChgrp(connectionId: connId, path: path, gid: group)
                 } catch {
-                    failures.append("chgrp: \(error.localizedDescription)")
+                    failures.append("Group: \(error.localizedDescription)")
                 }
             }
 

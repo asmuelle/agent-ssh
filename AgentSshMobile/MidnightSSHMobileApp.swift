@@ -53,7 +53,7 @@ struct MidnightSSHMobileApp: App {
         }
         .commands {
             SidebarCommands()
-            CommandMenu("Server") {
+            CommandMenu("Host") {
                 Button("Command Palette") {
                     NotificationCenter.default.post(name: .mobileShowCommandPalette, object: nil)
                 }

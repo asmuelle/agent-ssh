@@ -91,7 +91,7 @@ struct ServerDoctorView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Read-only collection preview")
                 .font(.title3.weight(.semibold))
-            Text("Doctor will run only fixed read-only collectors. No files are edited, no services are restarted, and no interactive sudo prompt is used.")
+            Text("Server Doctor only runs a fixed set of read-only checks. No files are edited, no services are restarted, and no interactive sudo prompt is used.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 

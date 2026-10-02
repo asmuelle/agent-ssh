@@ -134,7 +134,7 @@ final class SecurityPatchMonitorStore: ObservableObject {
         if !correlated.advisoryMatches.isEmpty {
             advisoryStatusMessage = "\(correlated.advisoryMatches.count) CISA KEV match\(correlated.advisoryMatches.count == 1 ? "" : "es") found."
         } else if let error = SecurityPatchAdvisoryStore.shared.lastError {
-            advisoryStatusMessage = "CISA KEV catalog unavailable: \(error)"
+            advisoryStatusMessage = "Couldn't load the list of actively exploited vulnerabilities (CISA KEV), so findings don't show whether a flaw is being exploited. \(error)"
         } else {
             advisoryStatusMessage = "No CISA KEV matches for \(cveIds.count) CVE ID\(cveIds.count == 1 ? "" : "s") in scan evidence."
         }

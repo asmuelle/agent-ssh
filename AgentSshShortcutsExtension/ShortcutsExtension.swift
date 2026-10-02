@@ -9,8 +9,11 @@ struct MidnightSSHAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: ListMidnightSSHServersIntent(),
-            phrases: ["List servers in \(.applicationName)"],
-            shortTitle: "List Servers",
+            phrases: [
+                "List hosts in \(.applicationName)",
+                "List servers in \(.applicationName)",
+            ],
+            shortTitle: "List Hosts",
             systemImageName: "server.rack"
         )
         AppShortcut(
@@ -58,23 +61,27 @@ struct MidnightSSHAppShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: CheckServerHealthIntent(),
             phrases: [
+                "Check host health in \(.applicationName)",
                 "Check server health in \(.applicationName)",
                 "Is my server healthy in \(.applicationName)",
             ],
-            shortTitle: "Server Health",
+            shortTitle: "Host Health",
             systemImageName: "stethoscope"
         )
         AppShortcut(
             intent: DiagnoseServerParameterIntent(),
-            phrases: ["Diagnose a server in \(.applicationName)"],
-            shortTitle: "Diagnose Server",
+            phrases: [
+                "Diagnose a host in \(.applicationName)",
+                "Diagnose a server in \(.applicationName)",
+            ],
+            shortTitle: "Diagnose Host",
             systemImageName: "stethoscope.circle"
         )
     }
 }
 
 struct MidnightSSHServerEntity: AppEntity {
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "agent-ssh Server")
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "agent-ssh Host")
     static var defaultQuery = MidnightSSHServerQuery()
 
     var id: String
@@ -196,30 +203,30 @@ enum MidnightSSHAutomationPolicyOption: String, AppEnum {
 }
 
 struct ListMidnightSSHServersIntent: AppIntent {
-    static var title: LocalizedStringResource = "List agent-ssh Servers"
-    static var description = IntentDescription("Returns the saved agent-ssh servers available to Shortcuts.")
+    static var title: LocalizedStringResource = "List agent-ssh Hosts"
+    static var description = IntentDescription("Returns the saved agent-ssh hosts available to Shortcuts.")
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let data = try ShortcutIntentSupport.loadIntegrations()
         let servers = data.shortcutServers(matching: "")
         let output = servers.isEmpty
-            ? "No agent-ssh servers are available to Shortcuts. Open the app once to publish saved servers."
+            ? "No agent-ssh hosts are available to Shortcuts. Open the app once to share your saved hosts."
             : servers.map { "\($0.displayName) - \($0.endpoint)" }.joined(separator: "\n")
 
         try ShortcutIntentSupport.recordCompletedShortcut(
-            title: "List servers shortcut",
+            title: "List hosts shortcut",
             metadata: ["serverCount": String(servers.count)]
         )
 
-        return .result(value: output, dialog: "\(servers.count) server\(servers.count == 1 ? "" : "s") available.")
+        return .result(value: output, dialog: "\(servers.count) host\(servers.count == 1 ? "" : "s") available.")
     }
 }
 
 struct UploadMidnightSSHFileIntent: AppIntent {
     static var title: LocalizedStringResource = "Upload File with agent-ssh"
-    static var description = IntentDescription("Queues a file upload to a saved agent-ssh server.")
+    static var description = IntentDescription("Queues a file upload to a saved agent-ssh host.")
 
-    @Parameter(title: "Server")
+    @Parameter(title: "Host")
     var server: MidnightSSHServerEntity
 
     @Parameter(title: "File")
@@ -261,9 +268,9 @@ struct UploadMidnightSSHFileIntent: AppIntent {
 
 struct DownloadMidnightSSHFileIntent: AppIntent {
     static var title: LocalizedStringResource = "Download File with agent-ssh"
-    static var description = IntentDescription("Queues a remote file download from a saved agent-ssh server.")
+    static var description = IntentDescription("Queues a remote file download from a saved agent-ssh host.")
 
-    @Parameter(title: "Server")
+    @Parameter(title: "Host")
     var server: MidnightSSHServerEntity
 
     @Parameter(title: "Remote Path")
@@ -302,9 +309,9 @@ struct DownloadMidnightSSHFileIntent: AppIntent {
 
 struct RunMidnightSSHCommandIntent: AppIntent {
     static var title: LocalizedStringResource = "Run agent-ssh Command"
-    static var description = IntentDescription("Queues a command for a saved agent-ssh server.")
+    static var description = IntentDescription("Queues a command for a saved agent-ssh host.")
 
-    @Parameter(title: "Server")
+    @Parameter(title: "Host")
     var server: MidnightSSHServerEntity
 
     @Parameter(title: "Command")
@@ -335,10 +342,10 @@ struct RunMidnightSSHCommandIntent: AppIntent {
 
 struct OpenMidnightSSHTerminalIntent: AppIntent {
     static var title: LocalizedStringResource = "Open agent-ssh Terminal"
-    static var description = IntentDescription("Opens agent-ssh and queues a terminal focus request for a saved server.")
+    static var description = IntentDescription("Opens agent-ssh and focuses the terminal for a saved host.")
     static var openAppWhenRun = true
 
-    @Parameter(title: "Server")
+    @Parameter(title: "Host")
     var server: MidnightSSHServerEntity
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
@@ -394,9 +401,9 @@ struct SyncMidnightSSHOfflineFolderIntent: AppIntent {
 
 struct TailMidnightSSHLogsIntent: AppIntent {
     static var title: LocalizedStringResource = "Tail agent-ssh Logs"
-    static var description = IntentDescription("Queues a portable recent-log command for a saved server.")
+    static var description = IntentDescription("Queues a recent-logs command for a saved host.")
 
-    @Parameter(title: "Server")
+    @Parameter(title: "Host")
     var server: MidnightSSHServerEntity
 
     @Parameter(title: "Lines", default: 160)
@@ -430,9 +437,9 @@ struct TailMidnightSSHLogsIntent: AppIntent {
 
 struct StartMidnightSSHMonitorIntent: AppIntent {
     static var title: LocalizedStringResource = "Start agent-ssh Monitor"
-    static var description = IntentDescription("Queues a monitor refresh for a saved server.")
+    static var description = IntentDescription("Queues a monitor refresh for a saved host.")
 
-    @Parameter(title: "Server")
+    @Parameter(title: "Host")
     var server: MidnightSSHServerEntity
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
@@ -456,10 +463,10 @@ struct StartMidnightSSHMonitorIntent: AppIntent {
 
 struct SetMidnightSSHAutomationPolicyIntent: AppIntent {
     static var title: LocalizedStringResource = "Set agent-ssh Automation Policy"
-    static var description = IntentDescription("Sets how Shortcuts may use saved credentials for a server.")
+    static var description = IntentDescription("Sets how Shortcuts may use saved credentials for a host.")
     static var openAppWhenRun = true
 
-    @Parameter(title: "Server")
+    @Parameter(title: "Host")
     var server: MidnightSSHServerEntity
 
     @Parameter(title: "Policy")
@@ -494,7 +501,7 @@ private enum ShortcutIntentSupport {
         in data: PlatformIntegrationStoreData
     ) throws -> ShortcutServerRecord {
         guard let record = data.shortcutServer(id: entity.id) else {
-            throw ShortcutIntentError.notFound("Server")
+            throw ShortcutIntentError.notFound("Host")
         }
         return record
     }
@@ -668,7 +675,7 @@ private enum ShortcutIntentError: LocalizedError {
 // MARK: - Server Doctor Siri / Shortcuts integrations
 
 struct MidnightSSHFindingEntity: AppEntity {
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Server Diagnostic Finding")
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Host Diagnostic Finding")
     static var defaultQuery = MidnightSSHFindingQuery()
 
     var id: String
@@ -743,10 +750,10 @@ struct MidnightSSHFindingQuery: EntityStringQuery {
 
 /// Siri Assistant Schema for fast system health check queries
 struct CheckServerHealthIntent: AppIntent {
-    static var title: LocalizedStringResource = "Check Server Health"
-    static var description = IntentDescription("Check overall health of your server infrastructure with Siri.")
+    static var title: LocalizedStringResource = "Check Host Health"
+    static var description = IntentDescription("Check the health of your hosts with Siri.")
 
-    @Parameter(title: "Server Name", description: "Name of the server to check.")
+    @Parameter(title: "Host Name", description: "Name of the host to check.")
     var serverName: String?
 
     init() {}
@@ -789,10 +796,10 @@ struct CheckServerHealthIntent: AppIntent {
 
 /// Dynamic Parameterized diagnostic run from Apple Shortcuts
 struct DiagnoseServerParameterIntent: AppIntent {
-    static var title: LocalizedStringResource = "Diagnose Server with Parameters"
+    static var title: LocalizedStringResource = "Diagnose a Host"
     static var description = IntentDescription("Trigger a structured, read-only collector diagnostics run.")
 
-    @Parameter(title: "Target Server", description: "Select the server connection.")
+    @Parameter(title: "Host", description: "The saved host to diagnose.")
     var server: MidnightSSHServerEntity
 
     @Parameter(title: "Scope Depth", description: "Choose scan depth.", default: .balanced)

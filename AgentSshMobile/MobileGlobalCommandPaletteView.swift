@@ -14,7 +14,7 @@ struct MobileGlobalCommandPaletteView: View {
 
     private var actions: [MobilePaletteAction] {
         var result = [
-            MobilePaletteAction(title: "Add Connection", subtitle: "Create an SSH or SFTP profile", systemImage: "plus.circle") {
+            MobilePaletteAction(title: "Add Host", subtitle: "Save a new SSH or SFTP host", systemImage: "plus.circle") {
                 onAddConnection()
             },
             MobilePaletteAction(title: "Fleet Dashboard", subtitle: "Problem-first overview of saved hosts", systemImage: "rectangle.grid.2x2") {
@@ -57,7 +57,7 @@ struct MobileGlobalCommandPaletteView: View {
                     HStack {
                         Image(systemName: "command")
                             .foregroundStyle(.secondary)
-                        TextField("Run command or open server", text: $query)
+                        TextField("Run a command or open a host", text: $query)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     }

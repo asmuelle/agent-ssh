@@ -174,7 +174,7 @@ struct ContentView: View {
                ),
                presenting: tabsStore.pendingFallback)
         { fallback in
-            Button("Convert profile to SFTP") {
+            Button("Convert host to SFTP") {
                 connectionStore.setKind(profileId: fallback.profileId, kind: .sftp)
                 tabsStore.pendingFallback = nil
             }

@@ -274,7 +274,7 @@ final class TerminalTabsStore: ObservableObject {
                       let existingConnId = tabs[idx].connectionId as String?,
                       resolvedId == existingConnId
                 else {
-                    lastError = "Reconnect routed to a different connection id; aborting"
+                    lastError = "Reconnecting reached a different session, so it was stopped. Connect again."
                     logger.error("Reconnect mismatch for \(sessionId, privacy: .private(mask: .hash))")
                     if let tabId { markTabError(tabId) }
                     return

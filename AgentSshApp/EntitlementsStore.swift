@@ -33,11 +33,11 @@ enum AppFeature: String, CaseIterable, Identifiable, Hashable, Codable {
 
     var label: String {
         switch self {
-        case .savedConnections: return "Saved connections"
+        case .savedConnections: return "Saved hosts"
         case .terminal: return "SSH terminal"
         case .sftp: return "SFTP browser"
         case .basicMonitor: return "Basic monitor"
-        case .multiServerDashboard: return "Multi-server dashboard"
+        case .multiServerDashboard: return "Multi-host dashboard"
         case .deepDiagnostics: return "Deep diagnostics"
         case .serviceVisualizations: return "Service visualizations"
         case .remoteFileEditor: return "Remote file editor"
@@ -307,7 +307,7 @@ private struct LicenseKeyEntitlementsProvider {
             }
             return .valid(payload.normalized())
         } catch {
-            return .invalid("License could not be decoded: \(error.localizedDescription)")
+            return .invalid("This license key isn't valid. Check that you copied all of it.")
         }
     }
 

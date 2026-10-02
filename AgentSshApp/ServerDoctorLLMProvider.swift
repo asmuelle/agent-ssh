@@ -30,13 +30,13 @@ enum ServerDoctorLocalLLMError: Error, LocalizedError {
         case .invalidPrompt:
             return "Server Doctor could not build the local LLM prompt."
         case .httpStatus(let status, let body):
-            return "Local LLM request failed with HTTP \(status): \(body)"
+            return "The local model server returned an error (HTTP \(status)). Details: \(body)"
         case .emptyResponse:
-            return "Local LLM returned an empty response."
+            return "The local model returned an empty answer. Try again."
         case .invalidModelJSON:
-            return "Local LLM did not return a usable Server Doctor JSON report."
+            return "The local model's answer couldn't be read as a report. Try again, or try a different model."
         case .responseFormat(let snippet):
-            return "Local LLM response was not OpenAI-compatible or Ollama chat JSON: \(snippet)"
+            return "The local model server answered in a format agent-ssh doesn't understand. It must speak the OpenAI or Ollama chat API. Details: \(snippet)"
         case .serverMessage(let message):
             return "Local LLM returned an error: \(message)"
         case .preflight(let message):

@@ -102,7 +102,7 @@ struct MobileFleetOverviewDashboardView: View {
 
     private func headline(attention: Int) -> String {
         if attention == 0 { return "All systems nominal" }
-        return "\(attention) server\(attention == 1 ? "" : "s") need attention"
+        return "\(attention) host\(attention == 1 ? "" : "s") need attention"
     }
 
     // MARK: - Servers list
@@ -110,11 +110,11 @@ struct MobileFleetOverviewDashboardView: View {
     /// Attention-sorted list: one row per server, worst first, with
     /// issues inline on the row. Tapping a row expands it in place —
     /// full issue list, disks, and meta, mirroring the macOS fleet
-    /// table — and "Open server" in the expansion navigates to the
+    /// table — and "Open host" in the expansion navigates to the
     /// detail page.
     private var serversSection: some View {
         VStack(alignment: .leading, spacing: MidnightMobileDesign.Spacing.large) {
-            sectionTitle("Servers", systemImage: "server.rack")
+            sectionTitle("Hosts", systemImage: "server.rack")
             LazyVStack(spacing: 8) {
                 ForEach(items) { item in
                     serverEntry(item)
@@ -277,7 +277,7 @@ struct MobileFleetOverviewDashboardView: View {
             }
 
             NavigationLink(value: item.profile.id) {
-                Label("Open server", systemImage: "arrow.right.circle")
+                Label("Open host", systemImage: "arrow.right.circle")
                     .font(MidnightMobileDesign.FontToken.captionStrong)
             }
             .buttonStyle(.borderless)
@@ -338,14 +338,14 @@ struct MobileFleetOverviewDashboardView: View {
             Image(systemName: "server.rack")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
-            Text("No Connections Yet")
+            Text("No Hosts Yet")
                 .font(MidnightMobileDesign.FontToken.headline)
-            Text("Add an SSH or SFTP connection and it will appear here.")
+            Text("Add an SSH or SFTP host and it appears here.")
                 .font(MidnightMobileDesign.FontToken.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button(action: onAddConnection) {
-                Label("Add Connection", systemImage: "plus")
+                Label("Add Host", systemImage: "plus")
             }
             .buttonStyle(.borderedProminent)
         }

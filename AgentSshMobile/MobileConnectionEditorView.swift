@@ -71,7 +71,7 @@ struct MobileConnectionEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Server") {
+                Section("Host") {
                     TextField("Name", text: $name)
                         .textContentType(.name)
                     TextField("Host", text: $host)
@@ -271,7 +271,7 @@ struct MobileConnectionEditorView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
 
-            Text("An identity is one keypair shared by several connections. Its public key must be in ~/.ssh/authorized_keys on the server.")
+            Text("An identity is one keypair shared by several hosts. Its public key must be in ~/.ssh/authorized_keys on the server.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

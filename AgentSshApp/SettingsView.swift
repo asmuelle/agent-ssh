@@ -51,8 +51,8 @@ struct SettingsView: View {
             case .appearance: return "Appearance"
             case .sync: return "Import & Export"
             case .credentials: return "Credentials"
-            case .advancedAuth: return "Advanced Auth"
-            case .aiCommandCenter: return "AI Command Center"
+            case .advancedAuth: return "Advanced Keys"
+            case .aiCommandCenter: return "AI Assistants"
             case .serverDoctor: return "Server Doctor"
             case .license: return "License"
             case .privacy: return "Privacy"
@@ -265,7 +265,7 @@ struct SettingsView: View {
             } header: {
                 Text("CSV import/export")
             } footer: {
-                Text("CSV files use stable profile IDs when present. Matching IDs update existing profiles while preserving local Keychain credentials.")
+                Text("CSV files keep each host's ID. Rows with a matching ID update that host and keep its saved credentials.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -340,7 +340,7 @@ struct SettingsView: View {
             if !connectionStore.connections.isEmpty {
                 Section {
                     HStack {
-                        Button("Delete Selected Profiles…") {
+                        Button("Delete Selected Hosts…") {
                             pendingConfirmation = connectionStore.deleteConfirmation(
                                 for: selectedConnections.compactMap { connectionStore.connection(withId: $0) }
                             )
@@ -397,7 +397,7 @@ struct SettingsView: View {
     private func importConnectionsCSV() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.commaSeparatedText, .plainText]
-        panel.message = "Select a agent-ssh connections CSV file"
+        panel.message = "Choose a CSV file of hosts exported from agent-ssh"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {
@@ -545,14 +545,14 @@ struct SettingsView: View {
                 )
                 statusRow(
                     icon: "externaldrive.fill",
-                    title: "Connection database",
+                    title: "Saved hosts",
                     value: appSupportURL.path,
                     color: .secondary
                 )
             } header: {
                 Text("Local storage")
             } footer: {
-                Text("Connection profiles stay in Application Support. Passwords and key passphrases stay in macOS Keychain. SSH host keys are stored in the Rust bridge's known_hosts file.")
+                Text("Saved hosts stay in Application Support. Passwords and key passphrases stay in macOS Keychain. SSH host keys are stored in the Rust bridge's known_hosts file.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

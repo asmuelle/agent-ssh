@@ -50,7 +50,7 @@ struct MobileSecurityVaultView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Text("Named keypairs shared across connections, so one key can serve several servers.")
+                    Text("Named keypairs you can use for several hosts at once.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

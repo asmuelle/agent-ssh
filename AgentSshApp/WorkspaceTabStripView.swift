@@ -70,7 +70,7 @@ struct WorkspaceTabStripView: View {
                                     .padding(.vertical, 6)
                             }
                             .buttonStyle(.plain)
-                            .help("New Connection")
+                            .help("New Host")
                         }
                     }
                 }
