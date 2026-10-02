@@ -97,16 +97,16 @@ struct JournalIssueBadges: View {
             if counts.errors > 0 {
                 issueBadge(
                     count: counts.errors,
-                    icon: "xmark.octagon.fill",
-                    color: .red,
+                    icon: MidnightMacDesign.StatusTone.critical.symbol,
+                    color: MidnightMacDesign.StatusTone.critical.color,
                     help: "Journal errors in the recent sample: \(counts.errors)"
                 )
             }
             if counts.warnings > 0 {
                 issueBadge(
                     count: counts.warnings,
-                    icon: "exclamationmark.triangle.fill",
-                    color: .orange,
+                    icon: MidnightMacDesign.StatusTone.warning.symbol,
+                    color: MidnightMacDesign.StatusTone.warning.color,
                     help: "Journal warnings in the recent sample: \(counts.warnings)"
                 )
             }

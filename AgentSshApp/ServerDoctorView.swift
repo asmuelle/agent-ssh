@@ -449,25 +449,8 @@ struct ServerDoctorView: View {
     }
 
     private func severitySymbol(_ severity: ServerDoctorSeverity) -> some View {
-        let name: String
-        let color: Color
-        switch severity {
-        case .critical:
-            name = "xmark.octagon.fill"
-            color = .red
-        case .high:
-            name = "exclamationmark.triangle.fill"
-            color = .orange
-        case .warning:
-            name = "exclamationmark.circle.fill"
-            color = .yellow
-        case .info:
-            name = "checkmark.circle.fill"
-            color = .green
-        case .unknown:
-            name = "questionmark.circle.fill"
-            color = .secondary
-        }
+        let name = severity.tone.symbol
+        let color = severity.tone.color
         return Image(systemName: name).foregroundStyle(color)
     }
 }

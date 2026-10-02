@@ -261,10 +261,10 @@ struct FleetStackAuditSheet: View {
 
     private func componentColor(_ state: StackDiagnosticState) -> Color {
         switch state {
-        case .healthy: return .green
-        case .warning: return .orange
-        case .critical: return .red
-        case .unknown: return .secondary
+        case .healthy: return MidnightMacDesign.StatusTone.ok.color
+        case .warning: return MidnightMacDesign.StatusTone.warning.color
+        case .critical: return MidnightMacDesign.StatusTone.critical.color
+        case .unknown: return MidnightMacDesign.StatusTone.unknown.color
         }
     }
 

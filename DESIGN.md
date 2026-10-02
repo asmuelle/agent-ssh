@@ -338,6 +338,20 @@ Capsules are appropriate for status badges, small counts, and compact pills. Do 
 
 **Status indicators:** Green means connected or healthy, yellow/orange means pending, degraded, or warning, red means failed or destructive. Gray means disconnected, unavailable, or low-emphasis metadata.
 
+In Swift, color a status only through `MidnightMacDesign.StatusTone`. Map the domain state to a tone once, then use the tone's `color` and `symbol`:
+
+| Tone | Color | Symbol | Use for |
+|---|---|---|---|
+| `ok` | green | `checkmark.circle.fill` | connected, healthy, succeeded |
+| `info` | blue | `info.circle.fill` | notices, informational findings |
+| `pending` | yellow | `clock.fill` | connecting, queued, starting, restarting, in progress |
+| `warning` | orange | `exclamationmark.triangle.fill` | warning and high severity, degraded, paused, rolled back |
+| `critical` | red | `exclamationmark.octagon.fill` | error, failed, critical, unhealthy |
+| `inactive` | gray | `minus.circle` | disconnected, stopped, disabled, skipped |
+| `unknown` | gray | `questionmark.circle.fill` | not known yet |
+
+Utilization bars use `MidnightMacDesign.utilizationTint(_:)`. `just design-check` (also in CI) rejects deprecated `.foregroundColor`, decorative gradients, `Color(red:)` literals, and text below 10 pt.
+
 ## Do's and Don'ts
 
 - Do prefer native Apple controls, materials, semantic colors, and SF Symbols.

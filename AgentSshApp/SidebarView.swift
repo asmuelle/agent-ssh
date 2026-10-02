@@ -246,14 +246,14 @@ struct SidebarView: View {
                         emptyState
                     } else {
                         Text("No matches")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .font(MidnightMacDesign.FontToken.caption)
                     }
                 }
             } else if isSearchActive && !hasAnyMatches {
                 Section {
                     Text("No matches")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .font(MidnightMacDesign.FontToken.caption)
                 }
             } else {
@@ -965,8 +965,8 @@ private struct SSHAlgorithmsSection: View {
 
             if isWeak {
                 Text("weak")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.orange)
+                    .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
+                    .foregroundStyle(MidnightMacDesign.StatusTone.warning.color)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
@@ -1263,7 +1263,7 @@ private extension SecurityPatchHostSummary {
     }
 
     var sidebarSecurityColor: Color {
-        isSidebarSecurityStale ? .secondary : severity.sidebarSecurityColor
+        isSidebarSecurityStale ? MidnightMacDesign.StatusTone.unknown.color : severity.tone.color
     }
 
     var sidebarSecurityHelp: String {
@@ -1286,17 +1286,6 @@ private extension SecurityPatchHostSummary {
     }
 }
 
-private extension SecurityPatchSeverity {
-    var sidebarSecurityColor: Color {
-        switch self {
-        case .critical: return .red
-        case .high: return .orange
-        case .warning: return .yellow
-        case .info: return .green
-        case .unknown: return .secondary
-        }
-    }
-}
 
 // MARK: - Section header
 
@@ -1429,15 +1418,7 @@ private extension ServerDoctorHostSummary {
 
     var sidebarSymbol: String { "stethoscope" }
 
-    var sidebarColor: Color {
-        switch overallSeverity {
-        case .critical: return .red
-        case .high: return .orange
-        case .warning: return .yellow
-        case .info: return .green
-        case .unknown: return .secondary
-        }
-    }
+    var sidebarColor: Color { overallSeverity.tone.color }
 
     var sidebarHelp: String {
         let provenance = narratedOnDevice ? " · Apple Intelligence" : ""

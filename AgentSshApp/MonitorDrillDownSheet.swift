@@ -195,7 +195,7 @@ struct MonitorDrillDownSheet: View {
                     requestSystemdAction(.start, unit: unit)
                 } label: {
                     HStack(spacing: 3) {
-                        Image(systemName: "play.fill")
+                        Image(systemName: SystemdVerb.start.symbol)
                         Text("Start")
                     }
                 }
@@ -208,7 +208,7 @@ struct MonitorDrillDownSheet: View {
                     requestSystemdAction(.stop, unit: unit)
                 } label: {
                     HStack(spacing: 3) {
-                        Image(systemName: "stop.fill")
+                        Image(systemName: SystemdVerb.stop.symbol)
                         Text("Stop")
                     }
                 }
@@ -220,7 +220,7 @@ struct MonitorDrillDownSheet: View {
                 Button {
                     requestSystemdAction(.restart, unit: unit)
                 } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Image(systemName: SystemdVerb.restart.symbol)
                 }
                 .tint(.blue)
                 .buttonStyle(.bordered)
@@ -230,7 +230,7 @@ struct MonitorDrillDownSheet: View {
                 Button {
                     requestSystemdAction(.reload, unit: unit)
                 } label: {
-                    Image(systemName: "arrow.down.doc")
+                    Image(systemName: SystemdVerb.reload.symbol)
                 }
                 .tint(.secondary)
                 .buttonStyle(.bordered)

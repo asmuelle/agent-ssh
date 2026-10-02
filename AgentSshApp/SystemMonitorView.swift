@@ -12,8 +12,8 @@ struct DashboardHealthIssue: Identifiable, Equatable {
 
         var color: Color {
             switch self {
-            case .warning: return .orange
-            case .critical: return .red
+            case .warning: return MidnightMacDesign.StatusTone.warning.color
+            case .critical: return MidnightMacDesign.StatusTone.critical.color
             }
         }
     }

@@ -897,8 +897,8 @@ struct DashboardPanel: View {
     /// majority reads as one quiet block.
     private func fleetRowTint(_ severity: FleetSeverity) -> Color {
         switch severity {
-        case .critical: return .red.opacity(0.08)
-        case .warning: return .orange.opacity(0.07)
+        case .critical: return MidnightMacDesign.StatusTone.critical.color.opacity(0.08)
+        case .warning: return MidnightMacDesign.StatusTone.warning.color.opacity(0.07)
         case .collecting, .healthy: return .clear
         }
     }
@@ -906,20 +906,11 @@ struct DashboardPanel: View {
     /// Same thresholds as the monitor bars: muted when healthy so
     /// color stays reserved for problems.
     private func fleetTint(_ fraction: Double) -> Color {
-        switch fraction {
-        case ..<0.6:  return .green.opacity(0.55)
-        case ..<0.85: return .orange
-        default:      return .red
-        }
+        MidnightMacDesign.utilizationTint(fraction)
     }
 
     private func fleetStatusColor(_ status: TerminalConnectionStatus) -> Color {
-        switch status {
-        case .connected:    return .green
-        case .connecting:   return .orange
-        case .disconnected: return Color(nsColor: .tertiaryLabelColor)
-        case .error:        return .red
-        }
+        MidnightMacDesign.statusColor(status)
     }
 
     private func fleetFormatBytes(_ bytes: UInt64) -> String {
@@ -1130,12 +1121,12 @@ struct DashboardPanel: View {
         freshness: FleetObservationFreshness?,
         isConnected: Bool
     ) -> Color {
-        if freshness == .stale || record == nil { return .secondary }
+        if freshness == .stale || record == nil { return MidnightMacDesign.StatusTone.unknown.color }
         switch record?.state {
-        case .healthy: return isConnected ? .green : .secondary
-        case .warning: return .orange
-        case .critical: return .red
-        case .unknown, .none: return .secondary
+        case .healthy: return isConnected ? MidnightMacDesign.StatusTone.ok.color : MidnightMacDesign.StatusTone.inactive.color
+        case .warning: return MidnightMacDesign.StatusTone.warning.color
+        case .critical: return MidnightMacDesign.StatusTone.critical.color
+        case .unknown, .none: return MidnightMacDesign.StatusTone.unknown.color
         }
     }
 

@@ -291,13 +291,13 @@ struct StatusBadge: View {
     private var color: Color {
         switch state.lowercased() {
         case "active", "running":
-            return .green
+            return MidnightMacDesign.StatusTone.ok.color
         case "failed", "error":
-            return .red
+            return MidnightMacDesign.StatusTone.critical.color
         case "activating", "reloading":
-            return .orange
+            return MidnightMacDesign.StatusTone.pending.color
         default:
-            return .secondary
+            return MidnightMacDesign.StatusTone.inactive.color
         }
     }
 }
