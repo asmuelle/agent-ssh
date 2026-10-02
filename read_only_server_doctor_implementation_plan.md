@@ -37,7 +37,7 @@ Existing pieces to reuse:
 Generated files and build rules:
 
 - Any FFI change requires `just mac-bindings`.
-- Do not hand-edit `bindings/midnight_ssh.swift`.
+- Do not hand-edit `bindings/agent_ssh.swift`.
 - The Xcode project is generated from `project.yml`; new source files under `AgentSshApp/` and `Sources/AgentSshMacOS/` are picked up by folder references, but FFI binding regeneration is still required.
 
 ## Target First Slice
@@ -241,8 +241,8 @@ Update:
 
 Regenerate:
 
-- `bindings/midnight_ssh.swift`
-- `bindings/midnight_sshFFI.h`
+- `bindings/agent_ssh.swift`
+- `bindings/agent_sshFFI.h`
 - `bindings/module.modulemap` if changed by the binding recipe.
 
 ### Rust Module Responsibilities

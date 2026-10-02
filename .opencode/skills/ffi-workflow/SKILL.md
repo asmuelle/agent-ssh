@@ -13,7 +13,7 @@ Use this skill whenever you need to:
 
 1. Edit `src/ffi.rs` — add or change `#[uniffi::export]` functions
 2. Run `just check` to verify Rust compiles
-3. Run `just mac-bindings` to regenerate `bindings/midnight_ssh.swift`
+3. Run `just mac-bindings` to regenerate `bindings/agent_ssh.swift`
 4. Commit both `src/ffi.rs` and the regenerated `bindings/` files
 
 ## Key rules
@@ -28,12 +28,12 @@ Use this skill whenever you need to:
 ## Verification
 
 After running `just mac-bindings`:
-- Confirm `bindings/midnight_ssh.swift` contains the new type/function
+- Confirm `bindings/agent_ssh.swift` contains the new type/function
 - Build: `just mac-build` (or `just mac-ci-build` for CI)
 - Test: `just mac-test`
 
 ## Pitfalls
 
-- **Never hand-edit** `bindings/midnight_ssh.swift` — uniffi bakes a per-function checksum into both lib and bindings. Mismatch = `_assertionFailure` at `rshellInit()`.
+- **Never hand-edit** `bindings/agent_ssh.swift` — uniffi bakes a per-function checksum into both lib and bindings. Mismatch = `_assertionFailure` at `rshellInit()`.
 - If the build fails with `use of undeclared type`, the bindings are out of sync — re-run `just mac-bindings`.
 - If `just mac-bindings` fails, check that `cargo build --release --lib` succeeds first.

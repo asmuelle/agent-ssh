@@ -17,7 +17,7 @@ globs: **/*.swift,**/*.rs,**/*.yml,**/*.md
 - iPadOS UI: `AgentSshMobile/`
 - Shared framework: `Sources/AgentSshMacOS/`
 - Rust FFI surface: `src/ffi.rs` (uniffi exports)
-- Generated bindings: `bindings/midnight_ssh.swift`
+- Generated bindings: `bindings/agent_ssh.swift`
 - Xcode project generated from `project.yml` — never hand-edit `.xcodeproj`
 
 ## Swift conventions
@@ -31,6 +31,6 @@ globs: **/*.swift,**/*.rs,**/*.yml,**/*.md
 - Any network call: `RUNTIME.block_on(async { … })`
 
 ## Critical rules
-- NEVER manually edit `bindings/midnight_ssh.swift` — FFI checksum mismatch causes crash at `rshellInit()`
+- NEVER manually edit `bindings/agent_ssh.swift` — FFI checksum mismatch causes crash at `rshellInit()`
 - After any FFI change: `just mac-bindings` + commit generated bindings
 - Stale SPM cache fix: `rm -rf build .build && just mac-gen && just mac-build`
