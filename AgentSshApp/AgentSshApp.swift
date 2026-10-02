@@ -31,29 +31,13 @@ struct AgentSshApp: App {
                     layoutManager.toggleInspector()
                 }
                 .keyboardShortcut("m", modifiers: .command)
-            }
 
-            CommandMenu("View") {
+                Divider()
+
                 Button("Command Palette…") {
                     AgentSshEventBus.shared.events.send(.showCommandPalette)
                 }
                 .keyboardShortcut("k", modifiers: .command)
-
-                Divider()
-
-                Button("Reconnect") {
-                    Task { await tabsStore.reconnectActive() }
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(tabsStore.activeTab == nil)
-
-                Button("Show Dashboard") {
-                    AgentSshEventBus.shared.events.send(.showDashboard)
-                }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
-                .disabled(tabsStore.connectedSSHTabs.count < 2)
-
-                Divider()
 
                 Button("Zen Mode") {
                     layoutManager.applyPreset(.zen)
@@ -64,26 +48,50 @@ struct AgentSshApp: App {
                     layoutManager.applyPreset(.default)
                 }
                 .keyboardShortcut("0", modifiers: [.command, .shift])
+            }
+
+            CommandMenu("Host") {
+                ForEach(HostSection.allCases) { section in
+                    Button("Show \(section.title)") {
+                        AgentSshEventBus.shared.events.send(.showHostSection(section))
+                    }
+                    .keyboardShortcut(section.keyEquivalent, modifiers: .command)
+                }
 
                 Divider()
 
-                Button("Close Tab") {
+                Button("Reconnect") {
+                    Task { await tabsStore.reconnectActive() }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(tabsStore.activeTab == nil)
+
+                Button("Disconnect") {
                     tabsStore.closeActiveTab()
                 }
                 .keyboardShortcut("w", modifiers: .command)
                 .disabled(tabsStore.activeTab == nil)
 
-                Button("Next Tab") {
-                    tabsStore.selectAdjacentTab(forward: true)
+                Button("Next Connected Host") {
+                    AgentSshEventBus.shared.events.send(.selectAdjacentHost(forward: true))
                 }
-                .keyboardShortcut(.tab, modifiers: .command)
-                .disabled(tabsStore.tabs.count < 2)
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .disabled(tabsStore.tabs.isEmpty)
 
-                Button("Previous Tab") {
-                    tabsStore.selectAdjacentTab(forward: false)
+                Button("Previous Connected Host") {
+                    AgentSshEventBus.shared.events.send(.selectAdjacentHost(forward: false))
                 }
-                .keyboardShortcut(.tab, modifiers: [.command, .shift])
-                .disabled(tabsStore.tabs.count < 2)
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .disabled(tabsStore.tabs.isEmpty)
+
+                Divider()
+
+                ForEach([FleetTool.runbook, .stackAudit]) { tool in
+                    Button(tool.menuTitle) {
+                        AgentSshEventBus.shared.events.send(.showFleetTool(tool))
+                    }
+                    .disabled(tabsStore.connectedSSHTabs.isEmpty)
+                }
             }
 
             CommandMenu("Find") {

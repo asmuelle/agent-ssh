@@ -10,10 +10,10 @@ struct CommandPaletteView: View {
     let onConnect: (ConnectionProfile) -> Void
     let onReconnectActive: () -> Void
     let onCloseActive: () -> Void
-    let onOpenDashboard: () -> Void
     let onToggleSidebar: () -> Void
     let onToggleInspector: () -> Void
     let onExportDiagnostics: () -> Void
+    let onOpenFleetTool: (FleetTool) -> Void
     let onDiagnoseActive: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -35,35 +35,41 @@ struct CommandPaletteView: View {
 
         if let activeTab {
             result.append(PaletteAction(
-                title: "Reconnect Active Tab",
+                title: "Reconnect",
                 subtitle: activeTab.profile.name,
                 icon: "arrow.clockwise",
                 isEnabled: true,
                 run: onReconnectActive
             ))
             result.append(PaletteAction(
-                title: "Close Active Tab",
+                title: "Disconnect",
                 subtitle: activeTab.profile.name,
                 icon: "xmark.circle",
                 isEnabled: true,
                 run: onCloseActive
             ))
             result.append(PaletteAction(
-                title: "Doctor: Diagnose Active Host",
+                title: "Diagnose Host",
                 subtitle: activeTab.profile.name,
                 icon: "stethoscope",
-                isEnabled: activeTab.effectiveKind.supportsTerminal && activeTab.status == .connected,
+                isEnabled: activeTab.effectiveKind.supportsTerminal,
                 run: onDiagnoseActive
             ))
         }
 
+        let hasConnectedShell = connectedHostCount > 0
         result.append(PaletteAction(
-            title: "Open Fleet Dashboard",
-            subtitle: connectedHostCount >= 2 ? "\(connectedHostCount) connected SSH hosts" : "Connect at least two SSH hosts",
-            icon: "square.grid.2x2",
-            isEnabled: connectedHostCount >= 2,
-            run: onOpenDashboard
-        ))
+            title: "Run on Several Hosts",
+            subtitle: "Roll a command out with canaries and verification",
+            icon: "list.bullet.rectangle",
+            isEnabled: hasConnectedShell
+        ) { onOpenFleetTool(.runbook) })
+        result.append(PaletteAction(
+            title: "Audit Stacks",
+            subtitle: "Read-only check of Docker, web servers, firewalls and databases",
+            icon: "square.stack.3d.up",
+            isEnabled: hasConnectedShell
+        ) { onOpenFleetTool(.stackAudit) })
         result.append(PaletteAction(title: "Toggle Sidebar", subtitle: "Show or hide hosts", icon: "sidebar.left", run: onToggleSidebar))
         result.append(PaletteAction(title: "Toggle Inspector", subtitle: "System monitor and host health", icon: "sidebar.right", run: onToggleInspector))
         result.append(PaletteAction(title: "Export Diagnostics", subtitle: "Create a redacted support bundle", icon: "square.and.arrow.up", run: onExportDiagnostics))

@@ -1,16 +1,16 @@
 import AgentSshMacOS
 import SwiftUI
 
-/// Native macOS workspace.
+/// Native macOS workspace: hosts on the left, the selected host on
+/// the right.
 ///
-///   ┌────────────────┬───────────────────┬────────────┐
-///   │ Connections    │ Terminal tabs     │            │
-///   │ (manager)      │ (always-visible)  │            │
-///   ├────────────────│                   │  System    │
-///   │ Connection     ├───────────────────┤  Monitor   │
-///   │ Details        │ File browser      │  (always)  │
-///   │                │ (always-visible)  │            │
-///   └────────────────┴───────────────────┴────────────┘
+///   ┌────────────────┬───────────────────────────┬────────────┐
+///   │ Needs Attention│ host · Diagnosis Terminal │            │
+///   │  web-1  ●      │        Files              │  System    │
+///   │ All Hosts      ├───────────────────────────┤  Monitor   │
+///   │  db-1          │ diagnosis, terminal or    │ (optional) │
+///   │  web-1  ●      │ files for that host       │            │
+///   └────────────────┴───────────────────────────┴────────────┘
 ///
 /// Layout is an explicit outer `HSplitView` (sidebar | detail). The
 /// detail column is itself an `HSplitView` so the main workspace and
@@ -30,15 +30,12 @@ struct ContentView: View {
     @StateObject private var connectionStore = ConnectionStoreManager.shared
     @StateObject private var transfersStore = TransferQueueStore()
     @State private var selectedConnection: ConnectionProfile?
-    /// What the detail column's main pane shows. `.server` is the
-    /// default: the active workspace tab's terminal + files split.
-    @State private var workspaceMode = WorkspaceMode.server
+    /// Which section each host shows; hosts not in the map open on
+    /// their first section (Diagnosis for SSH hosts).
+    @State private var hostSections: [String: HostSection] = [:]
     @State private var showingCommandPalette = false
-    @State private var serverDoctorTarget: ServerDoctorTarget?
+    @State private var fleetTool: FleetTool?
     @State private var didRunAutoConnect = false
-    /// Startup auto-connect targeted several hosts: land on the fleet
-    /// dashboard as soon as two of them are actually connected.
-    @State private var pendingAutoConnectDashboard = false
 
     var body: some View {
         HSplitView {
@@ -47,23 +44,16 @@ struct ContentView: View {
                     layoutManager: layoutManager,
                     storeManager: connectionStore,
                     selectedConnection: $selectedConnection,
-                    onConnect: { profile in
-                        Task { await tabsStore.openConnection(profile) }
-                    },
-                    onDiagnose: { profile in
-                        if let tab = tabsStore.connectedSSHTabs.first(where: { $0.profile.id == profile.id }) {
-                            serverDoctorTarget = ServerDoctorTarget(tab: tab)
-                        }
-                    }
+                    onConnect: connect,
+                    onDiagnose: diagnose
                 )
             }
 
             DetailColumn(
                 layoutManager: layoutManager,
-                mode: $workspaceMode,
-                onDiagnose: { tab in
-                    serverDoctorTarget = ServerDoctorTarget(tab: tab)
-                }
+                selectedConnection: selectedConnection,
+                hostSections: $hostSections,
+                onConnect: connect
             )
         }
         .environmentObject(transfersStore)
@@ -77,10 +67,20 @@ struct ContentView: View {
             guard !ProcessInfo.isRunningTests else { return }
             await runAutoConnect()
         }
-        .onChange(of: tabsStore.connectedSSHTabs.count) { _, count in
-            if pendingAutoConnectDashboard, count >= 2 {
-                pendingAutoConnectDashboard = false
-                workspaceMode = .dashboard
+        // The sidebar selection is the one source of truth for "which
+        // host": the active connection is always the selected host's,
+        // or none when that host isn't connected, so Reconnect,
+        // Disconnect and the palette can only ever act on the host on
+        // screen. A connect finishing in the background never moves
+        // the selection. The one exception is launch, when nothing is
+        // selected yet: the first host to connect is selected.
+        .onChange(of: selectedConnection?.id) { _, _ in syncActiveTab() }
+        .onChange(of: tabsStore.tabs.map(\.id)) { _, _ in syncActiveTab() }
+        .onChange(of: tabsStore.activeTabId) { _, _ in
+            if selectedConnection == nil, let profile = tabsStore.activeTab?.profile {
+                selectedConnection = profile
+            } else {
+                syncActiveTab()
             }
         }
         .sheet(isPresented: $showingCommandPalette) {
@@ -89,10 +89,7 @@ struct ContentView: View {
                 selectedConnection: selectedConnection,
                 activeTab: tabsStore.activeTab,
                 connectedHostCount: tabsStore.connectedSSHTabs.count,
-                onConnect: { profile in
-                    selectedConnection = profile
-                    Task { await tabsStore.openConnection(profile) }
-                },
+                onConnect: connect,
                 onReconnectActive: {
                     if let activeTab = tabsStore.activeTab {
                         Task { await tabsStore.reconnect(tabId: activeTab.id) }
@@ -100,11 +97,6 @@ struct ContentView: View {
                 },
                 onCloseActive: {
                     tabsStore.closeActiveTab()
-                },
-                onOpenDashboard: {
-                    if tabsStore.connectedSSHTabs.count >= 2 {
-                        workspaceMode = .dashboard
-                    }
                 },
                 onToggleSidebar: {
                     layoutManager.toggleSidebar()
@@ -119,26 +111,38 @@ struct ContentView: View {
                         layoutManager: layoutManager
                     )
                 },
+                onOpenFleetTool: { tool in
+                    fleetTool = tool
+                },
                 onDiagnoseActive: {
-                    if let tab = tabsStore.activeOpenSSHTab {
-                        serverDoctorTarget = ServerDoctorTarget(tab: tab)
+                    if let profile = tabsStore.activeTab?.profile {
+                        diagnose(profile)
                     }
                 }
             )
-        }
-        .sheet(item: $serverDoctorTarget) { target in
-            ServerDoctorView(target: target)
         }
         .onReceive(AgentSshEventBus.shared.events) { event in
             switch event {
             case .showCommandPalette:
                 showingCommandPalette = true
-            case .showDashboard:
-                if tabsStore.connectedSSHTabs.count >= 2 {
-                    workspaceMode = .dashboard
+            case .selectAdjacentHost(let forward):
+                selectAdjacentConnectedHost(forward: forward)
+            case .showFleetTool(let tool):
+                if !tabsStore.connectedSSHTabs.isEmpty {
+                    fleetTool = tool
+                }
+            case .showHostSection(let section):
+                if let profile = selectedConnection {
+                    hostSections[profile.id] = section
                 }
             default:
                 break
+            }
+        }
+        .sheet(item: $fleetTool) { tool in
+            switch tool {
+            case .runbook: FleetRunbookSheet(tabs: tabsStore.connectedSSHTabs)
+            case .stackAudit: FleetStackAuditSheet(tabs: tabsStore.connectedSSHTabs)
             }
         }
         .onOpenURL(perform: handleDeepLink)
@@ -186,16 +190,59 @@ struct ContentView: View {
         }
     }
 
+    /// Open (or refocus) a host's connection and select it. A fresh
+    /// connection opens on its first section, so connecting lands on
+    /// the diagnosis.
+    private func connect(_ profile: ConnectionProfile) {
+        selectedConnection = profile
+        if !tabsStore.tabs.contains(where: { $0.profile.id == profile.id }) {
+            hostSections[profile.id] = nil
+        }
+        Task { await tabsStore.openConnection(profile) }
+    }
+
+    private func syncActiveTab() {
+        let selectedTabId = selectedConnection.flatMap { selected in
+            tabsStore.tabs.first { $0.profile.id == selected.id }?.id
+        }
+        if tabsStore.activeTabId != selectedTabId {
+            tabsStore.activeTabId = selectedTabId
+        }
+    }
+
+    /// Move the selection to the next (or previous) connected host,
+    /// starting from the selected one.
+    private func selectAdjacentConnectedHost(forward: Bool) {
+        let connected = tabsStore.tabs.sorted { $0.order < $1.order }
+        guard !connected.isEmpty else { return }
+        let current = connected.firstIndex { $0.profile.id == selectedConnection?.id }
+        let next: Int
+        if let current {
+            next = (current + (forward ? 1 : -1) + connected.count) % connected.count
+        } else {
+            next = forward ? 0 : connected.count - 1
+        }
+        selectedConnection = connected[next].profile
+    }
+
+    /// Show a host's diagnosis, connecting first when needed.
+    private func diagnose(_ profile: ConnectionProfile) {
+        selectedConnection = profile
+        hostSections[profile.id] = .diagnosis
+        let tab = tabsStore.tabs.first { $0.profile.id == profile.id }
+        if tab == nil || tab?.status == .disconnected || tab?.status == .error {
+            Task { await tabsStore.openConnection(profile) }
+        }
+    }
+
     /// Connect every profile marked "Connect at launch" — once per app
     /// run, and only profiles whose stored credentials allow a silent
     /// connect, so startup never opens a wall of password prompts.
     ///
     /// Connects run in parallel: a serial loop would let one slow or
     /// unreachable host block every server behind it (the "only one
-    /// connected on startup" failure). A multi-host startup lands on
-    /// the fleet dashboard — switched reactively as soon as two hosts
-    /// are up (see the onChange in `body`), so a hanging connect can't
-    /// delay the overview either.
+    /// connected on startup" failure). Hosts that come up unhealthy
+    /// rise to "Needs Attention" in the sidebar on their own.
     @MainActor
     private func runAutoConnect() async {
         guard !didRunAutoConnect else { return }
@@ -206,10 +253,6 @@ struct ContentView: View {
         }
         guard !profiles.isEmpty else { return }
 
-        if profiles.count >= 2 {
-            pendingAutoConnectDashboard = true
-        }
-
         let tabsStore = tabsStore
         await withTaskGroup(of: Void.self) { group in
             for profile in profiles {
@@ -218,11 +261,6 @@ struct ContentView: View {
                 }
             }
         }
-
-        if pendingAutoConnectDashboard, tabsStore.connectedSSHTabs.count >= 2 {
-            workspaceMode = .dashboard
-        }
-        pendingAutoConnectDashboard = false
     }
 
     private func canConnectSilently(_ profile: ConnectionProfile) -> Bool {
@@ -246,9 +284,7 @@ struct ContentView: View {
                let profile = connectionStore.connection(withId: profileId)
             {
                 selectedConnection = profile
-            }
-            if tabsStore.connectedSSHTabs.count >= 2 {
-                workspaceMode = .dashboard
+                hostSections[profile.id] = .diagnosis
             }
         case .server, .terminal, .folder:
             guard let profileId = link.profileId,
@@ -343,40 +379,23 @@ private struct SidebarColumn: View {
     }
 }
 
-// MARK: - Detail column (main + bottom + inspector)
+// MARK: - Detail column (host + inspector)
 
 private struct DetailColumn: View {
     @ObservedObject var layoutManager: LayoutManager
-    @Binding var mode: WorkspaceMode
-    var onDiagnose: ((TerminalTab) -> Void)? = nil
+    let selectedConnection: ConnectionProfile?
+    @Binding var hostSections: [String: HostSection]
+    let onConnect: (ConnectionProfile) -> Void
     @EnvironmentObject var tabsStore: TerminalTabsStore
     @State private var inspectorWidthDebounce: Task<Void, Never>?
 
+    /// The System Monitor follows the selected host, and only while it
+    /// has an open shell.
     private var inspectorShouldRender: Bool {
-        layoutManager.layout.inspectorVisible && tabsStore.activeOpenSSHTab != nil
-    }
-
-    private var dashboardShouldRender: Bool {
-        mode == .dashboard && tabsStore.connectedSSHTabs.count >= 2
-    }
-
-    private var agentShouldRender: Bool {
-        mode == .agent && !tabsStore.tabs.isEmpty
-    }
-
-    /// Files view stays useful down to a single connected host (unlike
-    /// the dashboard's 2-host minimum) — one full-width pane is still a
-    /// better file workspace than nothing when the user asked for it.
-    private var filesShouldRender: Bool {
-        mode == .files && connectedFileTabCount >= 1
-    }
-
-    private var connectedFileTabCount: Int {
-        tabsStore.tabs.filter { $0.status == .connected }.count
-    }
-
-    private var connectedSSHTabIds: [UUID] {
-        tabsStore.connectedSSHTabs.map(\.id)
+        guard layoutManager.layout.inspectorVisible,
+              let tab = tabsStore.activeOpenSSHTab
+        else { return false }
+        return tab.profile.id == selectedConnection?.id
     }
 
     /// Changes whenever any tab's connection status flips — drives the
@@ -388,85 +407,41 @@ private struct DetailColumn: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if !tabsStore.tabs.isEmpty {
-                ConnectionWorkspaceStrip(mode: $mode)
-                Divider()
-            }
+        HSplitView {
+            HostWorkspaceView(
+                profile: selectedConnection,
+                sections: $hostSections,
+                onConnect: onConnect
+            )
+            .frame(minWidth: 320, minHeight: 320)
 
-            if agentShouldRender {
-                AgentPanel(
-                    onDiagnose: onDiagnose,
-                    onOpenHost: { tabId in
-                        tabsStore.setActive(tabId)
-                        mode = .server
-                    }
-                )
-                .frame(minWidth: 320, minHeight: 320)
-            } else if filesShouldRender {
-                FilesPanel()
-                    .frame(minWidth: 320, minHeight: 320)
-            } else if dashboardShouldRender {
-                DashboardPanel(
-                    onActivateHost: { tabId in
-                        tabsStore.setActive(tabId)
-                        mode = .server
-                    }
-                )
-                .frame(minWidth: 320, minHeight: 320)
-            } else {
-                HSplitView {
-                    MainPanel()
-                        .frame(minWidth: 320, minHeight: 320)
-
-                    if inspectorShouldRender {
-                        InspectorPanel()
-                            .frame(
-                                minWidth: LayoutConstants.minInspectorWidth,
-                                idealWidth: layoutManager.layout.inspectorWidth,
-                                maxWidth: LayoutConstants.maxInspectorWidth
-                            )
-                            .background(
-                                GeometryReader { proxy in
-                                    Color.clear
-                                        .preference(key: InspectorWidthKey.self,
-                                                    value: proxy.size.width)
-                                }
-                            )
-                            .materialBackground(.contentBackground,
-                                                blendingMode: .withinWindow)
-                    }
-                }
+            if inspectorShouldRender {
+                InspectorPanel()
+                    .frame(
+                        minWidth: LayoutConstants.minInspectorWidth,
+                        idealWidth: layoutManager.layout.inspectorWidth,
+                        maxWidth: LayoutConstants.maxInspectorWidth
+                    )
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear
+                                .preference(key: InspectorWidthKey.self,
+                                            value: proxy.size.width)
+                        }
+                    )
+                    .materialBackground(.contentBackground,
+                                        blendingMode: .withinWindow)
             }
         }
         .background {
-            // Keeps triage data (and the Agent badge) fresh whether or
-            // not the Agent view is open. Suspended while the dashboard
-            // renders its own monitors, which feed the same store.
-            AgentTriagePollers(isSuspended: dashboardShouldRender)
+            // Keeps host health fresh for the sidebar's attention
+            // ordering whichever host is on screen.
+            AgentTriagePollers()
         }
         .task(id: tabStatusKey) {
             AgentTriageStore.shared.syncTabs(tabsStore.tabs)
         }
         .onPreferenceChange(InspectorWidthKey.self, perform: persistInspectorWidth)
-        // When a mode's precondition disappears, fall back to the
-        // server workspace instead of leaving a lit segment with a
-        // dead pane behind it.
-        .onChange(of: connectedSSHTabIds) { _, ids in
-            if ids.count < 2, mode == .dashboard {
-                mode = .server
-            }
-        }
-        .onChange(of: tabsStore.tabs.isEmpty) { _, isEmpty in
-            if isEmpty, mode == .agent {
-                mode = .server
-            }
-        }
-        .onChange(of: connectedFileTabCount) { _, count in
-            if count < 1, mode == .files {
-                mode = .server
-            }
-        }
     }
 
     /// Debounce drag updates: split views fire preference changes on every

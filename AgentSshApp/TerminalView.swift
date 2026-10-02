@@ -115,6 +115,16 @@ struct TerminalView: NSViewRepresentable {
                 guard let term, let window = term.window else { return }
                 window.makeFirstResponder(term)
             }
+        } else if !isActive && context.coordinator.wasActive {
+            // Hidden terminals stay mounted (opacity 0) to keep their
+            // scrollback; let go of the keyboard so typing can't reach a
+            // shell the user can no longer see.
+            DispatchQueue.main.async { [weak term] in
+                guard let term, let window = term.window,
+                      window.firstResponder === term
+                else { return }
+                window.makeFirstResponder(nil)
+            }
         }
         context.coordinator.wasActive = isActive
     }

@@ -262,7 +262,7 @@ Use monospaced digits for counters, percentages, byte sizes, ports, durations, C
 
 The primary macOS layout is a persistent split workspace: sidebar, main work area, and optional inspector. The default sidebar is about 240 px wide, the inspector about 320 px wide, and the workspace tab strip is 32 px tall. Layout should remain compact and resizable, with stable minimums so terminal panes, tables, and file browsers do not collapse into unusable states.
 
-Use full-height panes separated by native split-view dividers. The main work area should privilege the terminal and dual-pane file browser. The right inspector is for system monitoring and server health. Multi-host dashboards can take over the main area when at least two SSH hosts are connected.
+Use full-height panes separated by native split-view dividers. The sidebar is the host list, hosts needing attention first. The main area shows one host at a time: its diagnosis first, then terminal and files as sections of the same screen. The right inspector is for system monitoring of that host. Tools that span several hosts open as sheets, never as a second main-area mode.
 
 On iPadOS, prefer `NavigationSplitView` for regular widths and `NavigationStack` for compact widths. Touch surfaces may use larger hit targets, but the visual language should still be operational rather than promotional.
 
@@ -280,7 +280,7 @@ Keep platform idioms distinct. On macOS, important toolbar actions must also be 
 
 ## Window & Commands
 
-macOS windows should use the titlebar toolbar for high-frequency navigation and workspace controls: show or hide sidebar, show or hide inspector, command palette, search, dashboard, reconnect, diagnostics, and settings where appropriate. Toolbar items should use SF Symbols and platform tooltips, and should collapse cleanly into overflow when the window narrows.
+macOS windows should use the titlebar toolbar for high-frequency navigation and workspace controls: show or hide sidebar, show or hide inspector, command palette, search, reconnect, diagnostics, and settings where appropriate. Toolbar items should use SF Symbols and platform tooltips, and should collapse cleanly into overflow when the window narrows.
 
 Every toolbar command needs an equivalent route through the menu bar, command palette, contextual menu, or keyboard shortcut. The toolbar is a convenience layer, not the only command surface. Destructive, credential, host-key, and file overwrite commands need explicit wording and platform roles regardless of where they are invoked.
 

@@ -9,7 +9,24 @@ enum AgentSshEvent: Equatable {
     case transferProgress(connectionId: String, payload: String)
     case terminalTitleChanged(connectionId: String, title: String)
     case showCommandPalette
-    case showDashboard
+    case showHostSection(HostSection)
+    case showFleetTool(FleetTool)
+    case selectAdjacentHost(forward: Bool)
+}
+
+/// Tools that act on several connected hosts at once. They open over
+/// the host screen as sheets.
+enum FleetTool: String, Identifiable, Equatable {
+    case runbook, stackAudit
+
+    var id: String { rawValue }
+
+    var menuTitle: String {
+        switch self {
+        case .runbook: return "Run on Several Hosts…"
+        case .stackAudit: return "Audit Stacks…"
+        }
+    }
 }
 
 // `@unchecked`: `PassthroughSubject` is not annotated `Sendable`, but Combine

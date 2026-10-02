@@ -18,7 +18,6 @@ struct ServerDoctorTarget: Identifiable, Equatable {
 
 struct ServerDoctorView: View {
     @StateObject private var store: ServerDoctorStore
-    @Environment(\.dismiss) private var dismiss
 
     @State private var explanation: String?
     @State private var isExplaining = false
@@ -44,7 +43,7 @@ struct ServerDoctorView: View {
             Divider()
             content
         }
-        .frame(minWidth: 980, idealWidth: 1120, minHeight: 640, idealHeight: 760)
+        .frame(minWidth: 560, minHeight: 360)
         .task { await store.loadPreview() }
     }
 
@@ -63,14 +62,14 @@ struct ServerDoctorView: View {
             if store.isCollecting || store.isLoadingPreview {
                 ProgressView()
                     .controlSize(.small)
+            } else if store.report != nil {
+                Button {
+                    Task { await store.startDiagnosis() }
+                } label: {
+                    Label("Run Again", systemImage: "arrow.clockwise")
+                }
+                .help("Run the same read-only checks again")
             }
-            Button {
-                dismiss()
-            } label: {
-                Label("Close", systemImage: "xmark")
-            }
-            .labelStyle(.iconOnly)
-            .help("Close")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -154,7 +153,6 @@ struct ServerDoctorView: View {
             Spacer()
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
                 Button {
                     Task { await store.startDiagnosis() }
                 } label: {
@@ -173,11 +171,11 @@ struct ServerDoctorView: View {
             Divider()
             HSplitView {
                 findingsList(report)
-                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
+                    .frame(minWidth: 200, idealWidth: 280, maxWidth: 360)
                 findingDetail
-                    .frame(minWidth: 360, idealWidth: 460)
+                    .frame(minWidth: 280, idealWidth: 440)
                 evidenceDetail
-                    .frame(minWidth: 320, idealWidth: 380)
+                    .frame(minWidth: 220, idealWidth: 340)
             }
             Divider()
             commandsRun
