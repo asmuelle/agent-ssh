@@ -1,6 +1,6 @@
 # Distribution Strategy
 
-Midnight SSH deliberately uses separate Apple distribution channels rather than pretending one macOS binary can satisfy incompatible requirements.
+agent-ssh deliberately uses separate Apple distribution channels rather than pretending one macOS binary can satisfy incompatible requirements.
 
 ## iPhone and iPad — App Store
 

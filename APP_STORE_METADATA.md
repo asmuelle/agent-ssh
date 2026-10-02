@@ -1,10 +1,10 @@
-# Midnight SSH — App Store Metadata
+# agent-ssh — App Store Metadata
 
 This file is the source of truth for customer-facing App Store Connect copy. Internal module names, bundle identifiers, the `agent-ssh://` compatibility URL, and the lifetime product identifier remain stable for migration compatibility.
 
 ## Identity
 
-- **Name:** Midnight SSH
+- **Name:** agent-ssh
 - **Subtitle:** Linux Server Doctor & SSH
 - **Primary category:** Developer Tools
 - **Secondary category:** Utilities
@@ -23,7 +23,7 @@ Diagnose Linux servers, review safe configuration changes, run repeatable proced
 
 ## Description
 
-Midnight SSH is a focused server-diagnosis and safe-operations workspace for iPhone and iPad.
+agent-ssh is a focused server-diagnosis and safe-operations workspace for iPhone and iPad.
 
 Connect directly to a Linux server over SSH, inspect evidence-linked health findings, review configuration changes before they are applied, and keep repeatable procedures beside the host they operate on. No daemon or monitoring agent is installed on your server.
 
@@ -43,7 +43,7 @@ Use the native terminal and SFTP browser, save reusable runbooks, monitor fleet 
 
 Passwords and key-encryption secrets are stored in Apple Keychain; imported private keys are encrypted on device. Host-key changes fail closed. Connections go directly from your device to the server you choose. Optional public-IP geolocation is off until you opt in.
 
-This App Store purchase applies to iPhone and iPad only; it does not unlock the separately distributed Mac build. Midnight SSH requires iOS/iPadOS 27 or later. iOS may suspend network sockets in the background; use tmux or screen for long-running terminal sessions.
+This App Store purchase applies to iPhone and iPad only; it does not unlock the separately distributed Mac build. agent-ssh requires iOS/iPadOS 27 or later. iOS may suspend network sockets in the background; use tmux or screen for long-running terminal sessions.
 
 ## Screenshot sequence
 

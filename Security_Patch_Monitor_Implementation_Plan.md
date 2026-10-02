@@ -36,7 +36,7 @@ Generated/build rules:
 
 - New FFI types and functions go through `src/ffi.rs`.
 - Regenerate Swift bindings with `just mac-bindings`.
-- Do not hand-edit `bindings/midnight_ssh.swift`.
+- Do not hand-edit `bindings/agent_ssh.swift`.
 - Xcode project changes go through `project.yml` and `just mac-gen` if a new target or build setting is needed.
 
 ## Target First Slice
@@ -475,7 +475,7 @@ Deliverables:
 Acceptance:
 
 - `just test-rust` passes.
-- `bindings/midnight_ssh.swift` is regenerated, not hand-edited.
+- `bindings/agent_ssh.swift` is regenerated, not hand-edited.
 - Scan returns partial evidence if some commands fail.
 
 ### Milestone 3: Swift Bridge And Parsers

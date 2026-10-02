@@ -1,11 +1,11 @@
-# VISION.md — Midnight is a doctor, not a terminal
+# VISION.md — agent-ssh is a doctor, not a terminal
 
 Date: 2026-09-17
 Status: proposal
 
 ## The one sentence
 
-Midnight is the app you open when a server is sick. Not the app you live in.
+agent-ssh is the app you open when a server is sick. Not the app you live in.
 Not a terminal. A doctor.
 
 Everything that does not serve "my box is misbehaving and I am on my phone" is

@@ -14,7 +14,7 @@
 - iPadOS UI: `AgentSshMobile/`
 - Shared framework: `Sources/AgentSshMacOS/`
 - Rust FFI surface: `src/ffi.rs` (uniffi exports)
-- Generated bindings: `bindings/midnight_ssh.swift` — never hand-edit
+- Generated bindings: `bindings/agent_ssh.swift` — never hand-edit
 - Xcode project: generated from `project.yml` via xcodegen
 
 ## Critical conventions
