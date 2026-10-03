@@ -103,7 +103,7 @@ struct AttentionInboxIngestTests {
     private func triageIssue(
         tabId: UUID,
         signal: String = "cpu",
-        severity: DashboardHealthIssue.Severity = .critical,
+        severity: HostHealthIssue.Severity = .critical,
         kind: TriageIssue.Kind = .metric
     ) -> TriageIssue {
         TriageIssue(
@@ -255,10 +255,10 @@ struct AttentionInboxIngestTests {
         store.syncTabs([tab], now: t0)
 
         store.ingest(
-            snapshot: DashboardHealthSnapshot(
+            snapshot: HostHealthSnapshot(
                 id: tab.id.uuidString,
                 hostName: tab.profile.name,
-                issues: [DashboardHealthIssue(
+                issues: [HostHealthIssue(
                     id: "cpu",
                     title: "web-01: CPU",
                     detail: "97.0%",
@@ -274,7 +274,7 @@ struct AttentionInboxIngestTests {
         #expect(inbox.allItems().first?.title == "CPU")
 
         store.ingest(
-            snapshot: DashboardHealthSnapshot(id: tab.id.uuidString, hostName: tab.profile.name, issues: []),
+            snapshot: HostHealthSnapshot(id: tab.id.uuidString, hostName: tab.profile.name, issues: []),
             tabId: tab.id,
             now: t0.addingTimeInterval(10)
         )

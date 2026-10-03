@@ -29,7 +29,7 @@ struct TriageIssue: Identifiable, Equatable {
     let title: String
     let detail: String
     let icon: String
-    let severity: DashboardHealthIssue.Severity
+    let severity: HostHealthIssue.Severity
     let kind: Kind
     /// When this issue first appeared. Survives re-ingestion so both
     /// hysteresis and the "since …" narrative work.
@@ -89,7 +89,7 @@ final class AgentTriageStore: ObservableObject {
     /// latest monitor snapshot. Connection issues are excluded here —
     /// they come from `syncTabs`, which also covers tabs the monitor
     /// can no longer reach.
-    func ingest(snapshot: DashboardHealthSnapshot, tabId: UUID, now: Date = Date()) {
+    func ingest(snapshot: HostHealthSnapshot, tabId: UUID, now: Date = Date()) {
         let fresh = snapshot.issues.filter { !$0.id.hasPrefix("status:") }
 
         var next = candidates
@@ -245,11 +245,11 @@ final class AgentTriageStore: ObservableObject {
 
 // MARK: - Hidden pollers
 
-/// Headless `SystemMonitorView` per connected SSH host, mounted in
+/// Triage-feed `SystemMonitorView` per connected SSH host, mounted in
 /// the detail column's background so triage data (the sidebar's
 /// "Needs Attention" ordering and alert notifications) stays fresh
 /// whichever host is on screen. Reuses the System Monitor's polling
-/// pipeline via `headless: true` so no chart/table UI is built — a zero-sized
+/// pipeline via `isTriageFeed: true` so no chart/table UI is built — a zero-sized
 /// `opacity(0)` monitor still pays full SwiftUI layout and Swift
 /// Charts rendering on every poll, which made the whole app feel
 /// sluggish once a few hosts were connected.
@@ -267,12 +267,11 @@ struct AgentTriagePollers: View {
                     profile: tab.profile,
                     connectionStatus: tab.status,
                     isActive: true,
-                    dashboardMode: true,
-                    dashboardIdentity: tab.id.uuidString,
-                    onDashboardHealthChange: { snapshot in
+                    isTriageFeed: true,
+                    snapshotId: tab.id.uuidString,
+                    onHealthChange: { snapshot in
                         AgentTriageStore.shared.ingest(snapshot: snapshot, tabId: tab.id)
-                    },
-                    headless: true
+                    }
                 )
                 .id(tab.id)
             }

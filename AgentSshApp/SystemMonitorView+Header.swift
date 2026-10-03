@@ -9,7 +9,7 @@ extension SystemMonitorView {
     // MARK: - Header
 
     var header: some View {
-        VStack(alignment: .leading, spacing: dashboardMode ? 5 : 2) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 connectionStatusIcon
                 Text(connectionLabel)
@@ -19,36 +19,14 @@ extension SystemMonitorView {
                 if connectionId != nil {
                     ufwStatusBadge
                 }
-                if dashboardMode {
-                    dashboardIssueBadges
-                }
                 Spacer()
-                // Dashboard mode: the refresh timestamp lives once in
-                // the dashboard toolbar instead of on every card.
-                if !dashboardMode, stats != nil {
+                if stats != nil {
                     Text("Updated \(Date().formatted(.dateTime.hour().minute().second()))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
             }
-            if dashboardMode {
-                // Always render all three meta lines (with blank
-                // placeholders while values resolve) so every card's
-                // header has the same height and the CPU/Memory/Disk
-                // rows line up across the grid.
-                dashboardMetaLine(
-                    endpointLine,
-                    font: MidnightMacDesign.FontToken.metadataMono,
-                    tint: .secondary
-                )
-                dashboardMetaLine(osInfo, font: .caption, tint: .secondary)
-                dashboardMetaLine(
-                    resolvedIPLine.map { "IP \($0)" },
-                    font: MidnightMacDesign.FontToken.metadataMono,
-                    tint: .tertiary,
-                    help: resolvedIPAddresses.joined(separator: ", ")
-                )
-            } else if let osInfo {
+            if let osInfo {
                 Text(osInfo)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -59,73 +37,6 @@ extension SystemMonitorView {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-    }
-
-    /// One fixed-height metadata line in the dashboard card header.
-    /// Renders a non-empty placeholder when the value hasn't resolved
-    /// yet so the header never changes height.
-    func dashboardMetaLine(
-        _ text: String?,
-        font: Font,
-        tint: HierarchicalShapeStyle,
-        help: String? = nil
-    ) -> some View {
-        Text(text ?? " ")
-            .font(font)
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .help(help ?? text ?? "")
-    }
-
-    var endpointLine: String? {
-        guard let profile else { return nil }
-        return "\(profile.username)@\(profile.host):\(profile.port)"
-    }
-
-    var resolvedIPLine: String? {
-        guard !resolvedIPAddresses.isEmpty else { return nil }
-        let visible = resolvedIPAddresses.prefix(2).joined(separator: ", ")
-        let hiddenCount = resolvedIPAddresses.count - 2
-        return hiddenCount > 0 ? "\(visible) +\(hiddenCount)" : visible
-    }
-
-    @ViewBuilder
-    var dashboardIssueBadges: some View {
-        let issues = currentDashboardHealthIssues
-        if !issues.isEmpty {
-            HStack(spacing: 4) {
-                ForEach(Array(issues.prefix(2))) { issue in
-                    dashboardIssueBadge(issue)
-                }
-                if issues.count > 2 {
-                    Text("+\(issues.count - 2)")
-                        .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(
-                            Color.secondary.opacity(0.12),
-                            in: Capsule()
-                        )
-                }
-            }
-        }
-    }
-
-    func dashboardIssueBadge(_ issue: DashboardHealthIssue) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: issue.icon)
-                .font(MidnightMacDesign.FontToken.caption)
-            Text(issue.title.replacingOccurrences(of: "\(connectionLabel): ", with: ""))
-                .font(MidnightMacDesign.FontToken.caption.weight(.semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(issue.severity.color)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 2)
-        .background(issue.severity.color.opacity(0.12), in: Capsule())
-        .help("\(issue.title): \(issue.detail)")
     }
 
     @ViewBuilder

@@ -30,17 +30,17 @@ struct AgentTriageStoreTests {
 
     private func snapshot(
         tab: TerminalTab,
-        issues: [DashboardHealthIssue]
-    ) -> DashboardHealthSnapshot {
-        DashboardHealthSnapshot(
+        issues: [HostHealthIssue]
+    ) -> HostHealthSnapshot {
+        HostHealthSnapshot(
             id: tab.id.uuidString,
             hostName: tab.profile.name,
             issues: issues
         )
     }
 
-    private func cpuIssue(host: String = "web-01") -> DashboardHealthIssue {
-        DashboardHealthIssue(
+    private func cpuIssue(host: String = "web-01") -> HostHealthIssue {
+        HostHealthIssue(
             id: "cpu",
             title: "\(host): CPU",
             detail: "97.0%",
@@ -49,8 +49,8 @@ struct AgentTriageStoreTests {
         )
     }
 
-    private func ufwIssue(host: String = "web-01") -> DashboardHealthIssue {
-        DashboardHealthIssue(
+    private func ufwIssue(host: String = "web-01") -> HostHealthIssue {
+        HostHealthIssue(
             id: "ufw-inactive",
             title: "\(host): UFW",
             detail: "Firewall inactive",
@@ -108,7 +108,7 @@ struct AgentTriageStoreTests {
     func snapshotStatusIssuesExcluded() {
         let store = AgentTriageStore()
         let tab = makeTab()
-        let statusIssue = DashboardHealthIssue(
+        let statusIssue = HostHealthIssue(
             id: "status:disconnected",
             title: "web-01: Connection",
             detail: "Disconnected",
