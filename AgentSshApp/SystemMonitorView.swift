@@ -5,7 +5,7 @@ import SwiftUI
 import OSLog
 import AgentSshMacOS
 
-struct DashboardHealthIssue: Identifiable, Equatable {
+struct HostHealthIssue: Identifiable, Equatable {
     enum Severity: Int, Equatable {
         case warning
         case critical
@@ -25,30 +25,10 @@ struct DashboardHealthIssue: Identifiable, Equatable {
     let severity: Severity
 }
 
-/// Key metrics carried alongside health issues so the dashboard can
-/// render aggregate views (e.g. the fleet table) without owning the
-/// per-host polling pipeline.
-struct DashboardHostMetrics: Equatable {
-    let cpuPercent: Double
-    let memoryPercent: Double
-    let memoryUsed: UInt64
-    let memoryTotal: UInt64
-    let swapUsed: UInt64
-    let swapTotal: UInt64
-    /// Fill fraction (0...1) and mount path of the fullest disk.
-    let worstDiskFraction: Double?
-    let worstDiskMount: String?
-    let loadAverage1m: Double
-    let uptimeSeconds: UInt64
-    /// All reported mounts — the fleet table needs the full record to
-    /// open the large-file drill-down for a specific mount.
-    var disks: [FfiDiskMount] = []
-}
-
 /// Log health of one user-monitored systemd unit, sampled from its
 /// recent journal by the hygiene probe. Uses the same server-side
-/// classifier as `MonitoredSystemdServicesPane`, so the counts on a
-/// fleet-row chip match the badges inside the expanded Services pane.
+/// classifier as `MonitoredSystemdServicesPane`, so the counts in a
+/// triage issue match the badges inside the Services pane.
 struct HygieneServiceLogHealth: Equatable {
     let unit: String
     let activeState: String
@@ -71,11 +51,10 @@ struct HygieneSnapshot: Equatable {
     var serviceLogs: [HygieneServiceLogHealth] = []
 }
 
-struct DashboardHealthSnapshot: Identifiable, Equatable {
+struct HostHealthSnapshot: Identifiable, Equatable {
     let id: String
     let hostName: String
-    let issues: [DashboardHealthIssue]
-    var metrics: DashboardHostMetrics? = nil
+    let issues: [HostHealthIssue]
 }
 
 /// Polls host stats through `BridgeManager` every few seconds for the active
@@ -97,30 +76,25 @@ struct SystemMonitorView: View {
     var profile: ConnectionProfile? = nil
     var connectionStatus: TerminalConnectionStatus? = nil
     var isActive: Bool = true
-    var dashboardMode = false
-    /// Render as the compact expansion band under a fleet-table row:
-    /// no header (the row already names the host), trend charts side
-    /// by side, and intrinsic height instead of a fixed card frame.
-    /// Only additive detail — nothing the row itself already shows.
-    var detailBandMode = false
-    var dashboardIdentity: String? = nil
-    var resolvedIPAddresses: [String] = []
-    var onDashboardHealthChange: ((DashboardHealthSnapshot) -> Void)? = nil
-    /// Render nothing — keep only the poll loops and the health
-    /// snapshot publishing. Used by `AgentTriagePollers`, which needs
-    /// the data pipeline for every connected host but no UI. Without
-    /// this, "hidden" monitors at `opacity(0)` still re-render their
-    /// Swift Charts on every poll, which is enough main-thread layout
-    /// work per host to make the whole app feel sluggish.
-    var headless = false
+    /// Feed `AgentTriageStore` instead of rendering: draw nothing,
+    /// additionally run the hygiene probe, and publish a
+    /// `HostHealthSnapshot` through `onHealthChange` after every poll.
+    /// Used by `AgentTriagePollers`, which needs the data pipeline for
+    /// every connected host but no UI. Without this, "hidden" monitors
+    /// at `opacity(0)` still re-render their Swift Charts on every
+    /// poll, which is enough main-thread layout work per host to make
+    /// the whole app feel sluggish.
+    var isTriageFeed = false
+    /// Stable id stamped on published snapshots; defaults to the
+    /// connection id.
+    var snapshotId: String? = nil
+    var onHealthChange: ((HostHealthSnapshot) -> Void)? = nil
 
     @State var stats: FfiSystemStats?
     @State var error: String?
     @State var ufwSummary = UFWProtectionSummary.loading
     /// Latest hygiene-probe result; nil until the first probe lands.
     @State var hygiene: HygieneSnapshot?
-    /// Journal viewer sheet opened from a journal issue's action.
-    @State var showingJournalSheet = false
     /// Set when the host's OS isn't supported. Renders a stable
     /// placeholder so we don't spam the user with parse errors on
     /// every poll. Reset on connection change.
@@ -134,12 +108,6 @@ struct SystemMonitorView: View {
     @State var drillDown: MonitorDrillDown?
     @State var serviceModal: ServiceModalKind?
     @State var showingConfidence = false
-    @State var servicesExpanded = false
-    @State var activityExpanded = false
-    @State var mapExpanded = false
-    /// Dashboard cards collapse the per-mount disk list to the fullest
-    /// mount (plus any near-full ones) until expanded.
-    @State var disksExpanded = false
     /// Distro / kernel / arch summary shown under the connection label.
     /// `nil` until the probe finishes; reset on `connectionId` change.
     @State var osInfo: String?
@@ -150,8 +118,8 @@ struct SystemMonitorView: View {
     /// Hygiene probe (failed services / docker / journal) — slow
     /// cadence: one combined SSH command per minute per host.
     static let hygienePollInterval: UInt64 = 60_000_000_000  // 60 s
-    /// Journal errors in the probe window below this stay off the
-    /// dashboard — a lone repeated line shouldn't paint the fleet.
+    /// Journal errors in the probe window below this stay out of
+    /// triage — a lone repeated line shouldn't paint the fleet.
     static let journalErrorThreshold = 3
     /// Monitored-service log thresholds: any error surfaces a warning
     /// chip; this many escalate to critical. Warnings alone need a
@@ -199,14 +167,8 @@ struct SystemMonitorView: View {
         }
         .task(id: hygienePollTaskKey) {
             hygiene = nil
-            guard isActive, dashboardMode, let connectionId else { return }
+            guard isActive, isTriageFeed, let connectionId else { return }
             await hygienePollLoop(connectionId: connectionId)
-        }
-        .sheet(isPresented: $showingJournalSheet) {
-            FleetJournalSheet(
-                connectionId: connectionId,
-                connectionLabel: connectionLabel
-            )
         }
         .sheet(item: $drillDown) { item in
             MonitorDrillDownSheet(
@@ -230,35 +192,23 @@ struct SystemMonitorView: View {
             }
         }
         .onAppear {
-            publishDashboardHealthSnapshot()
+            publishHealthSnapshot()
         }
         .onChange(of: connectionStatus) {
-            publishDashboardHealthSnapshot()
+            publishHealthSnapshot()
         }
     }
 
-    /// The rendered monitor, or — headless — an empty anchor that
-    /// exists only to host the polling `.task`s above. Keeping the
+    /// The inspector monitor, or — as a triage feed — an empty anchor
+    /// that exists only to host the polling `.task`s above. Keeping the
     /// branch *inside* the body (rather than at the caller) means the
-    /// poll loops, health publishing, and identity keys are exactly
-    /// the same in both modes.
+    /// poll loops and identity keys are exactly the same in both modes.
     @ViewBuilder
     var visibleBody: some View {
-        if headless {
+        if isTriageFeed {
             Color.clear
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
-        } else if detailBandMode {
-            detailBandBody
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background {
-                    RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium)
-                        .fill(MidnightMacDesign.ColorToken.windowBackground)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium)
-                        .stroke(MidnightMacDesign.ColorToken.separator.opacity(0.45), lineWidth: 1)
-                }
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 header
@@ -266,18 +216,6 @@ struct SystemMonitorView: View {
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
-                if dashboardMode {
-                    RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium)
-                        .fill(MidnightMacDesign.ColorToken.windowBackground)
-                }
-            }
-            .overlay {
-                if dashboardMode {
-                    RoundedRectangle(cornerRadius: MidnightMacDesign.Radius.medium)
-                        .stroke(MidnightMacDesign.ColorToken.separator.opacity(0.45), lineWidth: 1)
-                }
-            }
         }
     }
 
@@ -290,7 +228,7 @@ struct SystemMonitorView: View {
     }
 
     var hygienePollTaskKey: String {
-        "\(connectionId ?? "none"):\(isActive):\(dashboardMode)"
+        "\(connectionId ?? "none"):\(isActive):\(isTriageFeed)"
     }
 
 }

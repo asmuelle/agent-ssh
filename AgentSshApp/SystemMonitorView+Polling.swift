@@ -52,7 +52,7 @@ extension SystemMonitorView {
     /// is missing or permission is denied; that's "no findings", not
     /// an error, so hosts without docker or journald never nag.
     func fetchHygiene(connectionId: String) async {
-        defer { publishDashboardHealthSnapshot() }
+        defer { publishHealthSnapshot() }
 
         let separator = "__AGENT_SSH_HYGIENE_SEP__"
 
@@ -236,7 +236,7 @@ extension SystemMonitorView {
     }
 
     func fetchUFWStatus(connectionId: String) async {
-        defer { publishDashboardHealthSnapshot() }
+        defer { publishHealthSnapshot() }
 
         let script = """
         if command -v ufw >/dev/null 2>&1; then
@@ -298,7 +298,7 @@ extension SystemMonitorView {
     }
 
     func fetchOnce(connectionId: String) async {
-        defer { publishDashboardHealthSnapshot() }
+        defer { publishHealthSnapshot() }
 
         do {
             let s = try await BridgeManager.shared.getSystemStats(connectionId: connectionId)

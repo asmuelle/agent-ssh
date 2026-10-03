@@ -6,8 +6,8 @@ import OSLog
 import AgentSshMacOS
 
 extension SystemMonitorView {
-    var currentDashboardHealthIssues: [DashboardHealthIssue] {
-        dashboardHealthIssues(
+    var currentHealthIssues: [HostHealthIssue] {
+        healthIssues(
             stats: stats,
             error: error,
             unsupportedOs: unsupportedOs,
@@ -17,18 +17,18 @@ extension SystemMonitorView {
         )
     }
 
-    func dashboardHealthIssues(
+    func healthIssues(
         stats: FfiSystemStats?,
         error: String?,
         unsupportedOs: String?,
         ufwSummary: UFWProtectionSummary,
         connectionStatus: TerminalConnectionStatus?,
         hygiene: HygieneSnapshot? = nil
-    ) -> [DashboardHealthIssue] {
-        var issues: [DashboardHealthIssue] = []
+    ) -> [HostHealthIssue] {
+        var issues: [HostHealthIssue] = []
 
         if let connectionStatus, connectionStatus != .connected {
-            issues.append(DashboardHealthIssue(
+            issues.append(HostHealthIssue(
                 id: "status:\(connectionStatus.rawValue)",
                 title: "\(connectionLabel): Connection",
                 detail: connectionStatus.rawValue.capitalized,
@@ -38,7 +38,7 @@ extension SystemMonitorView {
         }
 
         if let unsupportedOs {
-            issues.append(DashboardHealthIssue(
+            issues.append(HostHealthIssue(
                 id: "unsupported-os",
                 title: "\(connectionLabel): Monitor",
                 detail: "Unsupported OS \(unsupportedOs)",
@@ -46,7 +46,7 @@ extension SystemMonitorView {
                 severity: .warning
             ))
         } else if let error, !error.isEmpty {
-            issues.append(DashboardHealthIssue(
+            issues.append(HostHealthIssue(
                 id: "monitor-error",
                 title: "\(connectionLabel): Monitor",
                 detail: error,
@@ -57,7 +57,7 @@ extension SystemMonitorView {
 
         switch ufwSummary.level {
         case .inactive:
-            issues.append(DashboardHealthIssue(
+            issues.append(HostHealthIssue(
                 id: "ufw-inactive",
                 title: "\(connectionLabel): UFW",
                 detail: "Firewall inactive",
@@ -68,7 +68,7 @@ extension SystemMonitorView {
             let detail = ufwSummary.extraOpenRules.isEmpty
                 ? "Public exposure detected"
                 : "Open: \(ufwSummary.extraOpenRules.prefix(3).joined(separator: ", "))"
-            issues.append(DashboardHealthIssue(
+            issues.append(HostHealthIssue(
                 id: "ufw-open",
                 title: "\(connectionLabel): UFW",
                 detail: detail,
@@ -76,7 +76,7 @@ extension SystemMonitorView {
                 severity: .warning
             ))
         case .unknown:
-            issues.append(DashboardHealthIssue(
+            issues.append(HostHealthIssue(
                 id: "ufw-unknown",
                 title: "\(connectionLabel): UFW",
                 detail: ufwSummary.error ?? ufwSummary.statusText,
@@ -90,7 +90,7 @@ extension SystemMonitorView {
         if let stats {
             let cpuFraction = stats.cpuPercent / 100
             if cpuFraction >= 0.85 {
-                issues.append(DashboardHealthIssue(
+                issues.append(HostHealthIssue(
                     id: "cpu",
                     title: "\(connectionLabel): CPU",
                     detail: String(format: "%.1f%%", stats.cpuPercent),
@@ -103,7 +103,7 @@ extension SystemMonitorView {
                 ? Double(stats.memoryUsed) / Double(stats.memoryTotal)
                 : 0
             if memoryFraction >= 0.85 {
-                issues.append(DashboardHealthIssue(
+                issues.append(HostHealthIssue(
                     id: "memory",
                     title: "\(connectionLabel): Memory",
                     detail: "\(formatBytes(stats.memoryUsed)) / \(formatBytes(stats.memoryTotal))",
@@ -122,7 +122,7 @@ extension SystemMonitorView {
                 .prefix(2)
 
             for (disk, fraction) in diskIssues {
-                issues.append(DashboardHealthIssue(
+                issues.append(HostHealthIssue(
                     id: "disk:\(disk.mount)",
                     title: "\(connectionLabel): Disk",
                     detail: "\(disk.mount) \(Int(fraction * 100))%",
@@ -135,7 +135,7 @@ extension SystemMonitorView {
         if let hygiene {
             if !hygiene.failedUnits.isEmpty {
                 let count = hygiene.failedUnits.count
-                issues.append(DashboardHealthIssue(
+                issues.append(HostHealthIssue(
                     id: "services-failed",
                     title: "\(connectionLabel): Services",
                     detail: "\(count) failed · \(hygiene.failedUnits.prefix(3).joined(separator: ", "))",
@@ -145,7 +145,7 @@ extension SystemMonitorView {
             }
             if !hygiene.dockerProblems.isEmpty {
                 let count = hygiene.dockerProblems.count
-                issues.append(DashboardHealthIssue(
+                issues.append(HostHealthIssue(
                     id: "docker",
                     title: "\(connectionLabel): Docker",
                     detail: "\(count) container\(count == 1 ? "" : "s") · \(hygiene.dockerProblems.prefix(2).joined(separator: ", "))",
@@ -154,7 +154,7 @@ extension SystemMonitorView {
                 ))
             }
             if hygiene.journalErrors >= Self.journalErrorThreshold {
-                issues.append(DashboardHealthIssue(
+                issues.append(HostHealthIssue(
                     id: "journal",
                     title: "\(connectionLabel): Journal",
                     detail: "\(hygiene.journalErrors) errors / 15 min",
@@ -168,7 +168,7 @@ extension SystemMonitorView {
             // warnings alone need a real pile. Counts mirror the
             // badges inside the expanded Services pane.
             for log in hygiene.serviceLogs {
-                let severity: DashboardHealthIssue.Severity
+                let severity: HostHealthIssue.Severity
                 if log.journalErrors >= Self.serviceLogErrorsCritical {
                     severity = .critical
                 } else if log.journalErrors > 0 {
@@ -182,7 +182,7 @@ extension SystemMonitorView {
                     ? String(log.unit.dropLast(".service".count))
                     : log.unit
                 let leadCount = log.journalErrors > 0 ? log.journalErrors : log.journalWarnings
-                issues.append(DashboardHealthIssue(
+                issues.append(HostHealthIssue(
                     id: "service-logs:\(log.unit)",
                     title: "\(connectionLabel): \(shortName) · \(leadCount)",
                     detail: "\(log.journalErrors) errors · \(log.journalWarnings) warnings in recent log"
@@ -220,39 +220,13 @@ extension SystemMonitorView {
         return 7
     }
 
-    func publishDashboardHealthSnapshot() {
-        guard dashboardMode, let onDashboardHealthChange else { return }
-        onDashboardHealthChange(DashboardHealthSnapshot(
-            id: dashboardIdentity ?? connectionId ?? connectionLabel,
+    func publishHealthSnapshot() {
+        guard isTriageFeed, let onHealthChange else { return }
+        onHealthChange(HostHealthSnapshot(
+            id: snapshotId ?? connectionId ?? connectionLabel,
             hostName: connectionLabel,
-            issues: currentDashboardHealthIssues,
-            metrics: stats.map(dashboardHostMetrics)
+            issues: currentHealthIssues
         ))
-    }
-
-    func dashboardHostMetrics(_ stats: FfiSystemStats) -> DashboardHostMetrics {
-        let memoryPercent = stats.memoryTotal > 0
-            ? Double(stats.memoryUsed) / Double(stats.memoryTotal) * 100
-            : 0
-        let worstDisk = stats.disks
-            .compactMap { disk -> (String, Double)? in
-                guard disk.total > 0 else { return nil }
-                return (disk.mount, Double(disk.used) / Double(disk.total))
-            }
-            .max { $0.1 < $1.1 }
-        return DashboardHostMetrics(
-            cpuPercent: stats.cpuPercent,
-            memoryPercent: memoryPercent,
-            memoryUsed: stats.memoryUsed,
-            memoryTotal: stats.memoryTotal,
-            swapUsed: stats.swapUsed,
-            swapTotal: stats.swapTotal,
-            worstDiskFraction: worstDisk?.1,
-            worstDiskMount: worstDisk?.0,
-            loadAverage1m: stats.loadAverage1m,
-            uptimeSeconds: stats.uptimeSeconds,
-            disks: stats.disks
-        )
     }
 
 }
